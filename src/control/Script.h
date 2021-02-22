@@ -1,7 +1,9 @@
 #pragma once
-#include "Font.h"
+#include "Font.h" 
+#include "Ped.h"
 #include "PedType.h"
 #include "Text.h"
+#include "sList.h"
 #include "Sprite2d.h"
 
 class CEntity;
@@ -17,7 +19,7 @@ class CRunningScript;
 extern int32 ScriptParams[32];
 
 void FlushLog();
-#define script_assert(_Expression) FlushLog(); assert(_Expression);
+#define script_assert(_Expression) { FlushLog(); assert(_Expression); }
 
 #define PICKUP_PLACEMENT_OFFSET (0.5f)
 #define PED_FIND_Z_OFFSET (5.0f)
@@ -28,9 +30,9 @@ void FlushLog();
 #define UPSIDEDOWN_TURN_SPEED_THRESHOLD (0.02f)
 #define UPSIDEDOWN_TIMER_THRESHOLD (1000)
 
-#define SPHERE_MARKER_R (252)
-#define SPHERE_MARKER_G (138)
-#define SPHERE_MARKER_B (242)
+#define SPHERE_MARKER_R (255)
+#define SPHERE_MARKER_G (255)
+#define SPHERE_MARKER_B (128)
 #define SPHERE_MARKER_A (228)
 #define SPHERE_MARKER_PULSE_PERIOD 2048
 #define SPHERE_MARKER_PULSE_FRACTION 0.1f
@@ -47,7 +49,15 @@ void FlushLog();
 
 #define KEY_LENGTH_IN_SCRIPT (8)
 
-//#define GTA_SCRIPT_COLLECTIVE
+#define GET_INTEGER_PARAM(i) (ScriptParams[i])
+#define GET_FLOAT_PARAM(i) (*(float*)&ScriptParams[i])
+#define GET_VECTOR_PARAM(i) (CVector(GET_FLOAT_PARAM(i), GET_FLOAT_PARAM(i+1), GET_FLOAT_PARAM(i+2)))
+
+#define SET_INTEGER_PARAM(i, x) ScriptParams[i] = x
+#define SET_FLOAT_PARAM(i, x) *(float*)&ScriptParams[i] = x
+#define SET_VECTOR_PARAM(i, v) { *(float*)&ScriptParams[i] = (v).x; *(float*)&ScriptParams[i+1] = (v).y; *(float*)&ScriptParams[i+2] = (v).z; }
+
+#define GTA_SCRIPT_COLLECTIVE
 
 struct intro_script_rectangle 
 {
@@ -215,14 +225,32 @@ public:
 };
 
 enum {
+	MAX_STACK_DEPTH = 16,
+	NUM_LOCAL_VARS = 96,
+	NUM_TIMERS = 2,
+	NUM_GLOBAL_SLOTS = 26
+};
+
+enum {
 	ARGUMENT_END = 0,
+	ARGUMENT_INT_ZERO,
+	ARGUMENT_FLOAT_ZERO,
+	ARGUMENT_FLOAT_1BYTE,
+	ARGUMENT_FLOAT_2BYTES,
+	ARGUMENT_FLOAT_3BYTES,
 	ARGUMENT_INT32,
-	ARGUMENT_GLOBALVAR,
-	ARGUMENT_LOCALVAR,
 	ARGUMENT_INT8,
 	ARGUMENT_INT16,
-	ARGUMENT_FLOAT
+	ARGUMENT_FLOAT,
+	ARGUMENT_TIMER,
+	ARGUMENT_LOCAL = ARGUMENT_TIMER + NUM_TIMERS,
+	ARGUMENT_LOCAL_ARRAY = ARGUMENT_LOCAL + NUM_LOCAL_VARS,
+	ARGUMENT_GLOBAL = ARGUMENT_LOCAL_ARRAY + NUM_LOCAL_VARS,
+	ARGUMENT_GLOBAL_ARRAY = ARGUMENT_GLOBAL + NUM_GLOBAL_SLOTS,
+	MAX_ARGUMENT = ARGUMENT_GLOBAL_ARRAY + NUM_GLOBAL_SLOTS
 };
+
+static_assert(MAX_ARGUMENT <= 256, "MAX_ARGUMENT must be less or equal to 256");
 
 struct tCollectiveData
 {
@@ -247,11 +275,18 @@ struct tBuildingSwap
 	int32 m_nOldModel;
 };
 
-
-enum {
-	MAX_STACK_DEPTH = 6,
-	NUM_LOCAL_VARS = 16,
-	NUM_TIMERS = 2
+struct script_corona
+{
+	int id;
+	float x;
+	float y;
+	float z;
+	float size;
+	uint8 r;
+	uint8 g;
+	uint8 b;
+	int type;
+	int flareType;
 };
 
 class CRunningScript
@@ -276,14 +311,25 @@ class CRunningScript
 		ORS_8
 	};
 
+	enum {
+		STACKVALUE_IP_BITS = 22,
+		STACKVALUE_INVERT_RETURN_BIT = STACKVALUE_IP_BITS,
+		STACKVALUE_IS_FUNCTION_CALL_BIT,
+		STACKVALUE_IP_PARAMS_OFFSET,
+
+		STACKVALUE_IP_MASK = ((1 << STACKVALUE_IP_BITS) - 1)
+	};
+
 public:
 	CRunningScript* next;
 	CRunningScript* prev;
+	int32 m_nId;
 	char m_abScriptName[8];
 	uint32 m_nIp;
 	uint32 m_anStack[MAX_STACK_DEPTH];
 	uint16 m_nStackPointer;
-	int32 m_anLocalVariables[NUM_LOCAL_VARS + NUM_TIMERS];
+	int32 m_anLocalVariables[NUM_LOCAL_VARS + 8 + NUM_TIMERS]; // TODO(LCS): figure out why 106
+	int32 m_nLocalsPointer;
 	bool m_bIsActive;
 	bool m_bCondResult;
 	bool m_bIsMissionScript;
@@ -303,8 +349,8 @@ public:
 	void Load(uint8*& buf);
 
 	void UpdateTimers(float timeStep) {
-		m_anLocalVariables[NUM_LOCAL_VARS] += timeStep;
-		m_anLocalVariables[NUM_LOCAL_VARS + 1] += timeStep;
+		for (int i = 0; i < NUM_TIMERS; i++)
+			m_anLocalVariables[NUM_LOCAL_VARS + 8 + i] += timeStep;
 	}
 
 	void Init();
@@ -315,14 +361,37 @@ public:
 
 	static const uint32 nSaveStructSize;
 
-	void CollectParameters(uint32*, int16);
+	void CollectParameters(uint32*, int16, int* pParams = (int*)&ScriptParams);
 	int32 CollectNextParameterWithoutIncreasingPC(uint32);
 	int32* GetPointerToScriptVariable(uint32*, int16);
 	void StoreParameters(uint32*, int16);
 
 	int8 ProcessOneCommand();
 	void DoDeatharrestCheck();
-	void UpdateCompareFlag(bool);
+	void UpdateCompareFlag(bool flag)
+	{
+		if (m_bNotFlag)
+			flag = !flag;
+		if (m_nAndOrState == ANDOR_NONE) {
+			m_bCondResult = flag;
+			return;
+		}
+		if (m_nAndOrState >= ANDS_1 && m_nAndOrState <= ANDS_8) {
+			m_bCondResult &= flag;
+			if (m_nAndOrState == ANDS_1) {
+				m_nAndOrState = ANDOR_NONE;
+				return;
+			}
+		}
+		else {
+			m_bCondResult |= flag;
+			if (m_nAndOrState <= ORS_1) {
+				m_nAndOrState = ANDOR_NONE;
+				return;
+			}
+		}
+		m_nAndOrState--;
+	}
 	int16 GetPadState(uint16, uint16);
 
 	int8 ProcessCommands0To99(int32);
@@ -340,7 +409,10 @@ public:
 	int8 ProcessCommands1200To1299(int32);
 	int8 ProcessCommands1300To1399(int32);
 	int8 ProcessCommands1400To1499(int32);
+	int8 ProcessCommands1500To1599(int32);
+	int8 ProcessCommands1600To1699(int32);
 
+	uint32 CollectLocateParameters(uint32*, bool);
 	void LocatePlayerCommand(int32, uint32*);
 	void LocatePlayerCharCommand(int32, uint32*);
 	void LocatePlayerCarCommand(int32, uint32*);
@@ -352,4 +424,266 @@ public:
 	void LocateSniperBulletCommand(int32, uint32*);
 	void PlayerInAreaCheckCommand(int32, uint32*);
 	void PlayerInAngledAreaCheckCommand(int32, uint32*);
-	void CharInAr
+	void CharInAreaCheckCommand(int32, uint32*);
+	void CarInAreaCheckCommand(int32, uint32*);
+	void LocateObjectCommand(int32, uint32*);
+	void ObjectInAreaCheckCommand(int32, uint32*);
+
+#ifdef GTA_SCRIPT_COLLECTIVE
+	void LocateCollectiveCommand(int32, uint32*);
+	void LocateCollectiveCharCommand(int32, uint32*);
+	void LocateCollectiveCarCommand(int32, uint32*);
+	void LocateCollectivePlayerCommand(int32, uint32*);
+	void CollectiveInAreaCheckCommand(int32, uint32*);
+#endif
+
+#ifdef MISSION_REPLAY
+	bool CanAllowMissionReplay();
+#endif
+
+#ifdef USE_ADVANCED_SCRIPT_DEBUG_OUTPUT
+	int CollectParameterForDebug(char* buf, bool& var);
+	void GetStoredParameterForDebug(char* buf);
+#endif
+
+	float LimitAngleOnCircle(float angle) { return angle < 0.0f ? angle + 360.0f : angle; }
+
+	bool ThisIsAValidRandomCop(uint32 mi, int cop, int swat, int fbi, int army, int miami);
+	bool ThisIsAValidRandomPed(uint32 pedtype, int civ, int gang, int criminal);
+	bool CheckDamagedWeaponType(int32 actual, int32 type);	
+
+	void ReturnFromGosubOrFunction();
+
+};
+
+
+enum {
+	VAR_LOCAL = 1,
+	VAR_GLOBAL = 2,
+};
+
+enum {
+	MAX_NUM_SCRIPTS = 128,
+	MAX_NUM_INTRO_TEXT_LINES = 48,
+	MAX_NUM_INTRO_RECTANGLES = 16,
+	MAX_NUM_SCRIPT_SRPITES = 16,
+	MAX_NUM_SCRIPT_SPHERES = 16,
+	MAX_NUM_COLLECTIVES = 32,
+	MAX_NUM_USED_OBJECTS = 305,
+	MAX_NUM_MISSION_SCRIPTS = 150,
+	MAX_NUM_BUILDING_SWAPS = 80,
+	MAX_NUM_INVISIBILITY_SETTINGS = 52,
+	MAX_NUM_STORED_LINES = 1024,
+	MAX_ALLOWED_COLLISIONS = 2
+};
+
+class CTheScripts
+{
+public:
+	static uint8* ScriptSpace;
+	static CRunningScript ScriptsArray[MAX_NUM_SCRIPTS];
+	static intro_text_line IntroTextLines[MAX_NUM_INTRO_TEXT_LINES];
+	static intro_script_rectangle IntroRectangles[MAX_NUM_INTRO_RECTANGLES];
+	static CSprite2d ScriptSprites[MAX_NUM_SCRIPT_SRPITES];
+	static script_sphere_struct ScriptSphereArray[MAX_NUM_SCRIPT_SPHERES];
+	static tCollectiveData CollectiveArray[MAX_NUM_COLLECTIVES];
+	static tUsedObject UsedObjectArray[MAX_NUM_USED_OBJECTS];
+	static int32 MultiScriptArray[MAX_NUM_MISSION_SCRIPTS];
+	static tBuildingSwap BuildingSwapArray[MAX_NUM_BUILDING_SWAPS];
+	static CEntity* InvisibilitySettingArray[MAX_NUM_INVISIBILITY_SETTINGS];
+	static CStoredLine aStoredLines[MAX_NUM_STORED_LINES];
+	static bool DbgFlag;
+	static uint32 OnAMissionFlag;
+	static CMissionCleanup MissionCleanUp;
+	static CStuckCarCheck StuckCars;
+	static CUpsideDownCarCheck UpsideDownCars;
+	static int32 StoreVehicleIndex;
+	static bool StoreVehicleWasRandom;
+	static CRunningScript *pIdleScripts;
+	static CRunningScript *pActiveScripts;
+	static int32 NextFreeCollectiveIndex;
+	static int32 LastRandomPedId;
+	static uint16 NumberOfUsedObjects;
+	static bool bAlreadyRunningAMissionScript;
+	static bool bUsingAMultiScriptFile;
+	static uint16 NumberOfMissionScripts;
+	static uint32 LargestMissionScriptSize;
+	static uint32 MainScriptSize;
+	static uint8 FailCurrentMission;
+	static uint16 NumScriptDebugLines;
+	static uint16 NumberOfIntroRectanglesThisFrame;
+	static uint16 NumberOfIntroTextLinesThisFrame;
+	static uint8 UseTextCommands;
+	static uint16 CommandsExecuted;
+	static uint16 ScriptsUpdated;
+	static uint32 LastMissionPassedTime;
+	static uint16 NumberOfExclusiveMissionScripts;
+
+	static bool bPlayerIsInTheStatium;
+	static uint8 RiotIntensity;
+	static bool bPlayerHasMetDebbieHarry;
+
+	static int AllowedCollision[MAX_ALLOWED_COLLISIONS];
+	static short* SavedVarIndices;
+	static int NumSaveVars;
+	static int FSDestroyedFlag;
+	static int NextProcessId;
+	static bool InTheScripts;
+	static CRunningScript* pCurrent;
+	static uint16 NumTrueGlobals;
+	static uint16 MostGlobals;
+	static base::cSList<script_corona> mCoronas;
+	static int NextScriptCoronaID;
+
+	static bool Init(bool loaddata = false);
+	static void Process();
+
+	static CRunningScript* StartTestScript();
+	static bool IsPlayerOnAMission();
+	static void ClearSpaceForMissionEntity(const CVector&, CEntity*);
+
+	static void UndoBuildingSwaps();
+	static void UndoEntityInvisibilitySettings();
+
+	/*
+	static void ScriptDebugLine3D(float x1, float y1, float z1, float x2, float y2, float z2, uint32 col, uint32 col2);
+	static void RenderTheScriptDebugLines();
+	*/
+
+	static void SaveAllScripts(uint8*, uint32*);
+	static bool LoadAllScripts(uint8*, uint32);
+
+	static bool IsDebugOn() { return DbgFlag; };
+	static void InvertDebugFlag() { DbgFlag = !DbgFlag; }
+
+	static int32* GetPointerToScriptVariable(int32 offset) { assert(offset >= 8 && offset < CTheScripts::GetSizeOfVariableSpace()); return (int32*)&ScriptSpace[offset]; }
+
+	static int32 Read4BytesFromScript(uint32* pIp) {
+		int32 retval = ScriptSpace[*pIp + 3] << 24 | ScriptSpace[*pIp + 2] << 16 | ScriptSpace[*pIp + 1] << 8 | ScriptSpace[*pIp];
+		*pIp += 4;
+		return retval;
+	}
+	static int16 Read2BytesFromScript(uint32* pIp) {
+		int16 retval = ScriptSpace[*pIp + 1] << 8 | ScriptSpace[*pIp];
+		*pIp += 2;
+		return retval;
+	}
+	static int8 Read1ByteFromScript(uint32* pIp) {
+		int8 retval = ScriptSpace[*pIp];
+		*pIp += 1;
+		return retval;
+	}
+	static float ReadFloatFromScript(uint32* pIp) {
+		return Read2BytesFromScript(pIp) / 16.0f;
+	}
+	static void ReadTextLabelFromScript(uint32* pIp, char* buf) {
+		strncpy(buf, (const char*)&CTheScripts::ScriptSpace[*pIp], KEY_LENGTH_IN_SCRIPT);
+	}
+	static wchar* GetTextByKeyFromScript(uint32* pIp) {
+		wchar* text = TheText.Get((const char*)&CTheScripts::ScriptSpace[*pIp]);
+		*pIp += KEY_LENGTH_IN_SCRIPT;
+		return text;
+	}
+	static int32 GetSizeOfVariableSpace()
+	{
+		uint32 tmp = 3;
+		return Read4BytesFromScript(&tmp);
+	}
+
+	static CRunningScript* StartNewScript(uint32);
+
+	static void CleanUpThisVehicle(CVehicle*);
+	static void CleanUpThisPed(CPed*);
+	static void CleanUpThisObject(CObject*);
+
+	static bool IsPedStopped(CPed*);
+	static bool IsPlayerStopped(CPlayerInfo*);
+	static bool IsVehicleStopped(CVehicle*);
+
+	static void PrintListSizes();
+	static void ReadObjectNamesFromScript();
+	static void UpdateObjectIndices();
+	static void ReadMultiScriptFileOffsetsFromScript();
+	static void DrawScriptSpheres();
+	static void HighlightImportantArea(uint32, float, float, float, float, float);
+	static void HighlightImportantAngledArea(uint32, float, float, float, float, float, float, float, float, float);
+	/*
+	static void DrawDebugSquare(float, float, float, float);
+	static void DrawDebugAngledSquare(float, float, float, float, float, float, float, float);
+	static void DrawDebugCube(float, float, float, float, float, float);
+	static void DrawDebugAngledCube(float, float, float, float, float, float, float, float, float, float);
+	*/
+
+	static void AddToInvisibilitySwapArray(CEntity*, bool);
+	static void AddToBuildingSwapArray(CBuilding*, int32, int32);
+
+	static int32 GetActualScriptSphereIndex(int32 index);
+	static int32 AddScriptSphere(int32 id, CVector pos, float radius);
+	static int32 GetNewUniqueScriptSphereIndex(int32 index);
+	static void RemoveScriptSphere(int32 index);
+	//static void RemoveScriptTextureDictionary();
+public:
+	static void RemoveThisPed(CPed* pPed);
+
+	static uint32& GetLastMissionPassedTime() { return LastMissionPassedTime; }
+#ifdef MISSION_SWITCHER
+	static void SwitchToMission(int32 mission);
+#endif
+
+	static int GetSaveVarIndex(int);
+	static void Shutdown(void);
+	static void SwapNearestBuildingModel(float, float, float, float, int, int);
+
+#ifdef GTA_SCRIPT_COLLECTIVE
+	static void AdvanceCollectiveIndex()
+	{
+		if (NextFreeCollectiveIndex == INT32_MAX)
+			NextFreeCollectiveIndex = 0;
+		else
+			NextFreeCollectiveIndex++;
+	}
+
+	static int AddPedsInVehicleToCollective(int);
+	static int AddPedsInAreaToCollective(float, float, float, float);
+	static int FindFreeSlotInCollectiveArray();
+	static void SetObjectiveForAllPedsInCollective(int, eObjective, int16, int16);
+	static void SetObjectiveForAllPedsInCollective(int, eObjective, CVector, float);
+	static void SetObjectiveForAllPedsInCollective(int, eObjective, CVector);
+	static void SetObjectiveForAllPedsInCollective(int, eObjective, void*);
+	static void SetObjectiveForAllPedsInCollective(int, eObjective);
+#endif
+
+	static bool IsFortStauntonDestroyed() { return FSDestroyedFlag && *(int32*)&ScriptSpace[FSDestroyedFlag] == 1; }
+
+};
+
+extern int ScriptParams[32];
+
+VALIDATE_SIZE(uStackReturnValue, 4);
+
+#ifdef USE_DEBUG_SCRIPT_LOADER
+extern int scriptToLoad;
+#endif
+#ifdef MISSION_REPLAY
+static_assert(false, "Mission replay is not supported");
+extern int AllowMissionReplay;
+extern uint32 WaitForMissionActivate;
+extern uint32 WaitForSave;
+extern uint32 MissionStartTime;
+extern int missionRetryScriptIndex;
+extern bool doingMissionRetry;
+extern bool gbTryingPorn4Again;
+extern int IsInAmmunation;
+extern int MissionSkipLevel;
+
+uint32 AddExtraDeathDelay();
+void RetryMission(int, int);
+#endif
+
+#ifdef USE_DEBUG_SCRIPT_LOADER
+extern int scriptToLoad;
+#endif
+
+extern int gScriptsFile;
+extern CVector gVectorSetInLua;
+
