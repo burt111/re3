@@ -15,25 +15,40 @@ public:
 	float m_fCurrentStamina;
 	float m_fMaxStamina;
 	float m_fStaminaProgress;
-	int8 m_nSelectedWepSlot;	// eWeaponType
+	int8 m_nSelectedWepSlot;
 	bool m_bSpeedTimerFlag;
 	uint8 m_nEvadeAmount;
-	int8 field_1367;
-	uint32 m_nSpeedTimer;
-	uint32 m_nHitAnimDelayTimer;
+	uint32 m_nSpeedTimer; // m_nStandStillTimer?
+	uint32 m_nHitAnimDelayTimer; // m_nShotDelay?
 	float m_fAttackButtonCounter;
 	bool m_bHaveTargetSelected;	// may have better name
 	CEntity *m_pEvadingFrom;	// is this CPhysical?
 	int32 m_nTargettableObjects[4];
+	uint32 m_nAdrenalineTime;
+	uint8 m_nDrunkenness;             // Needed to work out whether we lost target this frame
+	uint8 m_nFadeDrunkenness;
+	uint8 m_nDrunkCountdown; //countdown in frames when the drunk effect ends
 	bool m_bAdrenalineActive;
 	bool m_bHasLockOnTarget;
-	uint32 m_nAdrenalineTime;
 	bool m_bCanBeDamaged;
-	int8 field_1413;
+	bool m_bNoPosForMeleeAttack;
+	bool unk1;
 	CVector m_vecSafePos[6]; // safe places from the player, for example behind a tree
 	CPed *m_pPedAtSafePos[6];
-	float m_fWalkAngle;
+	CPed *m_pMeleeList[6]; // reachable peds at each direction(6)
+	int16 m_nAttackDirToCheck;
+	float m_fWalkAngle; //angle between heading and walking direction
 	float m_fFPSMoveHeading;
+	RpAtomic* m_pMinigunTopAtomic; //atomic for the spinning part of the minigun model
+	float m_fGunSpinSpeed; // for minigun
+	float m_fGunSpinAngle;
+	unsigned int m_nPadDownPressedInMilliseconds;
+	unsigned int m_nLastBusFareCollected;
+
+	static bool bDontAllowWeaponChange;
+#ifndef MASTER
+	static bool bDebugPlayerInfo;
+#endif
 
 	CPlayerPed();
 	~CPlayerPed();
@@ -45,7 +60,8 @@ public:
 	void SetWantedLevelNoDrop(int32 level);
 	void KeepAreaAroundPlayerClear(void);
 	void AnnoyPlayerPed(bool);
-	void MakeChangesForNewWeapon(int8);
+	void MakeChangesForNewWeapon(int32);
+	void MakeChangesForNewWeapon(eWeaponType);
 	void SetInitialState(void);
 	void ProcessControl(void);
 	void ClearAdrenaline(void);
@@ -53,24 +69,35 @@ public:
 	class CPlayerInfo *GetPlayerInfoForThisPlayerPed();
 	void SetRealMoveAnim(void);
 	void RestoreSprintEnergy(float);
-	bool DoWeaponSmoothSpray(void);
+	float DoWeaponSmoothSpray(void);
 	void DoStuffToGoOnFire(void);
 	bool DoesTargetHaveToBeBroken(CVector, CWeapon*);
 	void RunningLand(CPad*);
-	bool IsThisPedAttackingPlayer(CPed*);
+	bool IsThisPedAnAimingPriority(CPed*);
 	void PlayerControlSniper(CPad*);
 	void PlayerControlM16(CPad*);
 	void PlayerControlFighter(CPad*);
 	void ProcessWeaponSwitch(CPad*);
 	void MakeObjectTargettable(int32);
 	void PlayerControl1stPersonRunAround(CPad *padUsed);
-	void EvaluateNeighbouringTarget(CEntity*, CEntity**, float*, float, float, bool);
+	void EvaluateNeighbouringTarget(CEntity*, CEntity**, float*, float, float, bool, bool);
 	void EvaluateTarget(CEntity*, CEntity**, float*, float, float, bool);
 	bool FindNextWeaponLockOnTarget(CEntity*, bool);
 	bool FindWeaponLockOnTarget(void);
 	void ProcessAnimGroups(void);
 	void ProcessPlayerWeapon(CPad*);
 	void PlayerControlZelda(CPad*);
+	bool DoesPlayerWantNewWeapon(eWeaponType, bool);
+	void PlayIdleAnimations(CPad*);
+	void RemovePedFromMeleeList(CPed*);
+	void GetMeleeAttackCoords(CVector&, int8, float);
+	int32 FindMeleeAttackPoint(CPed*, CVector&, uint32&);
+	bool CanIKReachThisTarget(CVector, CWeapon*, bool);
+	void RotatePlayerToTrackTarget(void);
+	bool MovementDisabledBecauseOfTargeting(void);
+	void FindNewAttackPoints(void);
+	void SetNearbyPedsToInteractWithPlayer(void);
+	void UpdateMeleeAttackers(void);
 
 	static void SetupPlayerPed(int32);
 	static void DeactivatePlayerPed(int32);
@@ -84,6 +111,4 @@ public:
 	static const uint32 nSaveStructSize;
 };
 
-#ifndef PED_SKIN
-VALIDATE_SIZE(CPlayerPed, 0x5F0);
-#endif
+//VALIDATE_SIZE(CPlayerPed, 0x5F0);

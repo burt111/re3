@@ -4,12 +4,13 @@
 #include "TxdStore.h"
 #include "2dEffect.h"
 #include "BaseModelInfo.h"
+#include "ModelInfo.h"
 #include "ColModel.h"
 
 CBaseModelInfo::CBaseModelInfo(ModelInfoType type)
 {
 	m_colModel = nil;
-	m_twodEffects = nil;
+	m_2dEffectsID = -1;
 	m_objectId = -1;
 	m_refCount = 0;
 	m_txdSlot = -1;
@@ -23,7 +24,7 @@ CBaseModelInfo::Shutdown(void)
 {
 	DeleteCollisionModel();
 	DeleteRwObject();
-	m_twodEffects = nil;
+	m_2dEffectsID = -1;
 	m_num2dEffects = 0;
 	m_txdSlot = -1;
 }
@@ -76,17 +77,17 @@ CBaseModelInfo::RemoveTexDictionaryRef(void)
 void
 CBaseModelInfo::Init2dEffects(void)
 {
-	m_twodEffects = nil;
+	m_2dEffectsID = -1;
 	m_num2dEffects = 0;
 }
 
 void
 CBaseModelInfo::Add2dEffect(C2dEffect *fx)
 {
-	if(m_twodEffects)
+	if(m_2dEffectsID >= 0)
 		m_num2dEffects++;
 	else{
-		m_twodEffects = fx;
+		m_2dEffectsID = CModelInfo::Get2dEffectStore().GetIndex(fx);
 		m_num2dEffects = 1;
 	}
 }
@@ -94,8 +95,8 @@ CBaseModelInfo::Add2dEffect(C2dEffect *fx)
 C2dEffect*
 CBaseModelInfo::Get2dEffect(int n)
 {
-	if(m_twodEffects)
-		return &m_twodEffects[n];
+	if(m_2dEffectsID >= 0)
+		return CModelInfo::Get2dEffectStore().GetItem(m_2dEffectsID+n);
 	else
 		return nil;
 }

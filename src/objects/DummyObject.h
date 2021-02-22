@@ -10,5 +10,3 @@ public:
 	CDummyObject(void) {}
 	CDummyObject(CObject *obj);
 };
-
-VALIDATE_SIZE(CDummyObject, 0x68);

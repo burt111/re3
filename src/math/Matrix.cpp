@@ -453,61 +453,48 @@ CMatrix &
 Invert(const CMatrix &src, CMatrix &dst)
 {
 	// TODO: VU0 code
-	// GTA handles this as a raw 4x4 orthonormal matrix
-	// and trashes the RW flags, let's not do that
 	dst.f[3][0] = dst.f[3][1] = dst.f[3][2] = 0.0f;
-#ifndef FIX_BUGS
-	dst.f[3][3] = src.f[3][3];
-#endif
 
 	dst.f[0][0] = src.f[0][0];
 	dst.f[0][1] = src.f[1][0];
 	dst.f[0][2] = src.f[2][0];
-#ifndef FIX_BUGS
-	dst.f[0][3] = src.f[3][0];
-#endif
+
 	dst.f[1][0] = src.f[0][1];
 	dst.f[1][1] = src.f[1][1];
 	dst.f[1][2] = src.f[2][1];
-#ifndef FIX_BUGS
-	dst.f[1][3] = src.f[3][1];
-#endif
+
 	dst.f[2][0] = src.f[0][2];
 	dst.f[2][1] = src.f[1][2];
 	dst.f[2][2] = src.f[2][2];
-#ifndef FIX_BUGS
-	dst.f[2][3] = src.f[3][2];
-#endif
+
 
 	dst.f[3][0] += dst.f[0][0] * src.f[3][0];
 	dst.f[3][1] += dst.f[0][1] * src.f[3][0];
 	dst.f[3][2] += dst.f[0][2] * src.f[3][0];
-#ifndef FIX_BUGS
-	dst.f[3][3] += dst.f[0][3] * src.f[3][0];
-#endif
 
 	dst.f[3][0] += dst.f[1][0] * src.f[3][1];
 	dst.f[3][1] += dst.f[1][1] * src.f[3][1];
 	dst.f[3][2] += dst.f[1][2] * src.f[3][1];
-#ifndef FIX_BUGS
-	dst.f[3][3] += dst.f[1][3] * src.f[3][1];
-#endif
 
 	dst.f[3][0] += dst.f[2][0] * src.f[3][2];
 	dst.f[3][1] += dst.f[2][1] * src.f[3][2];
 	dst.f[3][2] += dst.f[2][2] * src.f[3][2];
-#ifndef FIX_BUGS
-	dst.f[3][3] += dst.f[2][3] * src.f[3][2];
-#endif
 
 	dst.f[3][0] = -dst.f[3][0];
 	dst.f[3][1] = -dst.f[3][1];
 	dst.f[3][2] = -dst.f[3][2];
-#ifndef FIX_BUGS
-	dst.f[3][3] = src.f[3][3] - dst.f[3][3];
-#endif
 
 	return dst;
+}
+
+void
+CMatrix::CopyToRwMatrix(RwMatrix* matrix)
+{
+	matrix->right = GetRight();
+	matrix->up = GetForward();
+	matrix->at = GetUp();
+	matrix->pos = GetPosition();
+	RwMatrixUpdate(matrix);
 }
 
 CMatrix

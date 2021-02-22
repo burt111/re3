@@ -3,10 +3,9 @@
 #include "ClumpModelInfo.h"
 
 enum {
-	NUM_FIRST_MATERIALS = 26,
-	NUM_SECOND_MATERIALS = 26,
+	NUM_FIRST_MATERIALS = 24,
+	NUM_SECOND_MATERIALS = 20,
 	NUM_VEHICLE_COLOURS = 8,
-	NUM_VEHICLE_ENVMAPS = 1
 };
 
 enum {
@@ -41,13 +40,6 @@ enum eCarPositions
 	CAR_POS_TAILLIGHTS,
 	CAR_POS_FRONTSEAT,
 	CAR_POS_BACKSEAT,
-	// these are unused so we don't know the actual values
-	CAR_POS_REVERSELIGHTS,
-	CAR_POS_BRAKELIGHTS,
-	CAR_POS_INDICATORS_FRONT,
-	CAR_POS_INDICATORS_BACK,
-	CAR_POS_STEERWHEEL,
-	//
 	CAR_POS_EXHAUST
 };
 
@@ -73,7 +65,7 @@ enum ePlanePositions
 };
 
 enum {
-	NUM_VEHICLE_POSITIONS = 10
+	NUM_VEHICLE_POSITIONS = 5
 };
 
 class CVehicleModelInfo : public CClumpModelInfo
@@ -81,17 +73,19 @@ class CVehicleModelInfo : public CClumpModelInfo
 public:
 	uint8 m_lastColour1;
 	uint8 m_lastColour2;
-	char m_gameName[32];
+	char m_gameName[10];
 	int32 m_vehicleType;
-	union {
-		int32 m_wheelId;
-		int32 m_planeLodId;
-	};
 	float m_wheelScale;
-	int32 m_numDoors;
-	int32 m_handlingId;
-	int32 m_vehicleClass;
-	int32 m_level;
+	union {
+		int16 m_wheelId;
+		int16 m_planeLodId;
+	};
+	int16 m_handlingId;
+	int8 m_numDoors;
+	int8 m_vehicleClass;
+	int8 m_level;
+	int8 m_numComps;
+	int16 m_frequency;
 	CVector m_positions[NUM_VEHICLE_POSITIONS];
 	uint32 m_compRules;
 	float m_bikeSteerAngle;
@@ -103,13 +97,15 @@ public:
 	uint8 m_lastColorVariation;
 	uint8 m_currentColour1;
 	uint8 m_currentColour2;
-	RwTexture *m_envMap;
 	RpAtomic *m_comps[6];
-	int32 m_numComps;
+	// This is stupid, CClumpModelInfo already has it!
+	union {
+		int32 m_animFileIndex;
+		char *m_animFileName;
+	};
 
 	static int8 ms_compsToUse[2];
 	static int8 ms_compsUsed[2];
-	static RwTexture *ms_pEnvironmentMaps[NUM_VEHICLE_ENVMAPS];
 	static RwRGBA ms_vehicleColourTable[256];
 	static RwTexture *ms_colourTextureTable[256];
 	static RwObjectNameIdAssocation *ms_vehicleDescs[NUM_VEHICLE_TYPES];
@@ -118,6 +114,9 @@ public:
 	void DeleteRwObject(void);
 	RwObject *CreateInstance(void);
 	void SetClump(RpClump *);
+	void SetAnimFile(const char *file);
+	void ConvertAnimFileIndex(void);
+	int GetAnimFileIndex(void) { return m_animFileIndex; }
 
 	static RwFrame *CollapseFramesCB(RwFrame *frame, void *data);
 	static RwObject *MoveObjectsCB(RwObject *object, void *data);
@@ -130,6 +129,7 @@ public:
 	static RpAtomic *SetAtomicRendererCB_Train(RpAtomic *atomic, void *data);
 	static RpAtomic *SetAtomicRendererCB_Boat(RpAtomic *atomic, void *data);
 	static RpAtomic *SetAtomicRendererCB_Heli(RpAtomic *atomic, void *data);
+	static RpAtomic *SetAtomicRendererCB_RealHeli(RpAtomic *atomic, void *data);
 	void SetAtomicRenderCallbacks(void);
 
 	static RwObject *SetAtomicFlagCB(RwObject *object, void *data);
@@ -152,8 +152,8 @@ public:
 	static void DeleteVehicleColourTextures(void);
 
 	static RpAtomic *SetEnvironmentMapCB(RpAtomic *atomic, void *data);
-	static RpMaterial *SetEnvironmentMapCB(RpMaterial *material, void *data);
-	static RpMaterial *HasSpecularMaterialCB(RpMaterial *material, void *data);
+	static RpMaterial *SetDefaultEnvironmentMapCB(RpMaterial *material, void *data);
+	static RpMaterial *GetMatFXEffectMaterialCB(RpMaterial *material, void *data);
 	void SetEnvironmentMap(void);
 	static void LoadEnvironmentMaps(void);
 	static void ShutdownEnvironmentMaps(void);
@@ -162,4 +162,5 @@ public:
 	static void SetComponentsToUse(int8 c1, int8 c2) { ms_compsToUse[0] = c1; ms_compsToUse[1] = c2; }
 };
 
-VALIDATE_SIZE(CVehicleModelInfo, 0x1F8);
+extern bool gbBlackCars;
+extern bool gbPinkCars;

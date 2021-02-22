@@ -9,29 +9,13 @@
 #include "World.h"
 #include "Vehicle.h"
 #include "SurfaceTable.h"
+#include "Weather.h"
+#include "PedAttractor.h"
+#include "Object.h"
+#include "CarCtrl.h"
 
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-eCrimeType
-EventTypeToCrimeType(eEventType event)
-{
-	eCrimeType crime;
-	switch (event) {
-	case EVENT_ASSAULT: crime = CRIME_HIT_PED; break;
-	case EVENT_RUN_REDLIGHT: crime = CRIME_RUN_REDLIGHT; break;
-	case EVENT_ASSAULT_POLICE: crime = CRIME_HIT_COP; break;
-	case EVENT_GUNSHOT: crime = CRIME_POSSESSION_GUN; break;
-	case EVENT_STEAL_CAR: crime = CRIME_STEAL_CAR; break;
-	case EVENT_HIT_AND_RUN: crime = CRIME_RUNOVER_PED; break;
-	case EVENT_HIT_AND_RUN_COP: crime = CRIME_RUNOVER_COP; break;
-	case EVENT_SHOOT_PED: crime = CRIME_SHOOT_PED; break;
-	case EVENT_SHOOT_COP: crime = CRIME_SHOOT_COP; break;
-	case EVENT_PED_SET_ON_FIRE: crime = CRIME_PED_BURNED; break;
-	case EVENT_COP_SET_ON_FIRE: crime = CRIME_COP_BURNED; break;
-	case EVENT_CAR_SET_ON_FIRE: crime = CRIME_VEHICLE_BURNED; break;
-	default: crime = CRIME_NONE; break;
-	}
-	return crime;
-}
+#ifndef _WIN32
+#include <float.h>
 #endif
 
 CCivilianPed::CCivilianPed(ePedType pedtype, uint32 mi) : CPed(pedtype)
@@ -40,6 +24,26 @@ CCivilianPed::CCivilianPed(ePedType pedtype, uint32 mi) : CPed(pedtype)
 	for (int i = 0; i < ARRAY_SIZE(m_nearPeds); i++) {
 		m_nearPeds[i] = nil;
 	}
+	m_bLookForVacantCars = false;
+	if (pedtype == PEDTYPE_CRIMINAL)
+		m_bLookForVacantCars = true;
+
+	m_nLookForVacantCarsCounter = 0;
+	m_bJustStoleACar = false;
+	m_bStealCarEvenIfThereIsSomeoneInIt = false;
+	for (int i = 0; i < ARRAY_SIZE(m_nStealWishList); i++) {
+#ifdef FIX_BUGS
+		uint32 randomCarModel = CGeneral::GetRandomNumberInRange(MI_LANDSTAL, MI_LAST_VEHICLE);
+#else
+		uint32 randomCarModel = CGeneral::GetRandomNumberInRange(MI_LANDSTAL, MI_LANDSTAL + VEHICLEMODELSIZE);
+#endif
+		if (CModelInfo::IsCarModel(randomCarModel) || CModelInfo::IsBikeModel(randomCarModel))
+			m_nStealWishList[i] = randomCarModel;
+		else
+			m_nStealWishList[i] = MI_CHEETAH;
+	}
+	m_nAttractorCycleState = 0;
+	m_bAttractorUnk = (CGeneral::GetRandomNumberInRange(0.0f, 1.0f) < 1.25f);
 }
 
 void
@@ -58,7 +62,13 @@ CCivilianPed::CivilianAI(void)
 		if (CTimer::GetTimeInMilliseconds() <= m_lookTimer)
 			return;
 
-		uint32 closestThreatFlag = ScanForThreats();
+		ScanForDelayedResponseThreats();
+		if (!m_threatFlags || CTimer::GetTimeInMilliseconds() <= m_threatCheckTimer)
+			return;
+		CheckThreatValidity();
+		uint32 closestThreatFlag = m_threatFlags;
+		m_threatFlags = 0;
+		m_threatCheckTimer = 0;
 		if (closestThreatFlag == PED_FLAG_EXPLOSION) {
 			float angleToFace = CGeneral::GetRadianAngleBetweenPoints(
 				m_eventOrThreat.x,  m_eventOrThreat.y,
@@ -72,18 +82,30 @@ CCivilianPed::CivilianAI(void)
 		}
 		return;
 	}
-	uint32 closestThreatFlag = ScanForThreats();
+	ScanForDelayedResponseThreats();
+	if (!m_threatFlags || CTimer::GetTimeInMilliseconds() <= m_threatCheckTimer)
+		return;
+	CheckThreatValidity();
+	uint32 closestThreatFlag = m_threatFlags;
+	m_threatFlags = 0;
+	m_threatCheckTimer = 0;
 	if (closestThreatFlag == PED_FLAG_GUN) {
 		if (!m_threatEntity || !m_threatEntity->IsPed())
 			return;
 
 		CPed *threatPed = (CPed*)m_threatEntity;
 		float threatDistSqr = (m_threatEntity->GetPosition() - GetPosition()).MagnitudeSqr2D();
+		if (CharCreatedBy == MISSION_CHAR && bCrouchWhenScared) {
+			SetDuck(10000, true);
+			SetLookFlag(m_threatEntity, false);
+			SetLookTimer(500);
+			return;
+		}
 		if (m_pedStats->m_fear <= m_pedStats->m_lawfulness) {
 			if (m_pedStats->m_temper <= m_pedStats->m_fear) {
 				if (!threatPed->IsPlayer() || !RunToReportCrime(CRIME_POSSESSION_GUN)) {
-					if (threatDistSqr < sq(10.0f)) {
-						Say(SOUND_PED_FLEE_SPRINT);
+					if (threatDistSqr < sq(30.0f)) {
+						bMakeFleeScream = true;
 						SetFindPathAndFlee(m_threatEntity, 10000);
 					} else {
 						SetFindPathAndFlee(m_threatEntity->GetPosition(), 5000, true);
@@ -93,13 +115,16 @@ CCivilianPed::CivilianAI(void)
 				SetFindPathAndFlee(m_threatEntity, 5000);
 				if (threatDistSqr < sq(20.0f)) {
 					SetMoveState(PEDMOVE_RUN);
-					Say(SOUND_PED_FLEE_SPRINT);
+					bMakeFleeScream = true;
 				} else {
 					SetMoveState(PEDMOVE_WALK);
 				}
+			} else if (threatPed->IsPlayer() && IsGangMember() && bCanAttackPlayerWithCops) {
+				SetObjective(OBJECTIVE_KILL_CHAR_ON_FOOT, m_threatEntity);
+
 			} else if (threatPed->IsPlayer() && FindPlayerPed()->m_pWanted->m_CurrentCops != 0)  {
 				SetFindPathAndFlee(m_threatEntity, 5000);
-				if (threatDistSqr < sq(10.0f)) {
+				if (threatDistSqr < sq(30.0f)) {
 					SetMoveState(PEDMOVE_RUN);
 				} else {
 					SetMoveState(PEDMOVE_WALK);
@@ -108,12 +133,12 @@ CCivilianPed::CivilianAI(void)
 				SetObjective(OBJECTIVE_KILL_CHAR_ON_FOOT, m_threatEntity);
 			}
 		} else {
-			if (threatDistSqr < sq(10.0f)) {
-				Say(SOUND_PED_FLEE_SPRINT);
+			if (threatDistSqr < sq(30.0f)) {
+				bMakeFleeScream = true;
 				SetFindPathAndFlee(m_threatEntity, 10000);
 				SetMoveState(PEDMOVE_SPRINT);
 			} else {
-				Say(SOUND_PED_FLEE_SPRINT);
+				bMakeFleeScream = false;
 				SetFindPathAndFlee(m_threatEntity, 5000);
 				SetMoveState(PEDMOVE_RUN);
 			}
@@ -122,7 +147,10 @@ CCivilianPed::CivilianAI(void)
 		SetLookTimer(500);
 	} else if (closestThreatFlag == PED_FLAG_DEADPEDS) {
 		float eventDistSqr = (m_pEventEntity->GetPosition() - GetPosition()).MagnitudeSqr2D();
-		if (IsGangMember() && m_nPedType == ((CPed*)m_pEventEntity)->m_nPedType) {
+		if (CharCreatedBy == MISSION_CHAR && bCrouchWhenScared && eventDistSqr < sq(5.0f)) {
+			SetDuck(10000, true);
+
+		} else if (((CPed*)m_pEventEntity)->bIsDrowning || IsGangMember() && m_nPedType == ((CPed*)m_pEventEntity)->m_nPedType) {
 			if (eventDistSqr < sq(5.0f)) {
 				SetFindPathAndFlee(m_pEventEntity, 2000);
 				SetMoveState(PEDMOVE_RUN);
@@ -137,32 +165,21 @@ CCivilianPed::CivilianAI(void)
 					investigateDeadPed = false;
 			}
 
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-			int32 eventId = CheckForPlayerCrimes((CPed*)m_pEventEntity);
-			eCrimeType crime = (eventId == -1 ? CRIME_NONE : EventTypeToCrimeType(gaEvent[eventId].type));
-			bool eligibleToReport = crime != CRIME_NONE && m_pedStats->m_fear <= m_pedStats->m_lawfulness && m_pedStats->m_temper <= m_pedStats->m_fear;
-			if (IsGangMember() || !eligibleToReport || !RunToReportCrime(crime))
-#endif
 			if (investigateDeadPed)
 				SetInvestigateEvent(EVENT_DEAD_PED, CVector2D(m_pEventEntity->GetPosition()), 1.0f, 20000, 0.0f);
 
 		} else {
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-			int32 eventId = CheckForPlayerCrimes((CPed*)m_pEventEntity);
-			eCrimeType crime = (eventId == -1 ? CRIME_NONE : EventTypeToCrimeType(gaEvent[eventId].type));
-			bool eligibleToReport = crime != CRIME_NONE && m_pedStats->m_fear <= m_pedStats->m_lawfulness && m_pedStats->m_temper <= m_pedStats->m_fear;
-			if(!eligibleToReport || !RunToReportCrime(crime))
-#endif
-			{
-				SetFindPathAndFlee(m_pEventEntity, 5000);
-				SetMoveState(PEDMOVE_RUN);
-			}
+			SetFindPathAndFlee(m_pEventEntity, 5000);
+			SetMoveState(PEDMOVE_RUN);
 		}
 	} else if (closestThreatFlag == PED_FLAG_EXPLOSION) {
 		CVector2D eventDistVec = m_eventOrThreat - GetPosition();
 		float eventDistSqr = eventDistVec.MagnitudeSqr();
-		if (eventDistSqr < sq(20.0f)) {
-			Say(SOUND_PED_FLEE_SPRINT);
+		if (CharCreatedBy == MISSION_CHAR && bCrouchWhenScared && eventDistSqr < sq(20.0f)) {
+			SetDuck(10000, true);
+
+		} else if (eventDistSqr < sq(20.0f)) {
+			bMakeFleeScream = true;
 			SetFlee(m_eventOrThreat, 2000);
 			float angleToFace = CGeneral::GetRadianAngleBetweenPoints(
 				m_eventOrThreat.x, m_eventOrThreat.y,
@@ -184,55 +201,32 @@ CCivilianPed::CivilianAI(void)
 			}
 		}
 	} else {
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-		bool youShouldRunEventually = false;
-		bool dontGoToPhone = false;
-#endif
 		if (m_threatEntity && m_threatEntity->IsPed()) {
 			CPed *threatPed = (CPed*)m_threatEntity;
 			if (m_pedStats->m_fear <= 100 - threatPed->m_pedStats->m_temper && threatPed->m_nPedType != PEDTYPE_COP) {
-				if (threatPed->GetWeapon(m_currentWeapon).IsTypeMelee() || !GetWeapon()->IsTypeMelee()) {
-					if (threatPed->IsPlayer() && FindPlayerPed()->m_pWanted->m_CurrentCops != 0) {
+				if (threatPed->GetWeapon()->IsTypeMelee() || !GetWeapon()->IsTypeMelee()) {
+					if (threatPed->IsPlayer() && IsGangMember() && bCanAttackPlayerWithCops) {
+						SetObjective(OBJECTIVE_KILL_CHAR_ON_FOOT, m_threatEntity);
+
+					} else if (threatPed->IsPlayer() && FindPlayerPed()->m_pWanted->m_CurrentCops != 0) {
 						if (m_objective == OBJECTIVE_KILL_CHAR_ON_FOOT || m_objective == OBJECTIVE_KILL_CHAR_ANY_MEANS) {
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-							dontGoToPhone = true;
-#endif
 							SetFindPathAndFlee(m_threatEntity, 10000);
 						}
 					} else {
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-						dontGoToPhone = true;
-#endif
 						SetObjective(OBJECTIVE_KILL_CHAR_ON_FOOT, m_threatEntity);
 					}
 				}
 			} else {
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-				youShouldRunEventually = true;
-#else
-				SetFindPathAndFlee(m_threatEntity, 10000, true);
-#endif
-			}
-		}
-
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-		if (!dontGoToPhone) {
-			int32 eventId = CheckForPlayerCrimes(nil);
-			eCrimeType crime = (eventId == -1 ? CRIME_NONE : EventTypeToCrimeType(gaEvent[eventId].type));
-			bool eligibleToReport = crime != CRIME_NONE && m_pedStats->m_fear <= m_pedStats->m_lawfulness;
-
-			if ((!eligibleToReport || !RunToReportCrime(crime)) && youShouldRunEventually) {
 				SetFindPathAndFlee(m_threatEntity, 10000, true);
 			}
 		}
-#endif
 	}
 }
 
 void
 CCivilianPed::ProcessControl(void)
 {
-	if (m_nZoneLevel > LEVEL_GENERIC && m_nZoneLevel != CCollision::ms_collisionInMemory)
+	if (CharCreatedBy == UNK_CHAR)
 		return;
 
 	CPed::ProcessControl();
@@ -243,7 +237,7 @@ CCivilianPed::ProcessControl(void)
 	if (DyingOrDead())
 		return;
 
-	GetWeapon()->Update(m_audioEntityId);
+	GetWeapon()->Update(m_audioEntityId, nil);
 	switch (m_nPedState) {
 		case PED_WANDER_RANGE:
 		case PED_WANDER_PATH:
@@ -260,19 +254,10 @@ CCivilianPed::ProcessControl(void)
 			// fall through
 		case PED_SEEK_POS:
 			if (Seek()) {
-				if ((m_objective == OBJECTIVE_GOTO_AREA_ON_FOOT || m_objective == OBJECTIVE_RUN_TO_AREA) && m_pNextPathNode) {
+				if ((m_objective == OBJECTIVE_GOTO_AREA_ON_FOOT || m_objective == OBJECTIVE_RUN_TO_AREA || m_objective == OBJECTIVE_SPRINT_TO_AREA ||
+					IsUseAttractorObjective(m_objective)) && m_pNextPathNode) {
 					m_pNextPathNode = nil;
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-				} else if (bRunningToPhone && m_objective < OBJECTIVE_FLEE_ON_FOOT_TILL_SAFE) {
-					if (crimeReporters[m_phoneId] != this) {
-						RestorePreviousState();
-						m_phoneId = -1;
-						bRunningToPhone = false;
-					} else {
-						m_facePhoneStart = true;
-						SetPedState(PED_FACE_PHONE);
-					}
-#else
+
 				} else if (bRunningToPhone) {
 					if (gPhoneInfo.m_aPhones[m_phoneId].m_nState != PHONE_STATE_FREE) {
 						RestorePreviousState();
@@ -281,9 +266,8 @@ CCivilianPed::ProcessControl(void)
 						gPhoneInfo.m_aPhones[m_phoneId].m_nState = PHONE_STATE_REPORTING_CRIME;
 						SetPedState(PED_FACE_PHONE);
 					}
-#endif
 				} else if (m_objective != OBJECTIVE_KILL_CHAR_ANY_MEANS && m_objective != OBJECTIVE_KILL_CHAR_ON_FOOT) {
-					if (m_objective == OBJECTIVE_FOLLOW_CHAR_IN_FORMATION) {
+					if (m_pedInObjective && m_objective == OBJECTIVE_FOLLOW_CHAR_IN_FORMATION) {
 						if (m_moved.Magnitude() == 0.0f) {
 							if (m_pedInObjective->m_nMoveState == PEDMOVE_STILL)
 								m_fRotationDest = m_pedInObjective->m_fRotationCur;
@@ -291,7 +275,8 @@ CCivilianPed::ProcessControl(void)
 					} else if (m_objective == OBJECTIVE_GOTO_CHAR_ON_FOOT
 						&& m_pedInObjective && m_pedInObjective->m_nMoveState != PEDMOVE_STILL) {
 						SetMoveState(m_pedInObjective->m_nMoveState);
-					} else if (m_objective == OBJECTIVE_GOTO_AREA_ON_FOOT || m_objective == OBJECTIVE_RUN_TO_AREA) {
+					} else if (m_objective == OBJECTIVE_GOTO_AREA_ON_FOOT || m_objective == OBJECTIVE_RUN_TO_AREA || m_objective == OBJECTIVE_SPRINT_TO_AREA ||
+						IsUseAttractorObjective(m_objective)) {
 						SetIdle();
 					} else {
 						RestorePreviousState();
@@ -357,6 +342,8 @@ CCivilianPed::ProcessControl(void)
 								GetPosition().x - m_pMyVehicle->GetPosition().x, GetPosition().y - m_pMyVehicle->GetPosition().y, 0.0f);
 
 							DMAudio.PlayOneShot(m_pMyVehicle->m_audioEntityId, SOUND_CAR_JERK, 0.0f);
+							m_pMyVehicle->pDriver->Say(SOUND_PED_PLAYER_BEFORESEX);
+							Say(SOUND_PED_PLAYER_BEFORESEX);
 
 							int playerSexFrequency = CWorld::Players[CWorld::PlayerInFocus].m_nSexFrequency;
 							if (CWorld::Players[CWorld::PlayerInFocus].m_nMoney >= 10 && playerSexFrequency > 250) {
@@ -367,19 +354,23 @@ CCivilianPed::ProcessControl(void)
 										CWorld::Players[CWorld::PlayerInFocus].m_nSexFrequency = Max(250, playerSexFrequency - 10);
 									}
 
-									m_pMyVehicle->pDriver->m_fHealth = Min(125.0f, 1.0f + m_pMyVehicle->pDriver->m_fHealth);
+									m_pMyVehicle->pDriver->m_fHealth = Min(CWorld::Players[0].m_nMaxHealth + 25.0f, 1.0f + m_pMyVehicle->pDriver->m_fHealth);
 									if (CWorld::Players[CWorld::PlayerInFocus].m_nSexFrequency == 250)
 										CWorld::Players[CWorld::PlayerInFocus].m_nNextSexFrequencyUpdateTime = CTimer::GetTimeInMilliseconds() + 3000;
 							} else {
 								bWanderPathAfterExitingCar = true;
 								CWorld::Players[CWorld::PlayerInFocus].m_pHooker = nil;
+								ClearLeader();
 								SetObjective(OBJECTIVE_LEAVE_CAR, m_pMyVehicle);
+								m_pMyVehicle->pDriver->Say(SOUND_PED_PLAYER_AFTERSEX);
 							}
 						} else {
 							bWanderPathAfterExitingCar = true;
 							CWorld::Players[CWorld::PlayerInFocus].m_pHooker = nil;
-							m_pMyVehicle->pDriver->m_fHealth = 125.0f;
+							m_pMyVehicle->pDriver->m_fHealth = CWorld::Players[0].m_nMaxHealth + 25.0f;
+							ClearLeader();
 							SetObjective(OBJECTIVE_LEAVE_CAR, m_pMyVehicle);
+							m_pMyVehicle->pDriver->Say(SOUND_PED_PLAYER_AFTERSEX);
 						}
 					} else {
 						CWorld::Players[CWorld::PlayerInFocus].m_nNextSexFrequencyUpdateTime = CTimer::GetTimeInMilliseconds() + 3000;
@@ -392,6 +383,7 @@ CCivilianPed::ProcessControl(void)
 				} else {
 					bWanderPathAfterExitingCar = true;
 					CWorld::Players[CWorld::PlayerInFocus].m_pHooker = nil;
+					ClearLeader();
 					SetObjective(OBJECTIVE_LEAVE_CAR, m_pMyVehicle);
 				}
 			}
@@ -412,6 +404,11 @@ CCivilianPed::ProcessControl(void)
 	if (IsPedInControl())
 		CivilianAI();
 
+	if (CharCreatedBy == RANDOM_CHAR) {
+		EnterVacantNearbyCars();
+		UseNearbyAttractors();
+	}
+
 	if (CTimer::GetTimeInMilliseconds() > m_timerUnused) {
 		m_stateUnused = 0;
 		m_timerUnused = 0;
@@ -421,27 +418,12 @@ CCivilianPed::ProcessControl(void)
 		Avoid();
 }
 
-// It's "CPhoneInfo::ProcessNearestFreePhone" in PC IDB but that's not true, someone made it up.
 bool
 CPed::RunToReportCrime(eCrimeType crimeToReport)
 {
-#ifdef PEDS_REPORT_CRIMES_ON_PHONE
-	if (bRunningToPhone) {
-		if (!isPhoneAvailable(m_phoneId) && crimeReporters[m_phoneId] != this) {
-			crimeReporters[m_phoneId] = nil;
-			m_phoneId = -1;
-			bIsRunning = false;
-			ClearSeek(); // clears bRunningToPhone
-			return false;
-		}
-
-		return true;
-	}
-#else
 	// They changed true into false to make this function unusable. So running to phone actually starts but first frame after that cancels it.
 	if (m_nPedState == PED_SEEK_POS)
 		return false;
-#endif
 
 	CVector pos = GetPosition();
 	int phoneId = gPhoneInfo.FindNearestFreePhone(&pos);
@@ -449,19 +431,180 @@ CPed::RunToReportCrime(eCrimeType crimeToReport)
 	if (phoneId == -1)
 		return false;
 
-	CPhone *phone = &gPhoneInfo.m_aPhones[phoneId];
-#ifndef PEDS_REPORT_CRIMES_ON_PHONE
+	CPhone* phone = &gPhoneInfo.m_aPhones[phoneId];
 	if (phone->m_nState != PHONE_STATE_FREE)
 		return false;
-#else
-	crimeReporters[phoneId] = this;
-#endif
 
 	bRunningToPhone = true;
-	SetSeek(phone->m_pEntity->GetMatrix() * -phone->m_pEntity->GetForward(), 1.0f); // original: phone.m_vecPos, 0.3f
+	SetSeek(phone->m_vecPos, 0.3f);
 	SetMoveState(PEDMOVE_RUN);
-	bIsRunning = true; // not there in original
 	m_phoneId = phoneId;
 	m_crimeToReportOnPhone = crimeToReport;
 	return true;
+}
+
+const int32 gFrequencyOfAttractorAttempt = 11;
+const float gDistanceToSeekAttractors = 50.0f;
+const float gMaxDistanceToAttract = 10.0f;
+
+/* Probably this was inlined */
+void CCivilianPed::FindNearbyAttractorsSectorList(CPtrList& list, float& minDistance, C2dEffect*& pClosestAttractor, CEntity*& pAttractorEntity)
+{
+	for (CPtrNode* pNode = list.first; pNode != nil; pNode = pNode->next) {
+		CEntity* pEntity = (CEntity*)pNode->item;
+		if (pEntity->IsObject() && (!pEntity->GetIsStatic() || ((CObject*)pEntity)->bHasBeenDamaged))
+			continue;
+		CBaseModelInfo* pModelInfo = CModelInfo::GetModelInfo(pEntity->GetModelIndex());
+		for (int i = 0; i < pModelInfo->GetNum2dEffects(); i++) {
+			C2dEffect* pEffect = pModelInfo->Get2dEffect(i);
+			if (pEffect->type != EFFECT_PED_ATTRACTOR)
+				continue;
+			if (!IsAttractedTo(pEffect->pedattr.type))
+				continue;
+			CVector pos;
+			CPedAttractorManager::ComputeEffectPos(pEffect, pEntity->GetMatrix(), pos);
+			if ((pos - GetPosition()).MagnitudeSqr() < minDistance) {
+				CPedAttractorManager* pManager = GetPedAttractorManager();
+				if (pManager->HasEmptySlot(pEffect) && pManager->IsApproachable(pEffect, pEntity->GetMatrix(), 0, this)) {
+					pClosestAttractor = pEffect;
+					pAttractorEntity = pEntity;
+					minDistance = (pos - GetPosition()).MagnitudeSqr();
+				}
+			}
+		}
+	}
+}
+
+void CCivilianPed::UseNearbyAttractors()
+{
+	if (CWeather::Rain < 0.2f && !m_bAttractorUnk)
+		return;
+	if (HasAttractor())
+		return;
+	if (m_nAttractorCycleState != gFrequencyOfAttractorAttempt) {
+		m_nAttractorCycleState++;
+		return;
+	}
+	m_nAttractorCycleState = 0;
+	if (!IsPedInControl())
+		return;
+	if (m_nPedState == PED_FLEE_ENTITY)
+		return;
+
+	float left = GetPosition().x - gDistanceToSeekAttractors;
+	float right = GetPosition().x + gDistanceToSeekAttractors;
+	float top = GetPosition().y - gDistanceToSeekAttractors;
+	float bottom = GetPosition().y + gDistanceToSeekAttractors;
+	int xstart = Max(0, CWorld::GetSectorIndexX(left));
+	int xend = Min(NUMSECTORS_X - 1, CWorld::GetSectorIndexX(right));
+	int ystart = Max(0, CWorld::GetSectorIndexY(top));
+	int yend = Min(NUMSECTORS_Y - 1, CWorld::GetSectorIndexY(bottom));
+	assert(xstart <= xend);
+	assert(ystart <= yend);
+
+	float minDistance = SQR(gMaxDistanceToAttract);
+	C2dEffect* pClosestAttractor = nil;
+	CEntity* pAttractorEntity = nil;
+
+	for (int y = ystart; y <= yend; y++) {
+		for (int x = xstart; x <= xend; x++) {
+			CSector* s = CWorld::GetSector(x, y);
+			FindNearbyAttractorsSectorList(s->m_lists[ENTITYLIST_BUILDINGS], minDistance, pClosestAttractor, pAttractorEntity);
+			FindNearbyAttractorsSectorList(s->m_lists[ENTITYLIST_OBJECTS], minDistance, pClosestAttractor, pAttractorEntity);
+		}
+	}
+	if (pClosestAttractor)
+		GetPedAttractorManager()->RegisterPedWithAttractor(this, pClosestAttractor, pAttractorEntity->GetMatrix());
+}
+
+bool CCivilianPed::IsAttractedTo(int8 type)
+{
+	switch (type) {
+	case ATTRACTOR_ATM: return true;
+	case ATTRACTOR_SEAT: return true;
+	case ATTRACTOR_STOP: return true;
+	case ATTRACTOR_PIZZA: return true;
+	case ATTRACTOR_SHELTER: return CWeather::Rain >= 0.2f;
+	case ATTRACTOR_ICECREAM: return false;
+	}
+	return false;
+}
+
+void
+CCivilianPed::EnterVacantNearbyCars(void)
+{
+	if (!m_bLookForVacantCars)
+		return;
+
+	if (m_bJustStoleACar && bInVehicle && m_carInObjective == m_pMyVehicle) {
+		m_bJustStoleACar = false;
+		m_pMyVehicle->SetStatus(STATUS_PHYSICS);
+		m_pMyVehicle->AutoPilot.m_nCarMission = MISSION_CRUISE;
+		m_pMyVehicle->AutoPilot.m_nCruiseSpeed = 10;
+		m_pMyVehicle->bEngineOn = true;
+
+	} else if (!bHasAlreadyStoleACar) {
+		if (m_nLookForVacantCarsCounter == 8) {
+			m_nLookForVacantCarsCounter = 0;
+			if (IsPedInControl() && m_objective == OBJECTIVE_NONE) {
+
+				CVehicle *foundCar = nil;
+				float closestDist = FLT_MAX;
+				int minX = CWorld::GetSectorIndexX(GetPosition().x - 10.0f);
+				if (minX < 0) minX = 0;
+				int minY = CWorld::GetSectorIndexY(GetPosition().y - 10.0f);
+				if (minY < 0) minY = 0;
+				int maxX = CWorld::GetSectorIndexX(GetPosition().x + 10.0f);
+				if (maxX > NUMSECTORS_X - 1) maxX = NUMSECTORS_X - 1;
+				int maxY = CWorld::GetSectorIndexY(GetPosition().y + 10.0f);
+				if (maxY > NUMSECTORS_Y - 1) maxY = NUMSECTORS_Y - 1;
+
+				for (int curY = minY; curY <= maxY; curY++) {
+					for (int curX = minX; curX <= maxX; curX++) {
+						CSector* sector = CWorld::GetSector(curX, curY);
+						for (CPtrNode* node = sector->m_lists[ENTITYLIST_VEHICLES].first; node; node = node->next) {
+							CVehicle* veh = (CVehicle*)node->item;
+							if (veh && veh->IsCar()) {
+
+								// Looks like PARKED_VEHICLE condition isn't there in Mobile.
+								if (veh->VehicleCreatedBy == RANDOM_VEHICLE || veh->VehicleCreatedBy == PARKED_VEHICLE) {
+									if (IsOnStealWishList(veh->GetModelIndex()) && !veh->IsLawEnforcementVehicle()
+										&& (m_bStealCarEvenIfThereIsSomeoneInIt || !veh->pDriver && !veh->m_nNumPassengers)
+										&& !veh->m_nNumGettingIn && !veh->m_nGettingInFlags && !veh->m_nGettingOutFlags
+										&& !veh->m_pCarFire && veh->m_fHealth > 800.0f
+										&& !veh->IsUpsideDown() && !veh->IsOnItsSide() && veh->CanPedEnterCar()) {
+										float dist = (GetPosition() - veh->GetPosition()).MagnitudeSqr();
+										if (dist < sq(10.0f) && dist < closestDist && veh->IsClearToDriveAway()) {
+											foundCar = veh;
+											closestDist = dist;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				if (foundCar) {
+					m_bJustStoleACar = true;
+					bHasAlreadyStoleACar = true;
+					CCarCtrl::JoinCarWithRoadSystem(foundCar);
+					SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, foundCar);
+					SetObjectiveTimer(10000);
+				}
+			}
+		} else {
+			++m_nLookForVacantCarsCounter;
+		}
+	}
+}
+
+bool
+CCivilianPed::IsOnStealWishList(int32 model)
+{
+	for (int i = 0; i < ARRAY_SIZE(m_nStealWishList); i++) {
+		if (model == m_nStealWishList[i]) {
+			return true;
+		}
+	}
+	return false;
 }

@@ -1,13 +1,9 @@
 #pragma once
 
+#include "ModelInfo.h"
+
 #define MODELINDICES \
 	X("fire_hydrant",	MI_FIRE_HYDRANT) \
-	X("bagelstnd02",	MI_BAGELSTAND2) \
-	X("fish01",		MI_FISHSTALL01) \
-	X("fishstall02",	MI_FISHSTALL02) \
-	X("fishstall03",	MI_FISHSTALL03) \
-	X("fishstall04",	MI_FISHSTALL04) \
-	X("taxisign",		MI_TAXISIGN) \
 	X("phonesign",		MI_PHONESIGN) \
 	X("noparkingsign1",	MI_NOPARKINGSIGN1) \
 	X("bussign1",		MI_BUSSIGN1) \
@@ -20,97 +16,62 @@
 	X("wastebin",		MI_WASTEBIN) \
 	X("phonebooth1",	MI_PHONEBOOTH1) \
 	X("parkingmeter",	MI_PARKINGMETER) \
+	X("parkingmeterg",	MI_PARKINGMETER2) \
+	X("mall_fans",		MI_MALLFAN) \
+	X("htl_fan_rotate_nt",	MI_HOTELFAN_NIGHT) \
+	X("htl_fan_rotate_dy",	MI_HOTELFAN_DAY) \
+	X("hotroomfan",		MI_HOTROOMFAN) \
 	X("trafficlight1",	MI_TRAFFICLIGHTS) \
+	X("MTraffic4",		MI_TRAFFICLIGHTS_VERTICAL) \
+	X("MTraffic1",		MI_TRAFFICLIGHTS_MIAMI) \
+	X("MTraffic2",		MI_TRAFFICLIGHTS_TWOVERTICAL) \
 	X("lamppost1",		MI_SINGLESTREETLIGHTS1) \
 	X("lamppost2",		MI_SINGLESTREETLIGHTS2) \
 	X("lamppost3",		MI_SINGLESTREETLIGHTS3) \
 	X("doublestreetlght1",	MI_DOUBLESTREETLIGHTS) \
-	X("rd_Road2A10",	MI_ROADSFORROADBLOCKSSTART) \
-	X("rd_Road1A30",	MI_ROADSFORROADBLOCKSEND) \
-	X("veg_tree1",		MI_TREE1) \
+	X("Streetlamp1",	MI_STREETLAMP1) \
+	X("Streetlamp2",	MI_STREETLAMP2) \
 	X("veg_tree3",		MI_TREE2) \
 	X("veg_treea1",		MI_TREE3) \
-	X("veg_treenew01",	MI_TREE4) \
-	X("veg_treenew05",	MI_TREE5) \
 	X("veg_treeb1",		MI_TREE6) \
-	X("veg_treenew10",	MI_TREE7) \
 	X("veg_treea3",		MI_TREE8) \
-	X("veg_treenew09",	MI_TREE9) \
-	X("veg_treenew08",	MI_TREE10) \
-	X("veg_treenew03",	MI_TREE11) \
-	X("veg_treenew16",	MI_TREE12) \
-	X("veg_treenew17",	MI_TREE13) \
-	X("veg_treenew06",	MI_TREE14) \
-	X("doc_crane_cab",	MODELID_CRANE_1) \
-	X("cranetopb",		MODELID_CRANE_2) \
-	X("cranetopa",		MODELID_CRANE_3) \
+	X("doc_crane_cab0",	MODELID_CRANE_1) \
+	X("doc_crane_cab01",	MODELID_CRANE_2) \
+	X("doc_crane_cab02",	MODELID_CRANE_3) \
+	X("doc_crane_cab03",	MODELID_CRANE_4) \
+	X("boatcranelg0",	MODELID_CRANE_5) \
+	X("LODnetopa0",		MODELID_CRANE_6) \
 	X("package1",		MI_COLLECTABLE1) \
 	X("Money",		MI_MONEY) \
 	X("barrel1",		MI_CARMINE) \
-	X("oddjgaragdoor",	MI_GARAGEDOOR1) \
-	X("bombdoor",		MI_GARAGEDOOR2) \
-	X("door_bombshop",	MI_GARAGEDOOR3) \
-	X("vheistlocdoor",	MI_GARAGEDOOR4) \
-	X("door2_garage",	MI_GARAGEDOOR5) \
-	X("ind_slidedoor",	MI_GARAGEDOOR6) \
-	X("bankjobdoor",	MI_GARAGEDOOR7) \
-	X("door_jmsgrage",	MI_GARAGEDOOR9) \
-	X("jamesgrge_kb",	MI_GARAGEDOOR10) \
-	X("door_sfehousegrge",	MI_GARAGEDOOR11) \
-	X("shedgaragedoor",	MI_GARAGEDOOR12) \
-	X("door4_garage",	MI_GARAGEDOOR13) \
-	X("door_col_compnd_01",	MI_GARAGEDOOR14) \
-	X("door_col_compnd_02",	MI_GARAGEDOOR15) \
-	X("door_col_compnd_03",	MI_GARAGEDOOR16) \
-	X("door_col_compnd_04",	MI_GARAGEDOOR17) \
-	X("door_col_compnd_05",	MI_GARAGEDOOR18) \
-	X("impex_door",		MI_GARAGEDOOR19) \
-	X("SalvGarage",		MI_GARAGEDOOR20) \
-	X("door3_garage",	MI_GARAGEDOOR21) \
-	X("leveldoor2",		MI_GARAGEDOOR22) \
-	X("double_garage_dr",	MI_GARAGEDOOR23) \
-	X("amcogaragedoor",	MI_GARAGEDOOR24) \
-	X("towergaragedoor1",	MI_GARAGEDOOR25) \
-	X("towergaragedoor2",	MI_GARAGEDOOR26) \
-	X("towergaragedoor3",	MI_GARAGEDOOR27) \
-	X("plysve_gragedoor",	MI_GARAGEDOOR28) \
-	X("impexpsubgrgdoor",	MI_GARAGEDOOR29) \
-	X("Sub_sprayshopdoor",	MI_GARAGEDOOR30) \
-	X("ind_plyrwoor",	MI_GARAGEDOOR31) \
-	X("8ballsuburbandoor",	MI_GARAGEDOOR32) \
+	X("dk_paynspraydoor",	MI_GARAGEDOOR2) \
+	X("dk_waretankdoor1",	MI_GARAGEDOOR3) \
+	X("hav_garagedoor1",	MI_GARAGEDOOR4) \
+	X("hav_garagedoor02",	MI_GARAGEDOOR5) \
+	X("hav_garagedoor03",	MI_GARAGEDOOR6) \
+	X("hav_garagedoor04",	MI_GARAGEDOOR7) \
+	X("lh_showdoor03",	MI_GARAGEDOOR9) \
+	X("lh_showdoor1",	MI_GARAGEDOOR10) \
+	X("lhtankdoor",		MI_GARAGEDOOR11) \
+	X("nbtgardoor",		MI_GARAGEDOOR12) \
+	X("dk_camjonesdoor",	MI_GARAGEDOOR13) \
+	X("nbtgardoor02",	MI_GARAGEDOOR14) \
+	X("dt_savedra",		MI_GARAGEDOOR15) \
+	X("dt_savedrb",		MI_GARAGEDOOR16) \
+	X("dk_bombdoor",	MI_GARAGEDOOR18) \
+	X("haiwshpnsdoor",	MI_GARAGEDOOR19) \
+	X("wshpnsdoor",		MI_GARAGEDOOR20) \
+	X("nbecpnsdoor",	MI_GARAGEDOOR21) \
+	X("nbtgardoor03",	MI_GARAGEDOOR22) \
+	X("dt_savedrc",		MI_GARAGEDOOR23) \
+	X("dt_savedrd",		MI_GARAGEDOOR24) \
+	X("man_frntstepGD",	MI_GARAGEDOOR25) \
+	X("svegrgedoor",	MI_GARAGEDOOR26) \
 	X("barrel2",		MI_NAUTICALMINE) \
-	X("crushercrush",	MI_CRUSHERBODY) \
-	X("crushertop",		MI_CRUSHERLID) \
-	X("donkeymag",		MI_DONKEYMAG) \
-	X("bullion",		MI_BULLION) \
-	X("floatpackge1",	MI_FLOATPACKAGE1) \
 	X("briefcase",		MI_BRIEFCASE) \
-	X("chinabanner1",	MI_CHINABANNER1) \
-	X("chinabanner2",	MI_CHINABANNER2) \
-	X("chinabanner3",	MI_CHINABANNER3) \
-	X("chinabanner4",	MI_CHINABANNER4) \
-	X("iten_chinatown5",	MI_CHINABANNER5) \
-	X("iten_chinatown7",	MI_CHINABANNER6) \
-	X("iten_chinatown3",	MI_CHINABANNER7) \
-	X("iten_chinatown2",	MI_CHINABANNER8) \
-	X("iten_chinatown4",	MI_CHINABANNER9) \
-	X("iten_washline01",	MI_CHINABANNER10) \
-	X("iten_washline02",	MI_CHINABANNER11) \
-	X("iten_washline03",	MI_CHINABANNER12) \
-	X("chinalanterns",	MI_CHINALANTERN) \
-	X("glassfx1",		MI_GLASS1) \
-	X("glassfx2",		MI_GLASS2) \
-	X("glassfx3",		MI_GLASS3) \
-	X("glassfx4",		MI_GLASS4) \
-	X("glassfx55",		MI_GLASS5) \
-	X("glassfxsub1",	MI_GLASS6) \
-	X("glassfxsub2",	MI_GLASS7) \
+	X("wglasssmash",	MI_GLASS1) \
 	X("glassfx_composh",	MI_GLASS8) \
-	X("bridge_liftsec",	MI_BRIDGELIFT) \
-	X("bridge_liftweight",	MI_BRIDGEWEIGHT) \
-	X("subbridge_lift",	MI_BRIDGEROADSEGMENT) \
 	X("barrel4",		MI_EXPLODINGBARREL) \
-	X("flagsitaly",		MI_ITALYBANNER1) \
 	X("adrenaline",		MI_PICKUP_ADRENALINE) \
 	X("bodyarmour",		MI_PICKUP_BODYARMOUR) \
 	X("info",		MI_PICKUP_INFO) \
@@ -119,44 +80,65 @@
 	X("bribe",		MI_PICKUP_BRIBE) \
 	X("killfrenzy",		MI_PICKUP_KILLFRENZY) \
 	X("camerapickup",	MI_PICKUP_CAMERA) \
+	X("bigdollar",		MI_PICKUP_REVENUE) \
+	X("pickupsave",		MI_PICKUP_SAVEGAME) \
+	X("property_locked",	MI_PICKUP_PROPERTY) \
+	X("property_fsale",	MI_PICKUP_PROPERTY_FORSALE) \
+	X("clothesp",		MI_PICKUP_CLOTHES) \
 	X("bollardlight",	MI_BOLLARDLIGHT) \
-	X("magnet",		MI_MAGNET) \
-	X("streetlamp1",	MI_STREETLAMP1) \
-	X("streetlamp2",	MI_STREETLAMP2) \
-	X("railtrax_lo4b",	MI_RAILTRACKS) \
 	X("bar_barrier10",	MI_FENCE) \
 	X("bar_barrier12",	MI_FENCE2) \
 	X("petrolpump",		MI_PETROLPUMP) \
-	X("bodycast",		MI_BODYCAST) \
-	X("backdoor",		MI_BACKDOOR) \
-	X("coffee",		MI_COFFEE) \
+	X("washgaspump",	MI_PETROLPUMP2) \
 	X("bouy",		MI_BUOY) \
 	X("parktable1",		MI_PARKTABLE) \
-	X("sbwy_tunl_start",	MI_SUBWAY1) \
-	X("sbwy_tunl_bit",	MI_SUBWAY2) \
-	X("sbwy_tunl_bend",	MI_SUBWAY3) \
-	X("sbwy_tunl_cstm6",	MI_SUBWAY4) \
-	X("sbwy_tunl_cstm7",	MI_SUBWAY5) \
-	X("sbwy_tunl_cstm8",	MI_SUBWAY6) \
-	X("sbwy_tunl_cstm10",	MI_SUBWAY7) \
-	X("sbwy_tunl_cstm9",	MI_SUBWAY8) \
-	X("sbwy_tunl_cstm11",	MI_SUBWAY9) \
-	X("sbwy_tunl_cstm1",	MI_SUBWAY10) \
-	X("sbwy_tunl_cstm2",	MI_SUBWAY11) \
-	X("sbwy_tunl_cstm4",	MI_SUBWAY12) \
-	X("sbwy_tunl_cstm3",	MI_SUBWAY13) \
-	X("sbwy_tunl_cstm5",	MI_SUBWAY14) \
-	X("subplatform_n2",	MI_SUBWAY15) \
-	X("suby_tunl_start",	MI_SUBWAY16) \
-	X("sbwy_tunl_start2",	MI_SUBWAY17) \
-	X("indy_tunl_start",	MI_SUBWAY18) \
-	X("indsubway03",	MI_SUBPLATFORM_IND) \
-	X("comerside_subway",	MI_SUBPLATFORM_COMS) \
-	X("subplatform",	MI_SUBPLATFORM_COMS2) \
-	X("subplatform_n",	MI_SUBPLATFORM_COMN) \
-	X("Otherside_subway",	MI_SUBPLATFORM_SUB) \
-	X("subplatform_sub",	MI_SUBPLATFORM_SUB2) \
-	X("files",		MI_FILES)
+	X("lamppost1",		MI_LAMPPOST1) \
+	X("veg_palm04",		MI_VEG_PALM01) \
+	X("veg_palwee02",	MI_VEG_PALM02) \
+	X("veg_palmkbb11",	MI_VEG_PALM03) \
+	X("veg_palmkb4",	MI_VEG_PALM04) \
+	X("veg_palm02",		MI_VEG_PALM05) \
+	X("veg_palmkb3",	MI_VEG_PALM06) \
+	X("veg_palmbig14",	MI_VEG_PALM07) \
+	X("veg_palm01",		MI_VEG_PALM08) \
+	X("mlamppost",		MI_MLAMPPOST) \
+	X("roadworkbarrier1",	MI_BARRIER1) \
+	X("littleha_police",	MI_LITTLEHA_POLICE) \
+	X("telgrphpole02",	MI_TELPOLE02) \
+	X("trafficlight1",	MI_TRAFFICLIGHT01) \
+	X("parkbench1",		MI_PARKBENCH) \
+	X("plc_stinger",	MI_PLC_STINGER) \
+	X("od_lightbeam",	MI_LIGHTBEAM) \
+	X("ap_radar1_01",	MI_AIRPORTRADAR) \
+	X("rcbomb",		MI_RCBOMB) \
+	X("beachball",		MI_BEACHBALL) \
+	X("sandcastle1",	MI_SANDCASTLE1) \
+	X("sandcastle2",	MI_SANDCASTLE2) \
+	X("jellyfish",		MI_JELLYFISH) \
+	X("jellyfish01",	MI_JELLYFISH01) \
+	X("fish1single",	MI_FISH1SINGLE) \
+	X("fish1s",		MI_FISH1S) \
+	X("fish2single",	MI_FISH2SINGLE) \
+	X("fish2s",		MI_FISH2S) \
+	X("fish3single",	MI_FISH3SINGLE) \
+	X("fish3s",		MI_FISH3S) \
+	X("turtle",		MI_TURTLE) \
+	X("dolphin",		MI_DOLPHIN) \
+	X("shark",		MI_SHARK) \
+	X("submarine",		MI_SUBMARINE) \
+	X("Esc_step",		MI_ESCALATORSTEP) \
+	X("lounge_wood_up",	MI_LOUNGE_WOOD_UP) \
+	X("lounge_towel_up",	MI_LOUNGE_TOWEL_UP) \
+	X("lounge_wood_dn",	MI_LOUNGE_WOOD_DN) \
+	X("lotion",		MI_LOTION) \
+	X("beachtowel01",	MI_BEACHTOWEL01) \
+	X("beachtowel02",	MI_BEACHTOWEL02) \
+	X("beachtowel03",	MI_BEACHTOWEL03) \
+	X("beachtowel04",	MI_BEACHTOWEL04) \
+	X("blimp_night",	MI_BLIMP_NIGHT) \
+	X("blimp_day",		MI_BLIMP_DAY) \
+	X("yt_main_body",	MI_YT_MAIN_BODY) \
+	X("yt_main_body2",	MI_YT_MAIN_BODY2)
 
 #define X(name, var) extern int16 var;
 	MODELINDICES
@@ -174,88 +156,131 @@ enum
 	MI_MEDIC,
 	MI_FIREMAN,
 	MI_MALE01,
-	MI_TAXI_D,
-	MI_PIMP,
-	MI_GANG01,
-	MI_GANG02,
-	MI_GANG03,
-	MI_GANG04,
-	MI_GANG05,
-	MI_GANG06,
-	MI_GANG07,
-	MI_GANG08,
-	MI_GANG09,
-	MI_GANG10,
-	MI_GANG11,
-	MI_GANG12,
-	MI_GANG13,
-	MI_GANG14,
-	MI_CRIMINAL01,
-	MI_CRIMINAL02,
-	MI_SPECIAL01,
+
+	MI_HFYST = 9,
+	MI_HFOST,
+	MI_HMYST,
+	MI_HMOST,
+	MI_HFYRI,
+	MI_HFORI,
+	MI_HMYRI,
+	MI_HMORI,
+	MI_HFYBE,
+	MI_HFOBE,
+	MI_HMYBE,
+	MI_HMOBE,
+	MI_HFYBU,
+	MI_HFYMD,
+	MI_HFYCG,
+	MI_HFYPR,
+	MI_HFOTR,
+	MI_HMOTR,
+	MI_HMYAP,
+	MI_HMOCA,
+	MI_TAXI_D = MI_HMOCA,
+	MI_BMODK,
+	MI_BMYKR,
+	MI_BFYST,
+	MI_BFOST,
+	MI_BMYST,
+	MI_BMOST,
+	MI_BFYRI,
+	MI_BFORI,
+	MI_BMYRI,
+	MI_BFYBE,
+	MI_BMYBE,
+	MI_BFOBE,
+	MI_BMOBE,
+	MI_BMYBU,
+	MI_BFYPR,
+	MI_BFOTR,
+	MI_BMOTR,
+	MI_BMYPI,
+	MI_BMYBB,
+	MI_WMYCR,
+	MI_WFYST,
+	MI_WFOST,
+	MI_WMYST,
+	MI_WMOST,
+	MI_WFYRI,
+	MI_WFORI,
+	MI_WMYRI,
+	MI_WMORI,
+	MI_WFYBE,
+	MI_WMYBE,
+	MI_WFOBE,
+	MI_WMOBE,
+	MI_WMYCW,
+	MI_WMYGO,
+	MI_WFOGO,
+	MI_WMOGO,
+	MI_WFYLG,
+	MI_WMYLG,
+	MI_WFYBU,
+	MI_WMYBU,
+	MI_WMOBU,
+	MI_WFYPR,
+	MI_WFOTR,
+	MI_WMOTR,
+	MI_WMYPI,
+	MI_WMOCA,
+	MI_WFYJG,
+	MI_WMYJG,
+	MI_WFYSK,
+	MI_WMYSK,
+	MI_WFYSH,
+	MI_WFOSH,
+	MI_JFOTO,
+	MI_JMOTO,
+
+	MI_CBA,// = 83,
+	MI_CBB,
+	MI_HNA,
+	MI_HNB,
+	MI_SGA,
+	MI_SGB,
+	MI_CLA,
+	MI_CLB,
+	MI_GDA,
+	MI_GDB,
+	MI_BKA,
+	MI_BKB,
+	MI_PGA,
+	MI_PGB,
+	MI_VICE1,
+	MI_VICE2,
+	MI_VICE3,
+	MI_VICE4,
+	MI_VICE5,
+	MI_VICE6,
+	MI_VICE7,
+	MI_VICE8,
+	MI_WFYG1,
+	MI_WFYG2,// = 106,	// last regular ped
+	// three more peds possible
+	MI_SPECIAL01 = 109,
 	MI_SPECIAL02,
 	MI_SPECIAL03,
 	MI_SPECIAL04,
-	MI_MALE02,
-	MI_MALE03,
-	MI_FATMALE01,
-	MI_FATMALE02,
-	MI_FEMALE01,
-	MI_FEMALE02,
-	MI_FEMALE03,
-	MI_FATFEMALE01,
-	MI_FATFEMALE02,
-	MI_PROSTITUTE,
-	MI_PROSTITUTE2,
-	MI_P_MAN1,
-	MI_P_MAN2,
-	MI_P_WOM1,
-	MI_P_WOM2,
-	MI_CT_MAN1,
-	MI_CT_MAN2,
-	MI_CT_WOM1,
-	MI_CT_WOM2,
-	MI_LI_MAN1,
-	MI_LI_MAN2,
-	MI_LI_WOM1,
-	MI_LI_WOM2,
-	MI_DOCKER1,
-	MI_DOCKER2,
-	MI_SCUM_MAN,
-	MI_SCUM_WOM,
-	MI_WORKER1,
-	MI_WORKER2,
-	MI_B_MAN1,
-	MI_B_MAN2,
-	MI_B_MAN3,
-	MI_B_WOM1,
-	MI_B_WOM2,
-	MI_B_WOM3,
-	MI_MOD_MAN,
-	MI_MOD_WOM,
-	MI_ST_MAN,
-	MI_ST_WOM,
-	MI_FAN_MAN1,
-	MI_FAN_MAN2,
-	MI_FAN_WOM,
-	MI_HOS_MAN,
-	MI_HOS_WOM,
-	MI_CONST1,
-	MI_CONST2,
-	MI_SHOPPER1,
-	MI_SHOPPER2,
-	MI_SHOPPER3,
-	MI_STUD_MAN,
-	MI_STUD_WOM,
-	MI_CAS_MAN,
-	MI_CAS_WOM,
-	MI_BUSKER1,
-	MI_BUSKER2,
-	MI_BUSKER3,
-	MI_BUSKER4,
-	// three more peds possible
+	MI_SPECIAL05,
+	MI_SPECIAL06,
+	MI_SPECIAL07,
+	MI_SPECIAL08,
+	MI_SPECIAL09,
+	MI_SPECIAL10,
+	MI_SPECIAL11,
+	MI_SPECIAL12,
+	MI_SPECIAL13,
+	MI_SPECIAL14,
+	MI_SPECIAL15,
+	MI_SPECIAL16,
+	MI_SPECIAL17,
+	MI_SPECIAL18,
+	MI_SPECIAL19,
+	MI_SPECIAL20,
+	MI_SPECIAL21,// = 129,
 
-	MI_LAST_PED = 89,
+	MI_LAST_PED = MI_SPECIAL21,
 	MI_FIRST_VEHICLE,
 
 	MI_LANDSTAL = MI_FIRST_VEHICLE,
@@ -264,13 +289,13 @@ enum
 	MI_LINERUN,
 	MI_PEREN,
 	MI_SENTINEL,
-	MI_PATRIOT,
+	MI_RIO,
 	MI_FIRETRUCK,
 	MI_TRASH,
 	MI_STRETCH,
 	MI_MANANA,
 	MI_INFERNUS,
-	MI_BLISTA,
+	MI_VOODOO,
 	MI_PONY,
 	MI_MULE,
 	MI_CHEETAH,
@@ -279,11 +304,11 @@ enum
 	MI_MOONBEAM,
 	MI_ESPERANT,
 	MI_TAXI,
-	MI_KURUMA,
+	MI_WASHING,
 	MI_BOBCAT,
 	MI_MRWHOOP,
 	MI_BFINJECT,
-	MI_CORPSE,
+	MI_HUNTER,
 	MI_POLICE,
 	MI_ENFORCER,
 	MI_SECURICA,
@@ -292,61 +317,91 @@ enum
 	MI_BUS,
 	MI_RHINO,
 	MI_BARRACKS,
-	MI_TRAIN,
+	MI_CUBAN,
 	MI_CHOPPER,
-	MI_DODO,
+	MI_ANGEL,
 	MI_COACH,
 	MI_CABBIE,
 	MI_STALLION,
 	MI_RUMPO,
 	MI_RCBANDIT,
-	MI_BELLYUP,
-	MI_MRWONGS,
-	MI_MAFIA,
-	MI_YARDIE,
-	MI_YAKUZA,
-	MI_DIABLOS,
-	MI_COLUMB ,
-	MI_HOODS,
+	MI_ROMERO,
+	MI_PACKER,
+	MI_SENTXS,
+	MI_ADMIRAL,
+	MI_SQUALO,
+	MI_SEASPAR,
+	MI_PIZZABOY,
+	MI_GANGBUR,
 	MI_AIRTRAIN,
 	MI_DEADDODO,
 	MI_SPEEDER,
 	MI_REEFER,
-	MI_PANLANT,
+	MI_TROPIC,
 	MI_FLATBED,
 	MI_YANKEE,
-	MI_ESCAPE,
-	MI_BORGNINE,
-	MI_TOYZ,
-	MI_GHOST,
+	MI_CADDY,
+	MI_ZEBRA,
+	MI_TOPFUN,
+	MI_SKIMMER,
+	MI_PCJ600,
+	MI_FAGGIO,
+	MI_FREEWAY,
+	MI_RCBARON,
+	MI_RCRAIDER,
+	MI_GLENDALE,
+	MI_OCEANIC,
+	MI_SANCHEZ,
+	MI_SPARROW,
+	MI_PATRIOT,
+	MI_LOVEFIST,
+	MI_COASTG,
+	MI_DINGHY,
+	MI_HERMES,
+	MI_SABRE,
+	MI_SABRETUR,
+	MI_PHEONIX,
+	MI_WALTON,
+	MI_REGINA,
+	MI_COMET,
+	MI_DELUXO,
+	MI_BURRITO,
+	MI_SPAND,
+	MI_MARQUIS,
+	MI_BAGGAGE,
+	MI_KAUFMAN,
+	MI_MAVERICK,
+	MI_VCNMAV,
+	MI_RANCHER,
+	MI_FBIRANCH,
+	MI_VIRGO,
+	MI_GREENWOO,
+	MI_JETMAX,
+	MI_HOTRING,
+	MI_SANDKING,
+	MI_BLISTAC,
+	MI_POLMAV,
+	MI_BOXVILLE,
+	MI_BENSON,
+	MI_MESA,
+	MI_RCGOBLIN,
+	MI_HOTRINA,
+	MI_HOTRINB,
+	MI_BLOODRA,
+	MI_BLOODRB,
+	MI_VICECHEE,
 
-	// leftovers on PC
-	MI_MIAMI_RCBARON = 154,
-	MI_MIAMI_RCRAIDER = 155,
-	MI_MIAMI_SPARROW = 159,
+	// HACK
+	MI_TRAIN = -1,
+	MI_DODO = -2,
 
-	MI_GRENADE = 170,
-	MI_AK47,
-	MI_BASEBALL_BAT,
-	MI_COLT,
-	MI_MOLOTOV,
-	MI_ROCKETLAUNCHER,
-	MI_SHOTGUN,
-	MI_SNIPER,
-	MI_UZI,
-	MI_MISSILE,
-	MI_M16,
-	MI_FLAMETHROWER,
-	MI_BOMB,
-	MI_FINGERS,
+	MI_LAST_VEHICLE = MI_VICECHEE,
 
-	MI_CUTOBJ01 = 185,
-	MI_CUTOBJ02,
-	MI_CUTOBJ03,
-	MI_CUTOBJ04,
-	MI_CUTOBJ05,
+	MI_WHEEL_RIM,
+	MI_WHEEL_OFFROAD,
+	MI_WHEEL_TRUCK,
 
-	MI_CAR_DOOR = 190,
+	MI_CAR_DOOR,// = 240,
 	MI_CAR_BUMPER,
 	MI_CAR_PANEL,
 	MI_CAR_BONNET,
@@ -355,14 +410,66 @@ enum
 	MI_BODYPARTA,
 	MI_BODYPARTB,
 
-	MI_AIRTRAIN_VLO = 198,
-	MI_LOPOLYGUY,
+	MI_WHEEL_SPORT = 250,
+	MI_WHEEL_SALOON,
+	MI_WHEEL_LIGHTVAN,
+	MI_WHEEL_CLASSIC,
+	MI_WHEEL_ALLOY,
+	MI_WHEEL_LIGHTTRUCK,
+	MI_WHEEL_SMALLCAR,
 
-	NUM_DEFAULT_MODELS
+	MI_AIRTRAIN_VLO, // = 257,
+	MI_MOBILE,
+
+	MI_BRASS_KNUCKLES, // 259
+	MI_SCREWDRIVER,
+	MI_GOLFCLUB,
+	MI_NIGHTSTICK,
+	MI_KNIFE,
+	MI_BASEBALL_BAT,
+	MI_HAMMER,
+	MI_MEAT_CLEAVER,
+	MI_MACHETE,
+	MI_KATANA,
+	MI_CHAINSAW,
+	MI_GRENADE,
+	MI_TEARGAS,
+	MI_MOLOTOV,
+	MI_MISSILE,
+	MI_COLT45,
+	MI_PYTHON,
+	MI_RUGER,
+	MI_SHOTGUN,
+	MI_SPAS12_SHOTGUN,
+	MI_STUBBY_SHOTGUN,
+	MI_M4,
+	MI_TEC9,
+	MI_UZI,
+	MI_SILENCEDINGRAM,
+	MI_MP5,
+	MI_SNIPERRIFLE,
+	MI_LASERSCOPE,
+	MI_ROCKETLAUNCHER,
+	MI_FLAMETHROWER,
+	MI_M60,
+	MI_MINIGUN,
+	MI_BOMB,
+	MI_CAMERA,
+	MI_FINGERS,
+	MI_MINIGUN2,
+
+	MI_CUTOBJ01,// = 295,
+	MI_CUTOBJ02,
+	MI_CUTOBJ03,
+	MI_CUTOBJ04,
+	MI_CUTOBJ05,
+
+
+	NUM_DEFAULT_MODELS,// = 300
 };
 
 enum{
-	NUM_OF_SPECIAL_CHARS = 4,
+	NUM_OF_SPECIAL_CHARS = 21,
 	NUM_OF_CUTSCENE_OBJECTS = 5
 };
 
@@ -373,18 +480,21 @@ void TestModelIndices(void);
 inline bool
 IsGlass(int16 id)
 {
-	return id == MI_GLASS1 ||
-		id == MI_GLASS2 ||
-		id == MI_GLASS3 ||
-		id == MI_GLASS4 ||
-		id == MI_GLASS5 ||
-		id == MI_GLASS6 ||
-		id == MI_GLASS7 ||
-		id == MI_GLASS8;
+	CSimpleModelInfo *mi = (CSimpleModelInfo*)CModelInfo::GetModelInfo(id);
+	return mi->IsBuilding() && (mi->m_isCodeGlass || mi->m_isArtistGlass);
 }
 
 inline bool
-IsStreetLight(int16 id)
+IsTrafficLight(int16 id)
+{
+	return id == MI_TRAFFICLIGHTS ||
+		id == MI_TRAFFICLIGHTS_VERTICAL ||
+		id == MI_TRAFFICLIGHTS_MIAMI ||
+		id == MI_TRAFFICLIGHTS_TWOVERTICAL;
+}
+
+inline bool
+IsLightWithoutShift(int16 id)
 {
 	return id == MI_TRAFFICLIGHTS ||
 		id == MI_SINGLESTREETLIGHTS1 ||
@@ -394,19 +504,59 @@ IsStreetLight(int16 id)
 }
 
 inline bool
+IsLightWithPreRenderEffects(int16 id)
+{
+	return IsTrafficLight(id) ||
+		id == MI_SINGLESTREETLIGHTS1 ||
+		id == MI_SINGLESTREETLIGHTS2 ||
+		id == MI_SINGLESTREETLIGHTS3 ||
+		id == MI_DOUBLESTREETLIGHTS;
+}
+
+inline bool
+IsLightThatNeedsRepositioning(int16 id)
+{
+	return id == MI_SINGLESTREETLIGHTS1 ||
+		id == MI_SINGLESTREETLIGHTS2 ||
+		id == MI_SINGLESTREETLIGHTS3 ||
+		id == MI_TRAFFICLIGHTS_MIAMI ||
+		id == MI_TRAFFICLIGHTS_TWOVERTICAL ||
+		id == MI_MLAMPPOST ||
+		id == MI_STREETLAMP1 ||
+		id == MI_STREETLAMP2;
+}
+
+inline bool
+IsLightObject(int16 id)
+{
+	return id == MI_TRAFFICLIGHTS_MIAMI ||
+		id == MI_MLAMPPOST ||
+		id == MI_SINGLESTREETLIGHTS1 ||
+		id == MI_SINGLESTREETLIGHTS2 ||
+		id == MI_SINGLESTREETLIGHTS3 ||
+		id == MI_DOUBLESTREETLIGHTS ||
+		id == MI_TRAFFICLIGHTS_TWOVERTICAL;
+}
+
+inline bool
+IsLampPost(int16 id)
+{
+	return id == MI_SINGLESTREETLIGHTS1 ||
+		id == MI_SINGLESTREETLIGHTS2 ||
+		id == MI_SINGLESTREETLIGHTS3 ||
+		id == MI_BOLLARDLIGHT ||
+		id == MI_MLAMPPOST ||
+		id == MI_STREETLAMP1 ||
+		id == MI_STREETLAMP2 ||
+		id == MI_TELPOLE02 ||
+		id == MI_TRAFFICLIGHTS_MIAMI ||
+		id == MI_TRAFFICLIGHTS_TWOVERTICAL;
+}
+
+inline bool
 IsBodyPart(int16 id)
 {
 	return id == MI_BODYPARTA || id == MI_BODYPARTB;
-}
-
-// This is bad and should perhaps not be used
-inline bool
-IsBoatModel(int16 id)
-{
-	return id == MI_PREDATOR ||
-		id == MI_REEFER ||
-		id == MI_SPEEDER ||
-		id == MI_GHOST;
 }
 
 inline bool
@@ -414,66 +564,27 @@ IsPedModel(int16 id)
 {
 	return id >= MI_PLAYER && id <= MI_LAST_PED;
 }
+inline bool
+IsPalmTreeModel(int16 id)
+{
+	return	id == MI_VEG_PALM01 ||
+		id == MI_VEG_PALM02 ||
+		id == MI_VEG_PALM03 ||
+		id == MI_VEG_PALM04 ||
+		id == MI_VEG_PALM05 ||
+		id == MI_VEG_PALM06 ||
+		id == MI_VEG_PALM07 ||
+		id == MI_VEG_PALM08;
+}
 
 inline bool
 IsTreeModel(int16 id)
 {
-	return id == MI_TREE1 ||
-		id == MI_TREE2 ||
+	return	id == MI_TREE2 ||
 		id == MI_TREE3 ||
-		id == MI_TREE4 ||
-		id == MI_TREE5 ||
 		id == MI_TREE6 ||
-		id == MI_TREE7 ||
 		id == MI_TREE8 ||
-		id == MI_TREE9 ||
-		id == MI_TREE10 ||
-		id == MI_TREE11 ||
-		id == MI_TREE12 ||
-		id == MI_TREE13 ||
-		id == MI_TREE14;
-}
-
-inline bool
-IsBannerModel(int16 id)
-{
-	return id == MI_CHINABANNER1 ||
-		id == MI_CHINABANNER2 ||
-		id == MI_CHINABANNER3 ||
-		id == MI_CHINABANNER4 ||
-		id == MI_CHINABANNER5 ||
-		id == MI_CHINABANNER6 ||
-		id == MI_CHINABANNER7 ||
-		id == MI_CHINABANNER8 ||
-		id == MI_CHINABANNER9 ||
-		id == MI_CHINABANNER10 ||
-		id == MI_CHINABANNER11 ||
-		id == MI_CHINABANNER12 ||
-		id == MI_ITALYBANNER1 ||
-		id == MI_CHINALANTERN;
-}
-inline bool
-IsPickupModel(int16 id)
-{
-	return id == MI_GRENADE ||
-		id == MI_AK47 ||
-		id == MI_BASEBALL_BAT ||
-		id == MI_COLT ||
-		id == MI_MOLOTOV ||
-		id == MI_ROCKETLAUNCHER ||
-		id == MI_SHOTGUN ||
-		id == MI_SNIPER ||
-		id == MI_UZI ||
-		id == MI_M16 ||
-		id == MI_FLAMETHROWER ||
-		id == MI_PICKUP_ADRENALINE ||
-		id == MI_PICKUP_BODYARMOUR ||
-		id == MI_PICKUP_INFO ||
-		id == MI_PICKUP_HEALTH ||
-		id == MI_PICKUP_BONUS ||
-		id == MI_PICKUP_BRIBE ||
-		id == MI_PICKUP_KILLFRENZY ||
-		id == MI_PICKUP_CAMERA;
+		IsPalmTreeModel(id);
 }
 
 inline bool
@@ -498,7 +609,8 @@ inline bool
 IsExplosiveThingModel(int16 id)
 {
 	return id == MI_EXPLODINGBARREL ||
-		id == MI_PETROLPUMP;
+		id == MI_PETROLPUMP ||
+		id == MI_PETROLPUMP2;
 }
 
 inline bool 

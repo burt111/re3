@@ -11,7 +11,11 @@
 #include "ModelIndices.h"
 #include "Shadows.h"
 #include "Timecycle.h"
+#include "CutsceneShadow.h"
 #include "CutsceneObject.h"
+#include "ModelIndices.h"
+#include "RpAnimBlend.h"
+
 
 CCutsceneObject::CCutsceneObject(void)
 {
@@ -21,12 +25,19 @@ CCutsceneObject::CCutsceneObject(void)
 	ObjectCreatedBy = CUTSCENE_OBJECT;
 	m_fMass = 1.0f;
 	m_fTurnMass = 1.0f;
+	
+	m_pAttachTo = nil;
+	m_pAttachmentObject = nil;
+	m_pShadow = nil;
+}
 
-#ifdef PED_SKIN
-	bRenderHead = true;
-	bRenderRightHand = true;
-	bRenderLeftHand = true;
-#endif
+CCutsceneObject::~CCutsceneObject(void)
+{
+	if ( m_pShadow )
+	{
+		delete m_pShadow;
+		m_pShadow = nil;
+	}
 }
 
 void
@@ -40,21 +51,37 @@ CCutsceneObject::SetModelIndex(uint32 id)
 }
 
 void
+CCutsceneObject::CreateShadow(void)
+{
+	if ( IsPedModel(GetModelIndex()) )
+	{
+		m_pShadow = new CCutsceneShadow();
+		if (!m_pShadow->IsInitialized())
+			m_pShadow->Create(m_rwObject, 6, true, 4, true);
+	}
+}
+
+void
 CCutsceneObject::ProcessControl(void)
 {
 	CPhysical::ProcessControl();
 
-	if(CTimer::GetTimeStep() < 1/100.0f)
-		m_vecMoveSpeed *= 100.0f;
+	if ( m_pAttachTo )
+	{
+		if ( m_pAttachmentObject )
+			GetMatrix() = CMatrix((RwMatrix*)m_pAttachTo);
+		else
+			GetMatrix() = CMatrix(RwFrameGetLTM((RwFrame*)m_pAttachTo));
+	}
 	else
-		m_vecMoveSpeed *= 1.0f/CTimer::GetTimeStep();
-
-	ApplyMoveSpeed();
-
-#ifdef PED_SKIN
-	if(IsClumpSkinned(GetClump()))
-		UpdateRpHAnim();
-#endif
+	{
+		if(CTimer::GetTimeStep() < 1/100.0f)
+			m_vecMoveSpeed *= 100.0f;
+		else
+			m_vecMoveSpeed *= 1.0f/CTimer::GetTimeStep();
+	
+		ApplyMoveSpeed();
+	}
 }
 
 static RpMaterial*
@@ -67,14 +94,52 @@ MaterialSetAlpha(RpMaterial *material, void *data)
 void
 CCutsceneObject::PreRender(void)
 {
-	if(IsPedModel(GetModelIndex())){
-		CShadows::StoreShadowForPedObject(this,
-			CTimeCycle::m_fShadowDisplacementX[CTimeCycle::m_CurrentStoredValue],
-			CTimeCycle::m_fShadowDisplacementY[CTimeCycle::m_CurrentStoredValue],
-			CTimeCycle::m_fShadowFrontX[CTimeCycle::m_CurrentStoredValue],
-			CTimeCycle::m_fShadowFrontY[CTimeCycle::m_CurrentStoredValue],
-			CTimeCycle::m_fShadowSideX[CTimeCycle::m_CurrentStoredValue],
-			CTimeCycle::m_fShadowSideY[CTimeCycle::m_CurrentStoredValue]);
+	if ( m_pAttachTo )
+	{
+		if ( m_pAttachmentObject )
+		{
+			m_pAttachmentObject->UpdateRpHAnim();
+			GetMatrix() = CMatrix((RwMatrix*)m_pAttachTo);
+		}
+		else
+			GetMatrix() = CMatrix(RwFrameGetLTM((RwFrame*)m_pAttachTo));
+		
+		if ( RwObjectGetType(m_rwObject) == rpCLUMP && IsClumpSkinned(GetClump()) )
+		{
+			RpAtomic *atomic = GetFirstAtomic(GetClump());
+			atomic->boundingSphere.center = (*RPANIMBLENDCLUMPDATA(GetClump()))->frames[0].hanimFrame->t;
+		}
+	}
+	
+	if ( RwObjectGetType(m_rwObject) == rpCLUMP )
+		UpdateRpHAnim();
+	
+	if(IsPedModel(GetModelIndex()))
+	{
+		if ( m_pShadow == nil )
+		{
+			CShadows::StoreShadowForPedObject(this,
+				CTimeCycle::m_fShadowDisplacementX[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowDisplacementY[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowFrontX[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowFrontY[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowSideX[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowSideY[CTimeCycle::m_CurrentStoredValue]);
+		}
+		else
+		{
+			if ( m_pShadow->IsInitialized() )
+				m_pShadow->UpdateForCutscene();
+			
+			CShadows::StoreShadowForCutscenePedObject(this,
+				CTimeCycle::m_fShadowDisplacementX[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowDisplacementY[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowFrontX[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowFrontY[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowSideX[CTimeCycle::m_CurrentStoredValue],
+				CTimeCycle::m_fShadowSideY[CTimeCycle::m_CurrentStoredValue]);
+		}
+			
 		// For some reason xbox/android limbs are transparent here...
 		RpGeometry *geometry = RpAtomicGetGeometry(GetFirstAtomic(GetClump()));
 		RpGeometrySetFlags(geometry, RpGeometryGetFlags(geometry) | rpGEOMETRYMODULATEMATERIALCOLOR);
@@ -85,46 +150,10 @@ CCutsceneObject::PreRender(void)
 void
 CCutsceneObject::Render(void)
 {
-#ifdef PED_SKIN
-	if(IsClumpSkinned(GetClump())){
-		if(bRenderLeftHand) RenderLimb(BONE_Lhand);
-		if(bRenderRightHand) RenderLimb(BONE_Rhand);
-		if(bRenderHead) RenderLimb(BONE_head);
-	}
-#endif
+	SetCullMode(rwCULLMODECULLNONE);
 	CObject::Render();
+	SetCullMode(rwCULLMODECULLBACK);
 }
-
-#ifdef PED_SKIN
-void
-CCutsceneObject::RenderLimb(int32 bone)
-{
-	RpAtomic *atomic;
-	CPedModelInfo *mi = (CPedModelInfo *)CModelInfo::GetModelInfo(GetModelIndex());
-	switch(bone){
-	case BONE_head:
-		atomic = mi->getHead();
-		break;
-	case BONE_Lhand:
-		atomic = mi->getLeftHand();
-		break;
-	case BONE_Rhand:
-		atomic = mi->getRightHand();
-		break;
-	default:
-		return;
-	}
-	if(atomic){
-		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
-		int idx = RpHAnimIDGetIndex(hier, bone);
-		RwMatrix *mat = &RpHAnimHierarchyGetMatrixArray(hier)[idx];
-		RwFrame *frame = RpAtomicGetFrame(atomic);
-		*RwFrameGetMatrix(frame) = *mat;
-		RwFrameUpdateObjects(frame);
-		RpAtomicRender(atomic);
-	}
-}
-#endif
 
 bool
 CCutsceneObject::SetupLighting(void)
@@ -137,7 +166,7 @@ CCutsceneObject::SetupLighting(void)
 	}else{
 		CVector coors = GetPosition();
 		float lighting = CPointLights::GenerateLightsAffectingObject(&coors);
-		if(!bHasBlip && lighting != 1.0f){
+		if(lighting != 1.0f){
 			SetAmbientAndDirectionalColours(lighting);
 			return true;
 		}

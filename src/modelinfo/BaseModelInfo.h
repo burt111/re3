@@ -2,18 +2,20 @@
 
 struct CColModel;
 
-#define MAX_MODEL_NAME (24)
+#define MAX_MODEL_NAME (21)
 
 enum ModelInfoType
 {
-	MITYPE_NA        = 0,
-	MITYPE_SIMPLE    = 1,
-	MITYPE_MLO       = 2,
-	MITYPE_TIME      = 3,
-	MITYPE_CLUMP     = 4,
-	MITYPE_VEHICLE   = 5,
-	MITYPE_PED       = 6,
-	MITYPE_XTRACOMPS = 7,
+	MITYPE_NA,
+	MITYPE_SIMPLE,
+	MITYPE_MLO,	// unused but still in enum
+	MITYPE_TIME,
+	MITYPE_WEAPON,
+	MITYPE_CLUMP,
+	MITYPE_VEHICLE,
+	MITYPE_PED,
+	MITYPE_XTRACOMPS,	// unused but still in enum
+	MITYPE_HAND	// xbox and mobile
 };
 
 class C2dEffect;
@@ -22,22 +24,14 @@ class CBaseModelInfo
 {
 protected:
 	char         m_name[MAX_MODEL_NAME];
-	CColModel   *m_colModel;
-	C2dEffect   *m_twodEffects;
-	int16        m_objectId;
-	uint16       m_refCount;
-	int16        m_txdSlot;
 	uint8        m_type;
 	uint8        m_num2dEffects;
 	bool         m_bOwnsColModel;
-#ifdef EXTRA_MODEL_FLAGS
-public:
-	// from mobile
-	bool         m_bIsDoubleSided;
-	bool         m_bIsTree;
-	bool         m_bCanBeIgnored;	// for low-end devices
-	bool RenderDoubleSided(void) { return m_bIsDoubleSided || m_bIsTree; }
-#endif
+	CColModel   *m_colModel;
+	int16        m_2dEffectsID;
+	int16        m_objectId;
+	uint16       m_refCount;
+	int16        m_txdSlot;
 
 public:
 	CBaseModelInfo(ModelInfoType type);
@@ -47,13 +41,15 @@ public:
 	virtual RwObject *CreateInstance(void) = 0;
 	virtual RwObject *CreateInstance(RwMatrix *) = 0;
 	virtual RwObject *GetRwObject(void) = 0;
+	virtual void SetAnimFile(const char *file) {}
+	virtual void ConvertAnimFileIndex(void) {}
+	virtual int GetAnimFileIndex(void) { return -1; }
 
 	// one day it becomes virtual
 	uint8 GetModelType() const { return m_type; }
-	bool IsSimple(void) { return m_type == MITYPE_SIMPLE || m_type == MITYPE_TIME; }
-	bool IsClump(void) { return m_type == MITYPE_CLUMP || m_type == MITYPE_PED || m_type == MITYPE_VEHICLE ||
-		m_type == MITYPE_MLO || m_type == MITYPE_XTRACOMPS;	// unused but what the heck
-	}
+	bool IsBuilding(void) { return m_type == MITYPE_SIMPLE || m_type == MITYPE_TIME; }
+	bool IsSimple(void) { return m_type == MITYPE_SIMPLE || m_type == MITYPE_TIME || m_type == MITYPE_WEAPON; }
+	bool IsClump(void) { return m_type == MITYPE_CLUMP || m_type == MITYPE_PED || m_type == MITYPE_VEHICLE;	}
 	char *GetModelName(void) { return m_name; }
 	void SetModelName(const char *name) { strncpy(m_name, name, MAX_MODEL_NAME); }
 	void SetColModel(CColModel *col, bool owns = false){
@@ -76,5 +72,3 @@ public:
 	uint8 GetNum2dEffects() const { return m_num2dEffects; }
 	uint16 GetNumRefs() const { return m_refCount; }
 };
-
-VALIDATE_SIZE(CBaseModelInfo, 0x30);

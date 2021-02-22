@@ -22,7 +22,12 @@
 #include "DummyObject.h"
 #include "Script.h"
 #include "Shadows.h"
-#include "Bike.h"
+#include "SurfaceTable.h"
+#include "Weather.h"
+#include "Darkel.h"
+#include "Streaming.h"
+#include "Clock.h"
+#include "WaterLevel.h"
 
 #define MIN_CREATION_DIST		40.0f // not for start of the game (look at the GeneratePedsAtStartOfGame)
 #define CREATION_RANGE			10.0f // added over the MIN_CREATION_DIST.
@@ -30,32 +35,13 @@
 #define PED_REMOVE_DIST			(MIN_CREATION_DIST + CREATION_RANGE + 1.0f)
 #define PED_REMOVE_DIST_SPECIAL	(MIN_CREATION_DIST + CREATION_RANGE + 15.0f) // for peds with bCullExtraFarAway flag
 
-// Transition areas between zones
-const RegenerationPoint aSafeZones[] = {
-	LEVEL_INDUSTRIAL, LEVEL_COMMERCIAL, 400.0f, 814.0f, -954.0f, -903.0f, 30.0f, 100.0f,
-		790.0f, -917.0f, 39.0f, 775.0f, -921.0f, 39.0f, 424.0f, -942.0f, 38.0f, 439.0f, -938.0f, 38.0f,
-	LEVEL_INDUSTRIAL, LEVEL_COMMERCIAL, 555.0f, 711.0f, 118.0f, 186.0f, -30.0f, -10.0f,
-		CVector(698.0f,  182.0f, -20.0f), CVector(681.0f,  178.0f, -20.0f), CVector(586.0f,  144.0f, -20.0f), CVector(577.0f,  135.0f, -20.0f),
-	LEVEL_INDUSTRIAL, LEVEL_COMMERCIAL, 626.0f, 744.0f, -124.0f, -87.0f, -20.0f, -6.0f,
-		CVector(736.0f, -117.0f, -13.0f), CVector(730.0f, -115.0f, -13.0f), CVector(635.0f, -93.0f, -12.5f), CVector(650.0f, -89.0f, -12.5f),
-	LEVEL_INDUSTRIAL, LEVEL_COMMERCIAL, 645.0f, 734.0f, -780.0f, -750.0f, -25.0f, -6.0f,
-		CVector(729.0f, -764.0f, -18.0f), CVector(720.0f, -769.0f, -17.0f), CVector(652.0f, -774.0f, -10.5f), CVector(659.0f, -770.0f, -10.5f),
-	LEVEL_COMMERCIAL, LEVEL_SUBURBAN, -532.0f, -136.0f, -668.0f, -599.0f, 34.0f, 60.0f,
-		CVector(-172.0f, -619.0f,  44.0f), CVector(-183.0f, -623.0f,  44.0f), CVector(-511.0f, -645.0f,  41.0f), CVector(-493.0f, -639.0f,  41.5f),
-	LEVEL_COMMERCIAL, LEVEL_SUBURBAN, -325.0f, -175.0f, 27.0f, 75.0f, -30.0f, -10.0f,
-		CVector(-185.0f,  40.8f, -20.5f), CVector(-202.0f,  37.0f, -20.5f), CVector(-315.0f,  65.5f, -20.5f), CVector(-306.0f,  62.4f, -20.5f),
-	LEVEL_COMMERCIAL, LEVEL_SUBURBAN, -410.0f, -310.0f, -1055.0f, -1030.0f, -20.0f, -6.0f,
-		CVector(-321.0f, -1043.0f, -13.2f), CVector(-328.0f, -1045.0f, -13.2f), CVector(-398.0f, -1044.0f, -13.5f), CVector(-390.0f, -1040.5f, -13.5f),
-	LEVEL_COMMERCIAL, LEVEL_SUBURBAN, -425.0f, -280.0f, -471.0f, -447.0f, -20.0f, -5.0f,
-		CVector(-292.0f, -457.0f, -11.6f), CVector(-310.0f, -461.0f, -11.6f), CVector(-413.0f, -461.0f, -11.5f), CVector(-399.0f, -457.0f, -11.3f)
-};
-
 PedGroup CPopulation::ms_pPedGroups[NUMPEDGROUPS];
 bool CPopulation::ms_bGivePedsWeapons;
 int32 CPopulation::m_AllRandomPedsThisType = -1;
 float CPopulation::PedDensityMultiplier = 1.0f;
 uint32 CPopulation::ms_nTotalMissionPeds;
 int32 CPopulation::MaxNumberOfPedsInUse = 25;
+int32 CPopulation::MaxNumberOfPedsInUseInterior = 40;
 uint32 CPopulation::ms_nNumCivMale;
 uint32 CPopulation::ms_nNumCivFemale;
 uint32 CPopulation::ms_nNumCop;
@@ -75,9 +61,13 @@ uint32 CPopulation::ms_nNumGang6;
 uint32 CPopulation::ms_nNumGang9;
 uint32 CPopulation::ms_nNumGang7;
 uint32 CPopulation::ms_nNumGang8;
-CVector CPopulation::RegenerationPoint_a;
-CVector CPopulation::RegenerationPoint_b;
-CVector CPopulation::RegenerationFront;
+
+uint32 CPopulation::ms_nTotalCarPassengerPeds;
+uint32 CPopulation::NumMiamiViceCops;
+
+uint32 gLastSelectedCivilianIndex;
+CEntity *gSunbatheObstacles[2];
+CEntity *gCoupleObstacles[3];
 
 void
 CPopulation::Initialise()
@@ -99,18 +89,19 @@ CPopulation::Initialise()
 	ms_nNumGang9 = 0;
 	ms_nNumDummy = 0;
 
+	ms_nTotalCarPassengerPeds = 0;
+	ms_nTotalCivPeds = 0;
+	ms_nTotalGangPeds = 0;
+	ms_nTotalPeds = 0;
+	ms_nTotalMissionPeds = 0;
+	m_CountDownToPedsAtStart = 2;
+	bZoneChangeHasHappened = false; // III leftover
+
 	m_AllRandomPedsThisType = -1;
 	PedDensityMultiplier = 1.0f;
-	bZoneChangeHasHappened = false;
-	m_CountDownToPedsAtStart = 2;
 	
-	ms_nTotalMissionPeds = 0;
-	ms_nTotalPeds = 0;
-	ms_nTotalGangPeds = 0;
-	ms_nTotalCivPeds = 0;
 
 	LoadPedGroups();
-	DealWithZoneChange(LEVEL_COMMERCIAL, LEVEL_INDUSTRIAL, true);
 
 	debug("CPopulation ready\n");
 }
@@ -125,7 +116,45 @@ CPopulation::RemovePed(CPed *ent)
 int32
 CPopulation::ChooseCivilianOccupation(int32 group)
 {
-	return ms_pPedGroups[group].models[CGeneral::GetRandomNumberInRange(0, NUMMODELSPERPEDGROUP)];
+	if (CWeather::Rain > 0.1f) {
+		int32 lastModel;
+		for (int i = 0; i < 8; i++) {
+			gLastSelectedCivilianIndex = CGeneral::GetRandomNumberInRange(0, NUMMODELSPERPEDGROUP);
+			lastModel = ms_pPedGroups[group].models[gLastSelectedCivilianIndex];
+
+			if (!CPopulation::IsSunbather(lastModel))
+				break;
+		}
+		return lastModel;
+
+	} else {
+		gLastSelectedCivilianIndex = CGeneral::GetRandomNumberInRange(0, NUMMODELSPERPEDGROUP);
+		return ms_pPedGroups[group].models[gLastSelectedCivilianIndex];
+	}
+}
+
+int32
+CPopulation::ChooseNextCivilianOccupation(int32 group)
+{
+	if (CWeather::Rain > 0.1f) {
+		int32 lastModel;
+		for (int i = 0; i < NUMMODELSPERPEDGROUP; i++) {
+			++gLastSelectedCivilianIndex;
+			if (gLastSelectedCivilianIndex >= NUMMODELSPERPEDGROUP)
+				gLastSelectedCivilianIndex = 0;
+			lastModel = ms_pPedGroups[group].models[gLastSelectedCivilianIndex];
+
+			if (!CPopulation::IsSunbather(ms_pPedGroups[group].models[gLastSelectedCivilianIndex]))
+				break;
+		}
+		return lastModel;
+
+	} else {
+		++gLastSelectedCivilianIndex;
+		if (gLastSelectedCivilianIndex >= NUMMODELSPERPEDGROUP)
+			gLastSelectedCivilianIndex = 0;
+		return ms_pPedGroups[group].models[gLastSelectedCivilianIndex];
+	}
 }
 
 // returns eCopType
@@ -320,108 +349,20 @@ CPopulation::UpdatePedCount(ePedType pedType, bool decrease)
 int
 CPopulation::ChooseGangOccupation(int gangId)
 {
-	int8 modelOverride = CGangs::GetGangPedModelOverride(gangId);
-
-	// All gangs have 2 models
-	int firstGangModel = 2 * gangId + MI_GANG01;
-
-	// GetRandomNumberInRange never returns max. value
-	if (modelOverride == -1)
-		return CGeneral::GetRandomNumberInRange(firstGangModel, firstGangModel + 2);
-
-	if (modelOverride != 0)
-		return firstGangModel + 1;
-	else
-		return firstGangModel;
+	return CGangs::ChooseGangPedModel(gangId);
 }
 
 void
 CPopulation::DealWithZoneChange(eLevelName oldLevel, eLevelName newLevel, bool forceIndustrialZone)
 {
-	bZoneChangeHasHappened = true;
-
-	CVector findSafeZoneAround;
-	int safeZone;
-
-	if (forceIndustrialZone) {
-		// Commercial to industrial transition area on Callahan Bridge
-		findSafeZoneAround.x = 690.0f;
-		findSafeZoneAround.y = -920.0f;
-		findSafeZoneAround.z = 42.0f;
-	} else {
-		findSafeZoneAround = FindPlayerCoors();
-	}
-	eLevelName level;
-	FindCollisionZoneForCoors(&findSafeZoneAround, &safeZone, &level);
-
-	// We aren't in a "safe zone", find closest one
-	if (safeZone < 0)
-		FindClosestZoneForCoors(&findSafeZoneAround, &safeZone, oldLevel, newLevel);
-
-	// No, there should be one!
-	if (safeZone < 0) {
-		if (newLevel == LEVEL_INDUSTRIAL) {
-			safeZone = 0;
-		} else if (newLevel == LEVEL_SUBURBAN) {
-			safeZone = 4;
-		}
-	}
-
-	if (aSafeZones[safeZone].srcLevel == newLevel) {
-		CPopulation::RegenerationPoint_a = aSafeZones[safeZone].srcPosA;
-		CPopulation::RegenerationPoint_b = aSafeZones[safeZone].srcPosB;
-		CPopulation::RegenerationFront = aSafeZones[safeZone].destPosA - aSafeZones[safeZone].srcPosA;
-		RegenerationFront.Normalise();
-	} else if (aSafeZones[safeZone].destLevel == newLevel) {
-		CPopulation::RegenerationPoint_a = aSafeZones[safeZone].destPosA;
-		CPopulation::RegenerationPoint_b = aSafeZones[safeZone].destPosB;
-		CPopulation::RegenerationFront = aSafeZones[safeZone].srcPosA - aSafeZones[safeZone].destPosA;
-		RegenerationFront.Normalise();
-	}
 }
 
 void
-CPopulation::FindCollisionZoneForCoors(CVector *coors, int *safeZoneOut, eLevelName *levelOut)
-{
-	*safeZoneOut = -1;
-	for (int i = 0; i < ARRAY_SIZE(aSafeZones); i++) {
-		if (coors->x > aSafeZones[i].x1 && coors->x < aSafeZones[i].x2) {
-			if (coors->y > aSafeZones[i].y1 && coors->y < aSafeZones[i].y2) {
-				if (coors->z > aSafeZones[i].z1 && coors->z < aSafeZones[i].z2)
-					*safeZoneOut = i;
-			}
-		}
-	}
-	// Then it's transition area
-	if (*safeZoneOut >= 0)
-		*levelOut = LEVEL_GENERIC;
-	else
-		*levelOut = CTheZones::GetLevelFromPosition(coors);
-}
-
-void
-CPopulation::FindClosestZoneForCoors(CVector *coors, int *safeZoneOut, eLevelName level1, eLevelName level2)
-{
-	float minDist = 10000000.0f;
-	int closestSafeZone = -1;
-	for (int i = 0; i < ARRAY_SIZE(aSafeZones); i++) {
-		if ((level1 == aSafeZones[i].srcLevel || level1 == aSafeZones[i].destLevel) && (level2 == aSafeZones[i].srcLevel || level2 == aSafeZones[i].destLevel)) {
-			CVector2D safeZoneDistVec(coors->x - (aSafeZones[i].x1 + aSafeZones[i].x2) * 0.5f, coors->y - (aSafeZones[i].y1 + aSafeZones[i].y2) * 0.5f);
-			float safeZoneDist = safeZoneDistVec.Magnitude();
-			if (safeZoneDist < minDist) {
-				minDist = safeZoneDist;
-				closestSafeZone = i;
-			}
-		}
-	}
-	*safeZoneOut = closestSafeZone;
-}
-
-void
-CPopulation::Update()
+CPopulation::Update(bool addPeds)
 {
 	if (!CReplay::IsPlayingBack()) {
 		ManagePopulation();
+		RemovePedsIfThePoolGetsFull();
 		MoveCarsAndPedsOutOfAbandonedZones();
 		if (m_CountDownToPedsAtStart != 0) {
 			if (--m_CountDownToPedsAtStart == 0)
@@ -433,7 +374,8 @@ CPopulation::Update()
 				+ ms_nNumGang2 + ms_nNumGang1;
 			ms_nTotalPeds = ms_nNumDummy + ms_nNumEmergency + ms_nNumCop
 				+ ms_nTotalGangPeds + ms_nNumCivFemale + ms_nNumCivMale;
-			if (!CCutsceneMgr::IsRunning()) {
+			ms_nTotalPeds -= ms_nTotalCarPassengerPeds;
+			if (!CCutsceneMgr::IsRunning() && addPeds) {
 				float pcdm = PedCreationDistMultiplier();
 				AddToPopulation(pcdm * (MIN_CREATION_DIST * TheCamera.GenerationDistMultiplier),
 					pcdm * ((MIN_CREATION_DIST + CREATION_RANGE) * TheCamera.GenerationDistMultiplier),
@@ -447,32 +389,19 @@ CPopulation::Update()
 void
 CPopulation::GeneratePedsAtStartOfGame()
 {
-	for (int i = 0; i < 50; i++) {
+	for (int i = 0; i < 100; i++) {
 		ms_nTotalCivPeds = ms_nNumCivFemale + ms_nNumCivMale;
 		ms_nTotalGangPeds = ms_nNumGang9 + ms_nNumGang8 + ms_nNumGang7
 			+ ms_nNumGang6 + ms_nNumGang5 + ms_nNumGang4
 			+ ms_nNumGang3 + ms_nNumGang2 + ms_nNumGang1;
 		ms_nTotalPeds = ms_nNumDummy + ms_nNumEmergency + ms_nNumCop
 			+ ms_nTotalGangPeds + ms_nNumCivFemale + ms_nNumCivMale;
+		ms_nTotalPeds -= ms_nTotalCarPassengerPeds;
 
 		// Min dist is 10.0f only for start of the game (naturally)
 		AddToPopulation(10.0f, PedCreationDistMultiplier() * (MIN_CREATION_DIST + CREATION_RANGE),
 			10.0f, PedCreationDistMultiplier() * (MIN_CREATION_DIST + CREATION_RANGE));
 	}
-}
-
-bool
-CPopulation::IsPointInSafeZone(CVector *coors)
-{
-	for (int i = 0; i < ARRAY_SIZE(aSafeZones); i++) {
-		if (coors->x > aSafeZones[i].x1 && coors->x < aSafeZones[i].x2) {
-			if (coors->y > aSafeZones[i].y1 && coors->y < aSafeZones[i].y2) {
-				if (coors->z > aSafeZones[i].z1 && coors->z < aSafeZones[i].z2)
-					return true;
-			}
-		}
-	}
-	return false;
 }
 
 // More speed = wider area to spawn peds
@@ -488,7 +417,7 @@ CPopulation::PedCreationDistMultiplier()
 }
 
 CPed*
-CPopulation::AddPed(ePedType pedType, uint32 miOrCopType, CVector const &coors)
+CPopulation::AddPed(ePedType pedType, uint32 miOrCopType, CVector const &coors, int32 modifier)
 {
 	switch (pedType) {
 		case PEDTYPE_CIVMALE:
@@ -499,16 +428,34 @@ CPopulation::AddPed(ePedType pedType, uint32 miOrCopType, CVector const &coors)
 			ped->SetOrientation(0.0f, 0.0f, 0.0f);
 			CWorld::Add(ped);
 			if (ms_bGivePedsWeapons) {
-				eWeaponType weapon = (eWeaponType)CGeneral::GetRandomNumberInRange(WEAPONTYPE_UNARMED, WEAPONTYPE_DETONATOR);
+				eWeaponType weapon;
+
+				switch (CGeneral::GetRandomNumber() & 3) {
+					case 0:
+						weapon = WEAPONTYPE_COLT45;
+						break;
+					case 1:
+						weapon = WEAPONTYPE_NIGHTSTICK;
+						break;
+					case 2:
+						weapon = WEAPONTYPE_GOLFCLUB;
+						break;
+					case 3:
+						weapon = WEAPONTYPE_TEC9;
+						break;
+					default:
+						break;
+				}
 				if (weapon != WEAPONTYPE_UNARMED) {
-					ped->SetCurrentWeapon(ped->GiveWeapon(weapon, 25001));
+					ped->GiveDelayedWeapon(weapon, 25001);
+					ped->SetCurrentWeapon(CWeaponInfo::GetWeaponInfo(weapon)->m_nWeaponSlot);
 				}
 			}
 			return ped;
 		}
 		case PEDTYPE_COP:
 		{
-			CCopPed *ped = new CCopPed((eCopType)miOrCopType);
+			CCopPed *ped = new CCopPed((eCopType)miOrCopType, modifier);
 			ped->SetPosition(coors);
 			ped->SetOrientation(0.0f, 0.0f, 0.0f);
 			CWorld::Add(ped);
@@ -529,12 +476,14 @@ CPopulation::AddPed(ePedType pedType, uint32 miOrCopType, CVector const &coors)
 			ped->SetOrientation(0.0f, 0.0f, 0.0f);
 			CWorld::Add(ped);
 
-			uint32 weapon;
+			eWeaponType weapon;
 			if (CGeneral::GetRandomNumberInRange(0, 100) >= 50)
-				weapon = ped->GiveWeapon((eWeaponType)CGangs::GetGangInfo(pedType - PEDTYPE_GANG1)->m_Weapon2, 25001);
+				weapon = (eWeaponType)CGangs::GetGangInfo(pedType - PEDTYPE_GANG1)->m_Weapon2;
 			else
-				weapon = ped->GiveWeapon((eWeaponType)CGangs::GetGangInfo(pedType - PEDTYPE_GANG1)->m_Weapon1, 25001);
-			ped->SetCurrentWeapon(weapon);
+				weapon = (eWeaponType)CGangs::GetGangInfo(pedType - PEDTYPE_GANG1)->m_Weapon1;
+
+			ped->GiveDelayedWeapon(weapon, 25001);
+			ped->SetCurrentWeapon(CWeaponInfo::GetWeaponInfo(weapon)->m_nWeaponSlot);
 			return ped;
 		}
 		case PEDTYPE_EMERGENCY:
@@ -576,68 +525,97 @@ CPopulation::AddToPopulation(float minDist, float maxDist, float minDistOffScree
 	int pedAmount;
 
 	CZoneInfo zoneInfo;
+	int32 man = -1, woman = -1;
 	CPed *gangLeader = nil;
 	bool addCop = false;
+	bool isSecurityGuard = false;
+	bool forceAddingCop = false;
 	CPlayerInfo *playerInfo = &CWorld::Players[CWorld::PlayerInFocus];
 	CVector playerCentreOfWorld = FindPlayerCentreOfWorld(CWorld::PlayerInFocus);
 	CTheZones::GetZoneInfoForTimeOfDay(&playerCentreOfWorld, &zoneInfo);
 	CWanted *wantedInfo = playerInfo->m_pPed->m_pWanted;
+
 	if (wantedInfo->GetWantedLevel() > 2) {
-		if (ms_nNumCop < wantedInfo->m_MaxCops && !playerInfo->m_pPed->bInVehicle
-			&& (CCarCtrl::NumLawEnforcerCars >= wantedInfo->m_MaximumLawEnforcerVehicles
+		if (!CGame::IsInInterior() && (CGeneral::GetRandomNumber() % 32 == 0) && FindPlayerVehicle())
+			forceAddingCop = true;
+
+		uint32 maxCops = CGame::IsInInterior() ? wantedInfo->m_MaxCops * 1.6f : wantedInfo->m_MaxCops;
+		if ((ms_nNumCop < maxCops || forceAddingCop) &&
+			(!playerInfo->m_pPed->bInVehicle &&
+				(CCarCtrl::NumLawEnforcerCars >= wantedInfo->m_MaximumLawEnforcerVehicles
 				|| CCarCtrl::NumRandomCars >= playerInfo->m_nTrafficMultiplier * CCarCtrl::CarDensityMultiplier
 				|| CCarCtrl::NumFiretrucksOnDuty + CCarCtrl::NumAmbulancesOnDuty + CCarCtrl::NumParkedCars
-				+ CCarCtrl::NumMissionCars + CCarCtrl::NumLawEnforcerCars + CCarCtrl::NumRandomCars >= CCarCtrl::MaxNumberOfCarsInUse)) {
+				+ CCarCtrl::NumMissionCars + CCarCtrl::NumLawEnforcerCars + CCarCtrl::NumRandomCars >= CCarCtrl::MaxNumberOfCarsInUse) || forceAddingCop)) {
 			addCop = true;
 			minDist = PedCreationDistMultiplier() * MIN_CREATION_DIST;
 			maxDist = PedCreationDistMultiplier() * (MIN_CREATION_DIST + CREATION_RANGE);
 		}
 	}
+	float missionAndWeatherMult = -0.8f * Sqrt(CWeather::Rain) + 1.0f;
+
+	// Taxi side mission
+	if (CTheScripts::IsPlayerOnAMission()) {
+		CPed *player = FindPlayerPed();
+		if (player && player->InVehicle() && player->m_pMyVehicle->IsTaxi())
+			missionAndWeatherMult = 1.0f;
+	}
+	if (CDarkel::FrenzyOnGoing())
+		missionAndWeatherMult = 1.0f;
+	int selectedMaxPeds = CGame::IsInInterior() ? CPopulation::MaxNumberOfPedsInUseInterior : CPopulation::MaxNumberOfPedsInUse;
+
 	// Yeah, float
-	float maxPossiblePedsForArea = (zoneInfo.pedDensity + zoneInfo.carDensity) * playerInfo->m_fRoadDensity * PedDensityMultiplier * CIniFile::PedNumberMultiplier;
-	maxPossiblePedsForArea = Min(maxPossiblePedsForArea, MaxNumberOfPedsInUse);
+	float maxPossiblePedsForArea = (zoneInfo.pedDensity + zoneInfo.carDensity) * playerInfo->m_fRoadDensity * PedDensityMultiplier
+		* (CDarkel::FrenzyOnGoing() ? 1.f : CIniFile::PedNumberMultiplier) * missionAndWeatherMult;
+	maxPossiblePedsForArea = Min(maxPossiblePedsForArea, selectedMaxPeds);
 
 	if (ms_nTotalPeds < maxPossiblePedsForArea || addCop) {
 		int decisionThreshold = CGeneral::GetRandomNumberInRange(0, 1000);
-		if (decisionThreshold < zoneInfo.copDensity || addCop) {
+		if (decisionThreshold < zoneInfo.copPedThreshold || addCop) {
 			pedTypeToAdd = PEDTYPE_COP;
 			modelToAdd = ChoosePolicePedOccupation();
 		} else {
-			int16 density = zoneInfo.copDensity;
-			for (int i = 0; i < NUM_GANGS; i++) {
-				density += zoneInfo.gangDensity[i];
-				if (decisionThreshold < density) {
-					pedTypeToAdd = PEDTYPE_GANG1 + i;
+			int i = 0;
+			for (i = 0; i < NUM_GANGS; i++) {
+				if (decisionThreshold < zoneInfo.gangPedThreshold[i]) {
 					break;
 				}
+			}
 
-				if (i == NUM_GANGS - 1) {
+			if (i == NUM_GANGS) {
+				if (CGeneral::GetRandomNumberInRange(0.0f, 1.0f) <= 0.95f) {
 					modelToAdd = ChooseCivilianOccupation(zoneInfo.pedGroup);
+
 					if (modelToAdd == -1)
 						return;
 					pedTypeToAdd = ((CPedModelInfo*)CModelInfo::GetModelInfo(modelToAdd))->m_pedType;
-				}
 
+				} else {
+					ChooseCivilianCoupleOccupations(zoneInfo.pedGroup, man, woman);
+					if (man == -1 || woman == -1)
+						return;
+					pedTypeToAdd = ((CPedModelInfo*)CModelInfo::GetModelInfo(woman))->m_pedType;
+				}
+			} else {
+				pedTypeToAdd = PEDTYPE_GANG1 + i;
+
+				if (IsSecurityGuard((ePedType)pedTypeToAdd)) {
+					isSecurityGuard = true;
+					modelToAdd = ChooseGangOccupation(pedTypeToAdd - PEDTYPE_GANG1);
+
+					if (modelToAdd == -1)
+						return;
+					pedTypeToAdd = ((CPedModelInfo*)CModelInfo::GetModelInfo(modelToAdd))->m_pedType;
+
+				}
 			}
 		}
 		if (!addCop && m_AllRandomPedsThisType > PEDTYPE_PLAYER1)
 			pedTypeToAdd = m_AllRandomPedsThisType;
 
-		if (pedTypeToAdd >= PEDTYPE_GANG1 && pedTypeToAdd <= PEDTYPE_GANG9) {
-			int randVal = CGeneral::GetRandomNumber() % 100;
-			if (randVal < 50)
-				return;
-
-			if (randVal < 57) {
-				pedAmount = 1;
-			} else if (randVal >= 74) {
-				if (randVal >= 85)
-					pedAmount = 4;
-				else
-					pedAmount = 3;
-			} else {
-				pedAmount = 2;
-			}
+		if (pedTypeToAdd >= PEDTYPE_GANG1 && pedTypeToAdd <= PEDTYPE_GANG9 && !isSecurityGuard) {
+			minDist += 30.0f;
+			maxDist += 30.0f;
+			pedAmount = ComputeRandomisedGangSize();
 		} else
 			pedAmount = 1;
 
@@ -650,35 +628,59 @@ CPopulation::AddToPopulation(float minDist, float maxDist, float minDistOffScree
 		if (!foundCoors)
 			return;
 
+		uint8 nodeSpawnRate = Min(ThePaths.m_pathNodes[node1].spawnRate, ThePaths.m_pathNodes[node2].spawnRate);
+		int randomRate = CGeneral::GetRandomNumber() & 0xF;
+		if (randomRate > nodeSpawnRate)
+			return;
+
+		CPathFind::TakeWidthIntoAccountForCoors(&ThePaths.m_pathNodes[node1], &ThePaths.m_pathNodes[node2], CGeneral::GetRandomNumber(), &generatedCoors.x, &generatedCoors.y);
+		if (CGame::currArea == AREA_MALL && (pedTypeToAdd == PEDTYPE_CIVMALE || pedTypeToAdd == PEDTYPE_CIVFEMALE || pedTypeToAdd == PEDTYPE_CRIMINAL) &&
+			CGeneral::GetRandomNumberInRange(0.f, 1.f) > 0.5f) {
+
+			PlaceMallPedsAsStationaryGroup(generatedCoors, zoneInfo.pedGroup);
+			return;
+		}
+
+		if (pedTypeToAdd >= PEDTYPE_GANG1 && pedTypeToAdd <= PEDTYPE_GANG9 && !isSecurityGuard) {
+			PlaceGangMembers((ePedType)pedTypeToAdd, pedAmount, generatedCoors);
+			return;
+		}
+
+		if (man > -1 && woman > -1) {
+			PlaceCouple(PEDTYPE_CIVMALE, man, PEDTYPE_CIVFEMALE, woman, generatedCoors);
+			return;
+		}
+
 		for (int i = 0; i < pedAmount; ++i) {
-			if (pedTypeToAdd >= PEDTYPE_GANG1 && pedTypeToAdd <= PEDTYPE_GANG9)
-				modelToAdd = ChooseGangOccupation(pedTypeToAdd - PEDTYPE_GANG1);
 
 			if (pedTypeToAdd == PEDTYPE_COP) {
 				// Unused code, ChoosePolicePedOccupation returns COP_STREET. Spawning FBI/SWAT/Army done in somewhere else.
 				if (modelToAdd == COP_STREET) {
-					if (!CModelInfo::GetModelInfo(MI_COP)->GetRwObject())
+					if (!CStreaming::HasModelLoaded(MI_COP))
 						return;
 
 				} else if (modelToAdd == COP_FBI) {
-					if (!CModelInfo::GetModelInfo(MI_FBI)->GetRwObject())
+					if (!CStreaming::HasModelLoaded(MI_COP) || !CStreaming::HasModelLoaded(CWeaponInfo::GetWeaponInfo(WEAPONTYPE_MP5)->m_nModelId))
 						return;
 
 				} else if (modelToAdd == COP_SWAT) {
-					if (!CModelInfo::GetModelInfo(MI_SWAT)->GetRwObject())
+					if (!CStreaming::HasModelLoaded(MI_SWAT) || !CStreaming::HasModelLoaded(CWeaponInfo::GetWeaponInfo(WEAPONTYPE_UZI)->m_nModelId))
 						return;
 
-				} else if (modelToAdd == COP_ARMY && !CModelInfo::GetModelInfo(MI_ARMY)->GetRwObject()) {
-					return;
+				} else if (modelToAdd == COP_ARMY) {
+					if (!CStreaming::HasModelLoaded(MI_ARMY) ||
+						!CStreaming::HasModelLoaded(CWeaponInfo::GetWeaponInfo(WEAPONTYPE_MP5)->m_nModelId) || !CStreaming::HasModelLoaded(CWeaponInfo::GetWeaponInfo(WEAPONTYPE_GRENADE)->m_nModelId))
+						return;
 				}
-			} else if (!CModelInfo::GetModelInfo(modelToAdd)->GetRwObject()) {
+			} else if (!CStreaming::HasModelLoaded(modelToAdd)) {
 				return;
 			}
 			generatedCoors.z += 0.7f;
 
 			// What? How can this not be met?
 			if (i < pedAmount) {
-				//rand()
+				// rand()
+				// III leftover, unused
 				if (gangLeader) {
 					// Align gang members in formation. (btw i can't be 0 in here)
 					float offsetMin = i * 0.75f;
@@ -693,7 +695,7 @@ CPopulation::AddToPopulation(float minDist, float maxDist, float minDistOffScree
 					generatedCoors.y = yOffset + gangLeader->GetPosition().y;
 				}
 			}
-			if (!CPedPlacement::IsPositionClearForPed(&generatedCoors))
+			if (!CPedPlacement::IsPositionClearForPed(generatedCoors))
 				break;
 
 			// Why no love for last gang member?!
@@ -705,29 +707,81 @@ CPopulation::AddToPopulation(float minDist, float maxDist, float minDistOffScree
 
 				generatedCoors.z = Max(generatedCoors.z, groundZ);
 			}
-			bool farEnoughToAdd = true;
-			CMatrix mat(TheCamera.GetCameraMatrix());
-			if (TheCamera.IsSphereVisible(generatedCoors, 2.0f, &mat)) {
+			bool surfaceAndDistIsOk = true;
+			if (TheCamera.IsSphereVisible(generatedCoors, 2.0f)) {
 				if (PedCreationDistMultiplier() * MIN_CREATION_DIST > (generatedCoors - playerCentreOfWorld).Magnitude2D())
-					farEnoughToAdd = false;
+					surfaceAndDistIsOk = false;
 			}
-			if (!farEnoughToAdd)
+
+			// Place skaters if only they're on tarmac.
+			if (((CPedModelInfo*)CModelInfo::GetModelInfo(modelToAdd))->m_pedStatType == PEDSTAT_SKATER) {
+				CEntity* foundEnt = nil;
+				CColPoint foundCol;
+				CWorld::ProcessVerticalLine(generatedCoors + CVector(0.f, 0.f, 2.f), generatedCoors.z - 2.0f, foundCol, foundEnt, true, false, false, false, false, false, nil);
+				if (foundEnt) {
+					if (foundCol.surfaceB == SURFACE_TARMAC || foundCol.surfaceB == SURFACE_PAVEMENT)
+						surfaceAndDistIsOk = true;
+					else
+						surfaceAndDistIsOk = false;
+
+				} else {
+					surfaceAndDistIsOk = false;
+				}
+			}
+			if (!surfaceAndDistIsOk)
 				break;
 			CPed *newPed = AddPed((ePedType)pedTypeToAdd, modelToAdd, generatedCoors);
-			newPed->SetWanderPath(CGeneral::GetRandomNumberInRange(0, 8));
+			if (forceAddingCop && newPed->m_nPedType == PEDTYPE_COP)
+				((CCopPed*)newPed)->m_bThrowsSpikeTrap = true;
 
+			bool gonnaSunbathe = false;
+			if (CPopulation::IsSunbather(modelToAdd)) {
+				CEntity* foundEnt = nil;
+				CColPoint foundCol;
+				CWorld::ProcessVerticalLine(generatedCoors + CVector(0.f, 0.f, 2.f), generatedCoors.z - 2.0f, foundCol, foundEnt, true, false, false, false, false, false, nil);
+				if (foundEnt) {
+					if ((foundCol.surfaceB == SURFACE_CONCRETE_BEACH || foundCol.surfaceB == SURFACE_SAND)
+						&& CClock::GetHours() >= 10 && CClock::GetHours() <= 18 && 0.0f == CWeather::Rain) {
+						gonnaSunbathe = true;
+						if (CPedPlacement::IsPositionClearForPed(generatedCoors, 3.0f, ARRAY_SIZE(gSunbatheObstacles), gSunbatheObstacles)) {
+							for (int j = 0; j < ARRAY_SIZE(gSunbatheObstacles); j++) {
+								if (gSunbatheObstacles[j] && gSunbatheObstacles[j] != newPed)
+									gonnaSunbathe = false;
+							}
+						}
+					}
+				}
+			}
+			if (gonnaSunbathe) {
+				float heading = CGeneral::GetRandomNumberInRange(0.f, 1.f) * TWOPI;
+				newPed->m_fRotationDest = heading;
+				newPed->m_fRotationCur = heading;
+				// unused
+				// v61 = CGeneral::GetRandomTrueFalse();
+				newPed->SetWaitState(WAITSTATE_SUN_BATHE_IDLE, nil);
+				CVector toyPos(newPed->GetPosition());
+				float waterLevel;
+				if (CWaterLevel::GetGroundLevel(toyPos, &waterLevel, nil, 30.0f)) {
+					toyPos.z = 0.04f + waterLevel;
+					CEntity *toy = CWaterLevel::CreateBeachToy(toyPos, BEACHTOY_ANY_TOWEL);
+					if (toy)
+						toy->SetHeading(heading);
+
+					if (!(CGeneral::GetRandomNumber() & 3)) {
+						CWaterLevel::CreateBeachToy(toyPos + CVector(CGeneral::GetRandomNumberInRange(-2.f, 2.f), CGeneral::GetRandomNumberInRange(-2.f, 2.f), 0.f), BEACHTOY_LOTION);
+					}
+				}
+			} else {
+				newPed->SetWanderPath(CGeneral::GetRandomNumberInRange(0, 8));
+			}
+			
 			if (i != 0) {
 				// Gang member
 				newPed->SetLeader(gangLeader);
-#if !defined(FIX_BUGS) && GTA_VERSION >= GTA3_PC_10
-				// seems to be a miami leftover (this code is not on PS2) but gang peds end up just being frozen
+
 				newPed->SetPedState(PED_UNKNOWN);
 				gangLeader->SetPedState(PED_UNKNOWN);
-				newPed->m_fRotationCur = CGeneral::GetRadianAngleBetweenPoints(
-					gangLeader->GetPosition().x, gangLeader->GetPosition().y,
-					newPed->GetPosition().x, newPed->GetPosition().y);
-				newPed->m_fRotationDest = newPed->m_fRotationCur;
-#endif
+
 			} else {
 				gangLeader = newPed;
 			}
@@ -743,9 +797,10 @@ CPopulation::AddToPopulation(float minDist, float maxDist, float minDistOffScree
 }
 
 CPed*
-CPopulation::AddPedInCar(CVehicle* car)
+CPopulation::AddPedInCar(CVehicle* car, bool isDriver)
 {
-	int defaultModel = MI_MALE01;
+	const int defaultModel = MI_MALE01;
+	int miamiViceIndex = 0;
 	bool imSureThatModelIsLoaded = true;
 	CVector coors = FindPlayerCoors();
 	CZoneInfo zoneInfo;
@@ -764,11 +819,8 @@ CPopulation::AddPedInCar(CVehicle* car)
 			preferredModel = 0;
 			pedType = PEDTYPE_EMERGENCY;
 			break;
-		case MI_FBICAR:
-			preferredModel = COP_FBI;
-			pedType = PEDTYPE_COP;
-			break;
 		case MI_POLICE:
+		case MI_PREDATOR:
 			preferredModel = COP_STREET;
 			pedType = PEDTYPE_COP;
 			break;
@@ -781,18 +833,28 @@ CPopulation::AddPedInCar(CVehicle* car)
 			preferredModel = COP_ARMY;
 			pedType = PEDTYPE_COP;
 			break;
-		case MI_TAXI:
-		case MI_CABBIE:
-		case MI_BORGNINE:
-			if (CGeneral::GetRandomTrueFalse()) {
-				pedType = PEDTYPE_CIVMALE;
-				preferredModel = MI_TAXI_D;
-				break;
-			}
-			defaultModel = MI_TAXI_D;
-
-			// fall through
+		case MI_FBIRANCH:
+			preferredModel = COP_FBI;
+			pedType = PEDTYPE_COP;
+			break;
 		default:
+			if (car->IsTaxi()) {
+				if (isDriver) {
+					pedType = PEDTYPE_CIVMALE;
+					preferredModel = MI_TAXI_D;
+					break;
+				}
+				// fall through if not
+			} else if (car->GetModelIndex() == MI_VICECHEE) {
+				if (car->bIsLawEnforcer) {
+					preferredModel = COP_MIAMIVICE;
+					pedType = PEDTYPE_COP;
+					miamiViceIndex = (isDriver ? 2 * CCarCtrl::MiamiViceCycle : 2 * CCarCtrl::MiamiViceCycle + 1);
+					break;
+				}
+				// fall through if not
+			}
+
 			int gangOfPed = 0;
 			imSureThatModelIsLoaded = false;
 
@@ -803,16 +865,20 @@ CPopulation::AddPedInCar(CVehicle* car)
 				pedType = gangOfPed + PEDTYPE_GANG1;
 				preferredModel = ChooseGangOccupation(gangOfPed);
 			} else if (gangOfPed == NUM_GANGS) {
-			    CVehicleModelInfo *carModelInfo = ((CVehicleModelInfo *)CModelInfo::GetModelInfo(car->GetModelIndex()));
+			    CVehicleModelInfo *carModel = ((CVehicleModelInfo *)CModelInfo::GetModelInfo(car->GetModelIndex()));
+				preferredModel = ChooseCivilianOccupation(zoneInfo.pedGroup);
 				int i = 15;
 				for(; i >= 0; i--) {
-					// Should return random model each time
-					preferredModel = ChooseCivilianOccupation(zoneInfo.pedGroup);
-					if (preferredModel == -1)
-						preferredModel = defaultModel;
+					CPedModelInfo* pedModel = (CPedModelInfo*)CModelInfo::GetModelInfo(preferredModel);
 
-					if (((CPedModelInfo*)CModelInfo::GetModelInfo(preferredModel))->m_carsCanDrive & (1 << carModelInfo->m_vehicleClass))
-						break;
+					if (pedModel->GetRwObject()) {
+						if (!car->IsPassenger(preferredModel) && !car->IsDriver(preferredModel)) {
+							if (((CPedModelInfo*)CModelInfo::GetModelInfo(preferredModel))->m_carsCanDrive & (1 << carModel->m_vehicleClass))
+								break;
+						}
+					}
+
+					preferredModel = ChooseNextCivilianOccupation(zoneInfo.pedGroup);
 				}
 				if (i == -1)
 					preferredModel = defaultModel;
@@ -826,120 +892,20 @@ CPopulation::AddPedInCar(CVehicle* car)
 		pedType = ((CPedModelInfo*)CModelInfo::GetModelInfo(defaultModel))->m_pedType;
 	}
 
-	CPed *newPed = CPopulation::AddPed((ePedType)pedType, preferredModel, car->GetPosition());
+	CPed *newPed = CPopulation::AddPed((ePedType)pedType, preferredModel, car->GetPosition(), miamiViceIndex);
 	newPed->bUsesCollision = false;
 
-	// what??
-	if (pedType != PEDTYPE_COP) {
-		newPed->SetCurrentWeapon(WEAPONTYPE_COLT45);
+	if (newPed->GetWeapon()->m_eWeaponType != WEAPONTYPE_UNARMED) {
 		newPed->RemoveWeaponModel(CWeaponInfo::GetWeaponInfo(newPed->GetWeapon()->m_eWeaponType)->m_nModelId);
 	}
-	
-	// Miami leftover
-	if (car->m_vehType == VEHICLE_TYPE_BIKE) {
-		newPed->m_pVehicleAnim = CAnimManager::BlendAnimation(newPed->GetClump(), ASSOCGRP_STD, ((CBike*)car)->m_bikeSitAnimation, 100.0f);
-	} else 
 
-	// FIX: Make peds comfortable while driving car/boat
-#ifdef FIX_BUGS
-	{
-		newPed->m_pVehicleAnim = CAnimManager::BlendAnimation(newPed->GetClump(), ASSOCGRP_STD, car->GetDriverAnim(), 100.0f);
-	}
-#else
-	{
-		newPed->m_pVehicleAnim = CAnimManager::BlendAnimation(newPed->GetClump(), ASSOCGRP_STD, ANIM_STD_CAR_SIT, 100.0f);
-	}
-#endif
-	
-	newPed->StopNonPartialAnims();
+	newPed->AddInCarAnims(car, isDriver);
 	return newPed;
 }
 
 void
 CPopulation::MoveCarsAndPedsOutOfAbandonedZones()
 {
-	eLevelName level;
-	int zone;
-	int frame = CTimer::GetFrameCounter() & 7;
-	if (frame == 1) {
-		int movedVehicleCount = 0;
-		int poolSize = CPools::GetVehiclePool()->GetSize();
-		for (int poolIndex = poolSize - 1; poolIndex >= 0; poolIndex--) {
-
-			CVehicle* veh = CPools::GetVehiclePool()->GetSlot(poolIndex);
-			if (veh && veh->m_nZoneLevel == LEVEL_GENERIC && veh->IsCar()) {
-
-				if(veh->GetStatus() != STATUS_ABANDONED && veh->GetStatus() != STATUS_WRECKED && veh->GetStatus() != STATUS_PLAYER &&
-					veh->GetStatus() != STATUS_PLAYER_REMOTE) {
-
-					CVector vehPos(veh->GetPosition());
-					CPopulation::FindCollisionZoneForCoors(&vehPos, &zone, &level);
-
-					// Level 0 is transition zones, and we don't wanna touch cars on transition zones.
-					if (level != LEVEL_GENERIC && level != CCollision::ms_collisionInMemory && vehPos.z > -4.0f) {
-						if (veh->bIsLocked || !veh->CanBeDeleted()) {
-							switch (movedVehicleCount & 3) {
-								case 0:
-									veh->SetPosition(RegenerationPoint_a);
-									break;
-								case 1:
-									veh->SetPosition(RegenerationPoint_b);
-									break;
-								case 2:
-									veh->SetPosition(RegenerationPoint_a.x, RegenerationPoint_b.y, RegenerationPoint_a.z);
-									break;
-								case 3:
-									veh->SetPosition(RegenerationPoint_b.x, RegenerationPoint_a.y, RegenerationPoint_a.z);
-									break;
-								default:
-									break;
-							}
-							veh->GetMatrix().GetPosition().z += (movedVehicleCount / 4) * 7.0f;
-							veh->GetMatrix().GetForward() = RegenerationFront;
-							((CAutomobile*)veh)->PlaceOnRoadProperly();
-							CCarCtrl::JoinCarWithRoadSystem(veh);
-							CTheScripts::ClearSpaceForMissionEntity(veh->GetPosition(), veh);
-							++movedVehicleCount;
-						} else {
-							CWorld::Remove(veh);
-							delete veh;
-						}
-					}
-				}
-			}
-		}
-	} else if (frame == 5) {
-		int poolSize = CPools::GetPedPool()->GetSize();
-		for (int poolIndex = poolSize - 1; poolIndex >= 0; poolIndex--) {
-
-			CPed *ped = CPools::GetPedPool()->GetSlot(poolIndex);
-			if (ped && ped->m_nZoneLevel == LEVEL_GENERIC && !ped->bInVehicle) {
-
-				CVector pedPos(ped->GetPosition());
-				CPopulation::FindCollisionZoneForCoors(&pedPos, &zone, &level);
-
-				// Level 0 is transition zones, and we don't wanna touch peds on transition zones.
-				if (level != LEVEL_GENERIC && level != CCollision::ms_collisionInMemory && pedPos.z > -4.0f) {
-					if (ped->CanBeDeleted()) {
-						CWorld::Remove(ped);
-						delete ped;
-					} else if (ped->m_nPedType != PEDTYPE_PLAYER1 && ped->m_nPedType != PEDTYPE_PLAYER2) {
-						ped->SetPosition(RegenerationPoint_a);
-
-						bool foundGround;
-						float groundZ = CWorld::FindGroundZFor3DCoord(ped->GetPosition().x, ped->GetPosition().y,
-							ped->GetPosition().z + 2.0f, &foundGround);
-
-						if (foundGround) {
-							ped->GetMatrix().GetPosition().z = 1.0f + groundZ;
-							//ped->GetPosition().z += 0.0f;
-							CTheScripts::ClearSpaceForMissionEntity(ped->GetPosition(), ped);
-						}
-					}
-				}
-			}
-		}
-	}
 }
 
 void
@@ -970,7 +936,8 @@ CPopulation::ConvertToRealObject(CDummyObject *dummy)
 	delete dummy;
 	CWorld::Add(obj);
 
-	if (IsGlass(obj->GetModelIndex())) {
+	CSimpleModelInfo *mi = (CSimpleModelInfo*)CModelInfo::GetModelInfo(obj->GetModelIndex());
+	if (IsGlass(obj->GetModelIndex()) && !mi->m_isArtistGlass) {
 		obj->bIsVisible = false;
 	} else if (obj->GetModelIndex() == MI_BUOY) {
 		obj->SetIsStatic(false);
@@ -989,7 +956,8 @@ CPopulation::ConvertToDummyObject(CObject *obj)
 	dummy->GetMatrix().UpdateRW();
 	dummy->UpdateRwFrame();
 
-	if (IsGlass(obj->GetModelIndex()))
+	CSimpleModelInfo *mi = (CSimpleModelInfo*)CModelInfo::GetModelInfo(obj->GetModelIndex());
+	if (IsGlass(obj->GetModelIndex()) && !mi->m_isArtistGlass)
 		dummy->bIsVisible = false;
 
 	CWorld::Remove(obj);
@@ -1001,7 +969,7 @@ bool
 CPopulation::TestRoomForDummyObject(CObject *obj)
 {
 	int16 collidingObjs;
-	CWorld::FindObjectsKindaColliding(obj->m_objectMatrix.GetPosition(), CModelInfo::GetModelInfo(obj->GetModelIndex())->GetColModel()->boundingSphere.radius,
+	CWorld::FindObjectsKindaColliding(obj->m_objectMatrix.GetPosition(), obj->GetBoundRadius(),
 		false, &collidingObjs, 2, nil, false, true, true, false, false);
 
 	return collidingObjs == 0;
@@ -1076,17 +1044,20 @@ CPopulation::ManagePopulation(void)
 	for (int i = objectPoolSize * frameMod32 / 32; i < objectPoolSize * (frameMod32 + 1) / 32; i++) {
 		CObject *obj = CPools::GetObjectPool()->GetSlot(i);
 		if (obj && obj->CanBeDeleted()) {
-			if ((obj->GetPosition() - playerPos).Magnitude() <= 80.0f ||
-				(obj->m_objectMatrix.GetPosition() - playerPos).Magnitude() <= 80.0f) {
-				if (obj->ObjectCreatedBy == TEMP_OBJECT && CTimer::GetTimeInMilliseconds() > obj->m_nEndOfLifeTime) {
+			float objPlayerDist = (obj->GetPosition() - playerPos).Magnitude();
+			if (obj->ObjectCreatedBy == TEMP_OBJECT) {
+				if (obj->GetModelIndex() != MI_ROADWORKBARRIER1 && obj->GetModelIndex() != MI_BEACHBALL) {
+					if (objPlayerDist > 51.0f || objPlayerDist > 25.0f && !obj->GetIsOnScreen() || CTimer::GetTimeInMilliseconds() > obj->m_nEndOfLifeTime) {
+						CWorld::Remove(obj);
+						delete obj;
+					}
+				} else if (objPlayerDist > 120.0f) {
 					CWorld::Remove(obj);
 					delete obj;
 				}
-			} else {
-				if (obj->ObjectCreatedBy == TEMP_OBJECT) {
-					CWorld::Remove(obj);
-					delete obj;
-				} else if (obj->ObjectCreatedBy != CUTSCENE_OBJECT && TestRoomForDummyObject(obj)) {
+
+			} else if (objPlayerDist > 80.0f && (obj->m_objectMatrix.GetPosition() - playerPos).Magnitude() > 80.0f) {
+				if (obj->ObjectCreatedBy != CUTSCENE_OBJECT && TestRoomForDummyObject(obj)) {
 					ConvertToDummyObject(obj);
 				}
 			}
@@ -1097,7 +1068,7 @@ CPopulation::ManagePopulation(void)
 	int dummyPoolSize = CPools::GetDummyPool()->GetSize();
 	for (int i = dummyPoolSize * frameMod32 / 32; i < dummyPoolSize * (frameMod32 + 1) / 32; i++) {
 		CDummy *dummy = CPools::GetDummyPool()->GetSlot(i);
-		if (dummy) {
+		if (dummy && (dummy->m_area == CGame::currArea || dummy->m_area == AREA_EVERYWHERE)) {
 			if ((dummy->GetPosition() - playerPos).Magnitude() < 80.0f)
 				ConvertToRealObject((CDummyObject*)dummy);
 		}
@@ -1112,7 +1083,8 @@ CPopulation::ManagePopulation(void)
 		CPed *ped = CPools::GetPedPool()->GetSlot(poolIndex);
 
 		if (ped && !ped->IsPlayer() && ped->CanBeDeleted() && !ped->bInVehicle) {
-			if (ped->m_nPedState == PED_DEAD && CTimer::GetTimeInMilliseconds() - ped->m_bloodyFootprintCountOrDeathTime > 60000)
+			uint32 timeSinceDeath = CTimer::GetTimeInMilliseconds() - ped->m_bloodyFootprintCountOrDeathTime;
+			if (ped->m_nPedState == PED_DEAD && (timeSinceDeath > 30000 || CDarkel::FrenzyOnGoing() && timeSinceDeath > 15000))
 				ped->bFadeOut = true;
 
 			if (ped->bFadeOut && CVisibilityPlugins::GetClumpAlpha(ped->GetClump()) == 0) {
@@ -1121,24 +1093,32 @@ CPopulation::ManagePopulation(void)
 			}
 
 			float dist = (ped->GetPosition() - playerPos).Magnitude2D();
-#ifdef SQUEEZE_PERFORMANCE
-			if (dist > 50.f)
-				ped->bUsesCollision = false;
-			else
-				ped->bUsesCollision = true;
-#endif
-
 			bool pedIsFarAway = false;
-			if (PedCreationDistMultiplier() * (PED_REMOVE_DIST_SPECIAL * TheCamera.GenerationDistMultiplier) < dist
-				|| (!ped->bCullExtraFarAway && PedCreationDistMultiplier() * PED_REMOVE_DIST * TheCamera.GenerationDistMultiplier < dist)
-				|| (PedCreationDistMultiplier() * (MIN_CREATION_DIST + CREATION_RANGE) * OFFSCREEN_CREATION_MULT < dist
-				&& !ped->GetIsOnScreen()
-				&& TheCamera.Cams[TheCamera.ActiveCam].Mode != CCam::MODE_SNIPER
-				&& TheCamera.Cams[TheCamera.ActiveCam].Mode != CCam::MODE_SNIPER_RUNABOUT
-				&& !TheCamera.Cams[TheCamera.ActiveCam].LookingLeft
-				&& !TheCamera.Cams[TheCamera.ActiveCam].LookingRight
-				&& !TheCamera.Cams[TheCamera.ActiveCam].LookingBehind))
+
+			if (ped->IsGangMember())
+				dist -= 30.0f;
+			else if (ped->bDeadPedInFrontOfCar && ped->m_vehicleInAccident)
+				dist = 0.0f;
+
+			if (PedCreationDistMultiplier() * (PED_REMOVE_DIST_SPECIAL * TheCamera.GenerationDistMultiplier) < dist ||
+				(!ped->bCullExtraFarAway && PedCreationDistMultiplier() * PED_REMOVE_DIST * TheCamera.GenerationDistMultiplier < dist)) {
 				pedIsFarAway = true;
+
+			} else if (PedCreationDistMultiplier() * (MIN_CREATION_DIST + CREATION_RANGE) * OFFSCREEN_CREATION_MULT < dist) {
+				if (CTimer::GetTimeInMilliseconds() > ped->m_nExtendedRangeTimer && !ped->GetIsOnScreen()) {
+					if (TheCamera.Cams[TheCamera.ActiveCam].Mode != CCam::MODE_SNIPER
+						&& TheCamera.Cams[TheCamera.ActiveCam].Mode != CCam::MODE_SNIPER_RUNABOUT
+						&& TheCamera.Cams[TheCamera.ActiveCam].Mode != CCam::MODE_CAMERA
+						&& !TheCamera.Cams[TheCamera.ActiveCam].LookingLeft
+						&& !TheCamera.Cams[TheCamera.ActiveCam].LookingRight
+						&& !TheCamera.Cams[TheCamera.ActiveCam].LookingBehind) {
+						pedIsFarAway = true;
+					}
+				}
+						
+			} else {
+				ped->m_nExtendedRangeTimer = ped->m_nPedType == PEDTYPE_COP ? CTimer::GetTimeInMilliseconds() + 10000 : CTimer::GetTimeInMilliseconds() + 4000;
+			}
 
 			if (!pedIsFarAway)
 				continue;
@@ -1171,6 +1151,641 @@ CPopulation::ManagePopulation(void)
 				ped->bFadeOut = true;
 			else
 				RemovePed(ped);
+		}
+	}
+}
+
+CPed* 
+CPopulation::AddDeadPedInFrontOfCar(const CVector& pos, CVehicle* pCulprit)
+{
+	if (TheCamera.IsSphereVisible(pos, 2.0f) && MIN_CREATION_DIST * PedCreationDistMultiplier() > (pos - FindPlayerPed()->GetPosition()).Magnitude2D()) {
+			return nil;
+	}
+
+	bool found;
+	float z = CWorld::FindGroundZFor3DCoord(pos.x, pos.y, pos.z, &found) + 1.0f;
+	if (!found)
+		return nil;
+	z = Max(z, pos.z);
+	if (!CModelInfo::GetModelInfo(MI_MALE01)->GetRwObject())
+		return nil;
+	CPed* pPed = CPopulation::AddPed(PEDTYPE_CIVMALE, MI_MALE01, pos);
+	pPed->SetDie();
+	pPed->m_nPedMoney = 0;
+	pPed->bDeadPedInFrontOfCar = true;
+	pPed->m_vehicleInAccident = pCulprit;
+	pCulprit->RegisterReference((CEntity**)&pPed->m_vehicleInAccident);
+	CEntity* pEntities[3] = { 0 };
+	if (!CPedPlacement::IsPositionClearForPed(pos, 2.0f, 3, pEntities)) {
+		for (int i = 0; i < 3; i++) {
+			if (pEntities[i] && pEntities[i] != pCulprit && pEntities[i] != pPed) {
+				RemovePed(pPed);
+				return nil;
+			}
+		}
+	}
+	CColPoint colpts[MAX_COLLISION_POINTS];
+	if (CCollision::ProcessColModels(pCulprit->GetMatrix(), *pCulprit->GetColModel(), pPed->GetMatrix(), *pPed->GetColModel(), colpts, nil, nil)) {
+		RemovePed(pPed);
+		return nil;
+	}
+	CVisibilityPlugins::SetClumpAlpha(pPed->GetClump(), 0);
+	return pPed;
+}
+
+bool
+CPopulation::IsSkateable(CVector const& pos)
+{
+	CColPoint foundCol;
+	CEntity* foundEnt = nil;
+	CWorld::ProcessVerticalLine(pos + CVector(0.f, 0.f, 2.f), pos.z - 2.0f, foundCol, foundEnt, true, false, false, false, false, false, nil);
+	if (!foundEnt)
+		return false;
+
+	return foundCol.surfaceB == SURFACE_TARMAC || foundCol.surfaceB == SURFACE_PAVEMENT;
+}
+
+bool
+CPopulation::CanJeerAtStripper(int32 model)
+{
+	return model == MI_WMOBE || model == MI_WMYBE || model == MI_WMOST || model == MI_BMYBB;
+}
+
+void
+CPopulation::RemovePedsIfThePoolGetsFull(void)
+{
+	if ((CTimer::GetFrameCounter() & 7) == 5) {
+		if (CPools::GetPedPool()->GetNoOfFreeSpaces() < 8) {
+			CPed *closestPed = nil;
+			float closestDist = 10000000.0;
+			int poolSize = CPools::GetPedPool()->GetSize();
+			for (int i = poolSize - 1; i >= 0; i--) {
+				CPed* ped = CPools::GetPedPool()->GetSlot(i);
+				if (ped && ped->CanBeDeleted()) {
+					float dist = (TheCamera.GetPosition() - ped->GetPosition()).Magnitude();
+					if (dist < closestDist) {
+						closestDist = dist;
+						closestPed = ped;
+					}
+				}
+			}
+			if (closestPed) {
+				RemovePed(closestPed);
+			}
+		}
+	}
+}
+
+bool
+CPopulation::IsMale(int32 model)
+{
+	switch (model) {
+		case MI_HMYST:
+		case MI_HMOST:
+		case MI_HMYRI:
+		case MI_HMORI:
+		case MI_HMYBE:
+		case MI_HMOBE:
+		case MI_HMOTR:
+		case MI_HMYAP:
+		case MI_HMOCA:
+		case MI_BMODK:
+		case MI_BMYKR:
+		case MI_BMYST:
+		case MI_BMOST:
+		case MI_BMYRI:
+		case MI_BMYBE:
+		case MI_BMOBE:
+		case MI_BMYBU:
+		case MI_BMOTR:
+		case MI_BMYPI:
+		case MI_BMYBB:
+		case MI_WMYCR:
+		case MI_WMYST:
+		case MI_WMOST:
+		case MI_WMYRI:
+		case MI_WMORI:
+		case MI_WMYBE:
+		case MI_WMOBE:
+		case MI_WMYCW:
+		case MI_WMYGO:
+		case MI_WMOGO:
+		case MI_WMYLG:
+		case MI_WMYBU:
+		case MI_WMOBU:
+		case MI_WMOTR:
+		case MI_WMYPI:
+		case MI_WMOCA:
+		case MI_WMYJG:
+		case MI_WMYSK:
+
+		// BUG? Why no JMOTO?
+			return true;
+		default:
+			return false;
+	}
+}
+
+bool
+CPopulation::IsFemale(int32 model)
+{
+	switch (model) {
+		case MI_HFYST:
+		case MI_HFOST:
+		case MI_HFYRI:
+		case MI_HFORI:
+		case MI_HFYBE:
+		case MI_HFOBE:
+		case MI_HFYBU:
+		case MI_HFYMD:
+		case MI_HFYCG:
+		case MI_HFYPR:
+		case MI_HFOTR:
+		case MI_BFYST:
+		case MI_BFOST:
+		case MI_BFYRI:
+		case MI_BFORI:
+		case MI_BFYBE:
+		case MI_BFOBE:
+		case MI_BFYPR:
+		case MI_BFOTR:
+		case MI_WFYST:
+		case MI_WFOST:
+		case MI_WFYRI:
+		case MI_WFORI:
+		case MI_WFYBE:
+		case MI_WFOBE:
+		case MI_WFOGO:
+		case MI_WFYLG:
+		case MI_WFYBU:
+		case MI_WFYPR:
+		case MI_WFOTR:
+		case MI_WFYJG:
+		case MI_WFYSK:
+		case MI_WFYSH:
+		case MI_WFOSH:
+		case MI_JFOTO:
+			return true;
+		default:
+			return false;
+	}
+}
+
+bool
+CPopulation::IsSunbather(int32 model)
+{
+	switch (model) {
+		case MI_HFYBE:
+		case MI_HFOBE:
+		case MI_HMYBE:
+		case MI_HMOBE:
+		case MI_BFYBE:
+		case MI_BMYBE:
+		case MI_BFOBE:
+		case MI_BMOBE:
+		case MI_WFYBE:
+		case MI_WMYBE:
+		case MI_WFOBE:
+		case MI_WMOBE:
+			return true;
+		default:
+			return false;
+	}
+}
+
+int32
+CPopulation::ComputeRandomisedGangSize(void)
+{
+	return CGeneral::GetRandomNumberInRange(3, 6);
+}
+
+bool
+CPopulation::CanSolicitPlayerInCar(int32 model)
+{
+	return model == MI_HFYPR || model == MI_BFYPR || model == MI_WFYPR;
+}
+
+bool
+CPopulation::CanSolicitPlayerOnFoot(int32 model)
+{
+	return model == MI_HFYMD || model == MI_HFYCG || model == MI_BFOTR || model == MI_BMOTR || model == MI_WFOTR || model == MI_WMOTR;
+}
+
+bool
+CPopulation::IsSecurityGuard(ePedType pedType)
+{
+	return pedType == PEDTYPE_GANG5;
+}
+
+void
+CPopulation::ChooseCivilianCoupleOccupations(int32 group, int32& man, int32& woman)
+{
+	man = -1;
+	woman = -1;
+	
+	for (int i = 0; i < 8; i++) {
+		if (man > -1)
+			break;
+
+		int32 model = ms_pPedGroups[group].models[CGeneral::GetRandomNumberInRange(0, NUMMODELSPERPEDGROUP)];
+		if (man == -1 && IsMale(model) && ((CPedModelInfo*)CModelInfo::GetModelInfo(model))->m_pedType == PEDTYPE_CIVMALE) {
+			man = model;
+		}
+	}
+
+	if (man != -1) {
+		int32 model;
+		for (int i = 0; i < NUMMODELSPERPEDGROUP; i++) {
+			model = ms_pPedGroups[group].models[i];
+			if (IsFemale(model)) {
+				CPedModelInfo* womanModelInfo = (CPedModelInfo*)CModelInfo::GetModelInfo(model);
+				if (womanModelInfo->m_pedType == PEDTYPE_CIVFEMALE) {
+					CPedModelInfo* manModelInfo = (CPedModelInfo*)CModelInfo::GetModelInfo(man);
+
+					// If both are skater or not, finalize the decision
+					if (manModelInfo && womanModelInfo) {
+						if (manModelInfo->m_animGroup == womanModelInfo->m_animGroup) {
+							if (manModelInfo->m_pedStatType != PEDSTAT_SKATER && womanModelInfo->m_pedStatType != PEDSTAT_SKATER)
+								break;
+
+							if (manModelInfo->m_pedStatType == PEDSTAT_SKATER && womanModelInfo->m_pedStatType == PEDSTAT_SKATER)
+								break;
+						}
+					}
+				}
+			}
+		}
+		woman = model;
+	}
+}
+
+void
+CPopulation::PlaceGangMembers(ePedType pedType, int pedAmount, CVector const& coors)
+{
+	if (CGeneral::GetRandomNumberInRange(0.f, 1.f) < 0.333f) {
+		PlaceGangMembersInFormation(pedType, pedAmount, coors);
+	} else {
+		PlaceGangMembersInCircle(pedType, pedAmount, coors);
+	}
+}
+
+void
+CPopulation::PlaceGangMembersInFormation(ePedType pedType, int pedAmount, CVector const& coors)
+{
+	CPed *createdPeds[5];
+
+	if (!TheCamera.IsSphereVisible(coors, 3.0f) || MIN_CREATION_DIST * PedCreationDistMultiplier() <= (coors - FindPlayerPed()->GetPosition()).Magnitude2D()) {
+		if (CPedPlacement::IsPositionClearForPed(coors, 3.0f, -1, 0)) {
+			bool leaderFoundGround;
+			float leaderGroundZ = CWorld::FindGroundZFor3DCoord(coors.x, coors.y, coors.z, &leaderFoundGround) + 1.0f;
+			if (leaderFoundGround) {
+				float finalZ = coors.z > leaderGroundZ ? coors.z : leaderGroundZ;
+				int leaderModel = ChooseGangOccupation(pedType - PEDTYPE_GANG1);
+				if (((CPedModelInfo*)CModelInfo::GetModelInfo(leaderModel))->GetRwObject()) {
+					CPed *leader = AddPed(pedType, leaderModel, CVector(coors.x, coors.y, finalZ));
+					if (leader) {
+						leader->SetObjective(OBJECTIVE_NONE);
+						leader->SetWanderPath(CGeneral::GetRandomNumberInRange(0, 8));
+						leader->bIsLeader = true;
+						if (CGangs::GetWillAttackPlayerWithCops(pedType))
+							leader->bCanAttackPlayerWithCops = true;
+
+						int pedIdx = 1;
+						createdPeds[0] = leader;
+						for (int i = 1; i < pedAmount; ++i) {
+							int memberModel = ChooseGangOccupation(pedType - PEDTYPE_GANG1);
+							if (!((CPedModelInfo*)CModelInfo::GetModelInfo(memberModel))->GetRwObject())
+								continue;
+
+							CPed* memberPed = AddPed(pedType, memberModel, CVector(coors.x, coors.y, finalZ));
+							if (!memberPed)
+								continue;
+
+							memberPed->SetObjective(OBJECTIVE_FOLLOW_CHAR_IN_FORMATION, leader);
+							memberPed->SetFormation((eFormation)i);
+							CVector formationPos = memberPed->GetFormationPosition();
+							CVector finalFormationPos = formationPos;
+							bool formationFoundGround;
+							float formationGroundZ = CWorld::FindGroundZFor3DCoord(formationPos.x, formationPos.y, 1.0f + formationPos.z, &formationFoundGround) + 1.0f;
+
+							finalFormationPos.z = Max(finalFormationPos.z, formationGroundZ);
+							if (formationFoundGround) {
+								if (Abs(finalFormationPos.z - leader->GetPosition().z) <= 1.0f) {
+									if (CWorld::GetIsLineOfSightClear(finalFormationPos, leader->GetPosition(), true, false, false, false, false, false, false)) {
+										memberPed->SetPosition(finalFormationPos);
+										createdPeds[pedIdx++] = memberPed;
+										if (CGangs::GetWillAttackPlayerWithCops(pedType))
+											leader->bCanAttackPlayerWithCops = true;
+
+										CVisibilityPlugins::SetClumpAlpha(memberPed->GetClump(), 0);
+										continue;
+									}
+								}
+							}
+							RemovePed(memberPed);
+						}
+						if (pedIdx >= 3) {
+							for (int j = 1; j < pedIdx; ++j)
+								createdPeds[j]->SetLeader(createdPeds[0]);
+
+						} else {
+							for (int k = 0; k < pedIdx; ++k) {
+								RemovePed(createdPeds[k]);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+void
+CPopulation::PlaceGangMembersInCircle(ePedType pedType, int pedAmount, CVector const& coors)
+{
+	CPed *createdPeds[5];
+
+	if (pedAmount < 2)
+		return;
+
+	float circleSector = TWOPI / pedAmount;
+
+	float circleR = Sqrt(0.5f / (1.0f - Cos(circleSector)));
+
+	if (!TheCamera.IsSphereVisible(coors, circleR) ||
+		MIN_CREATION_DIST * PedCreationDistMultiplier() <= (coors - FindPlayerPed()->GetPosition()).Magnitude2D()) {
+
+		if (CPedPlacement::IsPositionClearForPed(coors, circleR, -1, 0)) {
+			int pedIdx = 0;
+			CVector leaderPos;
+
+			for (int i = 0; i < pedAmount; i++) {	
+				float angleMult = i + CGeneral::GetRandomNumberInRange(-0.2f, 0.2f);
+				float randomR = circleR + CGeneral::GetRandomNumberInRange(-0.2f, 0.2f) * circleR;
+				float xOffset = randomR * Cos(angleMult * circleSector);
+				float yOffset = randomR * Sin(angleMult * circleSector);
+				bool foundGround;
+				float groundZ = CWorld::FindGroundZFor3DCoord(xOffset + coors.x, yOffset + coors.y, coors.z + 1.0, &foundGround) + 1.0f;
+				if (foundGround) {
+					CVector finalPos(coors.x + xOffset, coors.y + yOffset, coors.z > groundZ ? coors.z : groundZ);
+
+					if (i == 0)
+						leaderPos = finalPos;
+
+					int gangModel = ChooseGangOccupation(pedType - PEDTYPE_GANG1);
+					if (((CPedModelInfo*)CModelInfo::GetModelInfo(gangModel))->GetRwObject()) {
+						CEntity* obstacles[6] = { nil, nil, nil, nil, nil, nil };
+						CPedPlacement::IsPositionClearForPed(finalPos, CModelInfo::GetModelInfo(gangModel)->GetColModel()->boundingSphere.radius, ARRAY_SIZE(obstacles), obstacles);
+						bool foundObstacle = false;
+						for (int m = 0; m < ARRAY_SIZE(obstacles); m++) {
+							CEntity* obstacle = obstacles[m];
+							if (obstacle) {
+								int n = 0;
+								bool obstacleIsHarmless = false;
+								for (int n = 0; n < pedIdx; n++) {
+									if (obstacle == createdPeds[n])
+										obstacleIsHarmless = true;
+								}
+								if (!obstacleIsHarmless) {
+									foundObstacle = true;
+									break;
+								}
+							}
+						}
+						bool memberCanSeeLeader = i == 0 ? true : CWorld::GetIsLineOfSightClear(finalPos, leaderPos, true, false, false, false, false, false, false);
+
+						bool notTooCloseToLeader = i == 0 ? true : !(Abs(finalPos.z - leaderPos.z) < 1.0f);
+
+						if (!foundObstacle && memberCanSeeLeader && notTooCloseToLeader) {
+							CPed* newPed = AddPed(pedType, gangModel, finalPos);
+							if (newPed) {
+								createdPeds[pedIdx++] = newPed;
+								float angle = CGeneral::GetRadianAngleBetweenPoints(
+									coors.x, coors.y,
+									finalPos.x, finalPos.y);
+								newPed->m_fRotationDest = angle;
+								newPed->m_fRotationCur = angle;
+								if (CGangs::GetWillAttackPlayerWithCops(pedType))
+									newPed->bCanAttackPlayerWithCops = true;
+
+								CVisibilityPlugins::SetClumpAlpha(newPed->GetClump(), 0);
+							}
+							// No.
+#ifndef FIX_BUGS
+							else
+								CWorld::Remove(nil);
+#endif
+						}
+					}
+				}
+			}
+			if (pedIdx >= 3) {
+				for (int j = 0; j < pedIdx / 2; ++j) {
+					createdPeds[j]->SetChat(createdPeds[pedIdx - 1 - j], 100000);
+					createdPeds[pedIdx - 1 - j]->SetChat(createdPeds[j], 100000);
+				}
+
+				// Make that extra guy in the middle stand there(PED_UNKNOWN locks him) and do nothing :lmao:
+				if (pedIdx % 2 != 0) {
+					CPed *tmim = createdPeds[(pedIdx - 1) / 2];
+					float angle = CGeneral::GetRadianAngleBetweenPoints(
+						tmim->GetPosition().x, tmim->GetPosition().y,
+						createdPeds[0]->GetPosition().x, createdPeds[0]->GetPosition().y);
+					tmim->SetHeading(angle);
+					tmim->SetPedState(PED_UNKNOWN);
+				}
+				createdPeds[0]->bIsLeader = true;
+
+				for (int l = 1; l < pedIdx; ++l)
+					createdPeds[l]->SetLeader(createdPeds[0]);
+
+			} else {
+				for (int k = 0; k < pedIdx; ++k) {
+					RemovePed(createdPeds[k]);
+				}
+			}
+		}
+	}
+}
+
+void
+CPopulation::PlaceCouple(ePedType manType, int32 manModel, ePedType womanType, int32 womanModel, CVector coors)
+{
+	// Homosexuality filter!!!! Homophobic R* >>>:(
+	if (manType != PEDTYPE_CIVMALE || womanType != PEDTYPE_CIVFEMALE)
+		return;
+
+	if (!TheCamera.IsSphereVisible(coors, 1.5f) || MIN_CREATION_DIST * PedCreationDistMultiplier() <= (coors - FindPlayerPed()->GetPosition()).Magnitude2D()) {
+		if (CPedPlacement::IsPositionClearForPed(coors, CModelInfo::GetModelInfo(manModel)->GetColModel()->boundingSphere.radius, -1, 0)) {
+			bool manFoundGround;
+			float manGroundZ = CWorld::FindGroundZFor3DCoord(coors.x, coors.y, coors.z, &manFoundGround) + 1.0f;
+			if (manFoundGround) {
+				CVector correctedManPos = coors;
+				correctedManPos.z = Max(coors.z, manGroundZ);
+				if (((CPedModelInfo*)CModelInfo::GetModelInfo(manModel))->GetRwObject()) {
+					CPed *man = AddPed(PEDTYPE_CIVMALE, manModel, correctedManPos);
+					if (man) {
+						man->SetObjective(OBJECTIVE_NONE);
+						man->SetWanderPath(CGeneral::GetRandomNumberInRange(0, 8));
+						man->bIsLeader = true;
+						CVisibilityPlugins::SetClumpAlpha(man->GetClump(), 0);
+
+						if (((CPedModelInfo*)CModelInfo::GetModelInfo(womanModel))->GetRwObject()) {
+							CPed* woman = AddPed(PEDTYPE_CIVFEMALE, womanModel, correctedManPos); // will set the correct position later
+							if (woman) {
+								woman->SetObjective(OBJECTIVE_FOLLOW_CHAR_IN_FORMATION, man);
+								woman->SetFormation(FORMATION_RIGHT);
+
+								CVector formationPos = woman->GetFormationPosition();
+								CVector womanPos = formationPos;
+								bool womanFoundGround;
+								float formationGroundZ = CWorld::FindGroundZFor3DCoord(formationPos.x, formationPos.y, 1.0f + formationPos.z, &womanFoundGround) + 1.0f;
+
+								if (womanFoundGround) {
+									CVector correctedWomanPos = womanPos;
+									correctedWomanPos.z = Max(womanPos.z, formationGroundZ);
+									woman->SetPosition(correctedWomanPos);
+
+									// What's the point of this??
+									CEntity* obstacles[3];
+									memcpy(obstacles, gCoupleObstacles, sizeof(gCoupleObstacles));
+
+									CPedPlacement::IsPositionClearForPed(womanPos, CModelInfo::GetModelInfo(womanModel)->GetColModel()->boundingSphere.radius, ARRAY_SIZE(obstacles), obstacles);
+									for (int i = 0; i < ARRAY_SIZE(obstacles); i++) {
+										CEntity *obstacle = obstacles[i];
+										if (obstacle) {
+
+											// We found a real obstacle, so let's break and we can delete them...
+											if (obstacle != man && obstacle != woman)
+												break;
+										}
+										if (i == ARRAY_SIZE(obstacles) - 1) {
+											CVisibilityPlugins::SetClumpAlpha(woman->GetClump(), 0);
+											return;
+										}
+									}
+								}
+								RemovePed(woman);
+								RemovePed(man);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// Mostly copy paste of PlaceGangMembersInFormation.
+void
+CPopulation::PlaceMallPedsAsStationaryGroup(CVector const& coors, int32 group)
+{
+#ifdef FIX_BUGS
+	CPed *createdPeds[6];
+#else
+	CPed *createdPeds[5];
+#endif
+
+	if (CGame::currArea != AREA_MALL)
+		return;
+
+	int pedAmount = CGeneral::GetRandomNumberInRange(0, 4) + 3;
+
+	float circleSector = TWOPI / pedAmount;
+
+	float circleR = Sqrt(0.5f / (1.0f - Cos(circleSector)));
+
+	if (!TheCamera.IsSphereVisible(coors, circleR) ||
+		MIN_CREATION_DIST * PedCreationDistMultiplier() <= (coors - FindPlayerPed()->GetPosition()).Magnitude2D()) {
+
+		if (CPedPlacement::IsPositionClearForPed(coors, circleR, -1, 0)) {
+			int pedIdx = 0;
+			CVector leaderPos;
+
+			for (int i = 0; i < pedAmount; i++) {	
+				float angleMult = i + CGeneral::GetRandomNumberInRange(-0.2f, 0.2f);
+				float randomR = circleR + CGeneral::GetRandomNumberInRange(-0.2f, 0.2f) * circleR;
+				float xOffset = randomR * Cos(angleMult * circleSector);
+				float yOffset = randomR * Sin(angleMult * circleSector);
+				bool foundGround;
+				float groundZ = CWorld::FindGroundZFor3DCoord(xOffset + coors.x, yOffset + coors.y, coors.z + 1.0, &foundGround) + 1.0f;
+				if (foundGround) {
+					CVector finalPos(coors.x + xOffset, coors.y + yOffset, coors.z > groundZ ? coors.z : groundZ);
+
+					if (i == 0)
+						leaderPos = finalPos;
+
+					int pedModel = ChooseCivilianOccupation(group);
+					CPedModelInfo *pedModelInfo = (CPedModelInfo*)CModelInfo::GetModelInfo(pedModel);
+					if (pedModelInfo->GetRwObject()) {
+						CEntity* obstacles[6] = { nil, nil, nil, nil, nil, nil };
+						CPedPlacement::IsPositionClearForPed(finalPos, CModelInfo::GetModelInfo(pedModel)->GetColModel()->boundingSphere.radius, ARRAY_SIZE(obstacles), obstacles);
+						bool foundObstacle = false;
+						for (int m = 0; m < ARRAY_SIZE(obstacles); m++) {
+							CEntity* obstacle = obstacles[m];
+							if (obstacle) {
+								int n = 0;
+								bool obstacleIsHarmless = false;
+								for (int n = 0; n < pedIdx; n++) {
+									if (obstacle == createdPeds[n])
+										obstacleIsHarmless = true;
+								}
+								if (!obstacleIsHarmless) {
+									foundObstacle = true;
+									break;
+								}
+							}
+						}
+						bool memberCanSeeLeader = i == 0 ? true : CWorld::GetIsLineOfSightClear(finalPos, leaderPos, true, false, false, false, false, false, false);
+
+						bool notTooCloseToLeader = i == 0 ? true : !(Abs(finalPos.z - leaderPos.z) < 1.0f);
+
+						if (!foundObstacle && memberCanSeeLeader && notTooCloseToLeader) {
+							CPed *newPed = AddPed(pedModelInfo->m_pedType, pedModel, finalPos);
+							if (newPed) {
+								createdPeds[pedIdx++] = newPed;
+								float angle = CGeneral::GetRadianAngleBetweenPoints(
+									coors.x, coors.y,
+									finalPos.x, finalPos.y);
+								newPed->m_fRotationDest = angle;
+								newPed->m_fRotationCur = angle;
+								newPed->m_fearFlags = 0;
+								CVisibilityPlugins::SetClumpAlpha(newPed->GetClump(), 0);
+							}
+							// No.
+#ifndef FIX_BUGS
+							else
+								CWorld::Remove(nil);
+#endif
+						}
+					}
+				}
+			}
+			if (pedIdx >= 3) {
+				for (int j = 0; j < pedIdx / 2; ++j) {
+					createdPeds[j]->SetChat(createdPeds[pedIdx - 1 - j], 100000);
+					createdPeds[pedIdx - 1 - j]->SetChat(createdPeds[j], 100000);
+				}
+
+				// Make that extra guy in the middle stand there(PED_UNKNOWN locks him) and do nothing :lmao:
+				if (pedIdx % 2 != 0) {
+					CPed *tmim = createdPeds[(pedIdx - 1) / 2];
+					float angle = CGeneral::GetRadianAngleBetweenPoints(
+						tmim->GetPosition().x, tmim->GetPosition().y,
+						createdPeds[0]->GetPosition().x, createdPeds[0]->GetPosition().y);
+					tmim->SetHeading(angle);
+					tmim->SetPedState(PED_UNKNOWN);
+				}
+				createdPeds[0]->bIsLeader = true;
+
+				for (int l = 1; l < pedIdx; ++l)
+					createdPeds[l]->SetLeader(createdPeds[0]);
+
+			} else {
+				for (int k = 0; k < pedIdx; ++k) {
+					RemovePed(createdPeds[k]);
+				}
+			}
 		}
 	}
 }
