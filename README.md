@@ -20,11 +20,11 @@ such that we have a working game at all times.
 
 (Put content of selected archive into gamedir)
 
-- [Windows D3D9 MSS 32bit](https://nightly.link/GTAmodding/re3/workflows/re3_msvc_x86/master/re3_Release_win-x86-librw_d3d9-mss.zip)
-- [Windows D3D9 64bit](https://nightly.link/GTAmodding/re3/workflows/build-cmake-conan/master/windows-latest-d3d9.zip)
-- [Windows OpenGL 64bit](https://nightly.link/GTAmodding/re3/workflows/build-cmake-conan/master/windows-latest-gl3.zip)
-- [Linux 64bit](https://nightly.link/GTAmodding/re3/workflows/build-cmake-conan/master/ubuntu-latest-gl3.zip)
-- [MacOS 64bit](https://nightly.link/GTAmodding/re3/workflows/build-cmake-conan/master/macos-latest-gl3.zip)
+- [Windows D3D9 MSS 32bit](https://nightly.link/burt111/re3/workflows/re3_msvc_x86/master/re3_Release_win-x86-librw_d3d9-mss.zip)
+- [Windows D3D9 64bit](https://nightly.link/burt111/re3/workflows/build-cmake-conan/master/windows-latest-d3d9.zip)
+- [Windows OpenGL 64bit](https://nightly.link/burt111/re3/workflows/build-cmake-conan/master/windows-latest-gl3.zip)
+- [Linux 64bit](https://nightly.link/burt111/re3/workflows/build-cmake-conan/master/ubuntu-latest-gl3.zip)
+- [MacOS 64bit](https://nightly.link/burt111/re3/workflows/build-cmake-conan/master/macos-latest-gl3.zip)
 
 ## Building from Source  
 
@@ -32,7 +32,7 @@ When using premake, you may want to point GTA_III_RE_DIR environment variable to
 
 <details><summary>Linux Premake</summary>
 
-For Linux using premake, proceed: [Building on Linux](https://github.com/GTAmodding/re3/wiki/Building-on-Linux)
+For Linux using premake, proceed: [Building on Linux](https://github.com/burt111/re3/wiki/Building-on-Linux)
 
 </details>
 
@@ -40,7 +40,7 @@ For Linux using premake, proceed: [Building on Linux](https://github.com/GTAmodd
 
 Obtain source code.
 ```
-git clone https://github.com/GTAmodding/re3.git
+git clone https://github.com/burt111/re3.git
 cd re3
 git submodule init
 git submodule update --recursive
@@ -57,7 +57,7 @@ conan build .. -if build -bf build -pf package
 
 <details><summary>FreeBSD</summary>
 
-For FreeBSD using premake, proceed: [Building on FreeBSD](https://github.com/GTAmodding/re3/wiki/Building-on-FreeBSD)
+For FreeBSD using premake, proceed: [Building on FreeBSD](https://github.com/burt111/re3/wiki/Building-on-FreeBSD)
 
 </details>
 
@@ -70,15 +70,15 @@ Assuming you have Visual Studio:
     
 **If you use 64-bit D3D9**: We don't ship 64-bit Dx9 SDK. You need to download it from Microsoft if you don't have it(although it should come pre-installed after some Windows version)  
 
-**If you choose OpenAL on Windows** You must read [Running OpenAL build on Windows](https://github.com/GTAmodding/re3/wiki/Running-OpenAL-build-on-Windows).
+**If you choose OpenAL on Windows** You must read [Running OpenAL build on Windows](https://github.com/burt111/re3/wiki/Running-OpenAL-build-on-Windows).
 </details>
 
-> :information_source: There are various settings in [config.h](https://github.com/GTAmodding/re3/tree/master/src/core/config.h), you may want to take a look there. i.e. FIX_BUGS define fixes the bugs we've come across.
+> :information_source: There are various settings in [config.h](https://github.com/burt111/re3/tree/master/src/core/config.h), you may want to take a look there. i.e. FIX_BUGS define fixes the bugs we've come across.
 
-> :information_source: **Did you notice librw?** re3 uses completely homebrew RenderWare-replacement rendering engine; [librw](https://github.com/aap/librw/). librw comes as submodule of re3, but you also can use LIBRW enviorenment variable to specify path to your own librw.
+> :information_source: **Did you notice librw?** re3 uses completely homebrew RenderWare-replacement rendering engine; [librw](https://github.com/burt111/librw/). librw comes as submodule of re3, but you also can use LIBRW enviorenment variable to specify path to your own librw.
 
 ## Contributing
-Please read the [Coding Style](https://github.com/GTAmodding/re3/blob/master/CODING_STYLE.md) Document
+Please read the [Coding Style](https://github.com/burt111/re3/blob/master/CODING_STYLE.md) Document
 
 ### Unreversed / incomplete classes (at least the ones we know)
 The following classes have only unused or practically unused code left:
