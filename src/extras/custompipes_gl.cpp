@@ -1,6 +1,10 @@
 #include "common.h"
 
 #ifdef RW_OPENGL
+#ifdef EXTENDED_PIPELINES
+
+#include "rpmatfx.h"
+
 #include "main.h"
 #include "RwHelper.h"
 #include "Lights.h"
@@ -12,8 +16,6 @@
 #include "Renderer.h"
 #include "World.h"
 #include "custompipes.h"
-
-#ifdef EXTENDED_PIPELINES
 
 #ifndef LIBRW
 #error "Need librw for EXTENDED_PIPELINES"
@@ -33,13 +35,226 @@ static int32 u_reflProps;
 static int32 u_specDir;
 static int32 u_specColor;
 
+static int32 u_amb;
+static int32 u_emiss;
+static int32 u_colorscale;
+
+static int32 u_texMatrix;
+static int32 u_fxparams;
+
+static int32 u_skyTop;
+static int32 u_skyBot;
+
 #define U(i) currentShader->uniformLocations[i]
 
 /*
- * Neo Vehicle pipe
+ * Leeds & Neo Vehicle pipe
  */
 
+rw::gl3::Shader *leedsVehicleShader_add;
+rw::gl3::Shader *leedsVehicleShader_blend;
+rw::gl3::Shader *leedsVehicleShader_mobile;
+
 rw::gl3::Shader *neoVehicleShader;
+
+static rw::RawMatrix normal2texcoord_flipU = {
+	{ -0.5f,  0.0f, 0.0f }, 0.0f,
+	{ 0.0f, -0.5f, 0.0f }, 0.0f,
+	{ 0.0f,  0.0f, 1.0f }, 0.0f,
+	{ 0.5f,  0.5f, 0.0f }, 1.0f
+};
+
+static void
+uploadEnvMatrix(rw::Frame *frame)
+{
+	using namespace rw;
+	using namespace rw::gl3;
+
+	Matrix invMat;
+	if(frame == nil)
+		frame = engine->currentCamera->getFrame();
+
+	// cache the matrix across multiple meshes
+	static RawMatrix envMtx;
+// can't do it, frame matrix may change
+//	if(frame != lastEnvFrame){
+//		lastEnvFrame = frame;
+	{
+
+		Matrix tmp = *frame->getLTM();
+		// Now the weird part: we remove the camera pitch
+		tmp.at.z = 0.0f;
+		tmp.at = normalize(tmp.at);
+		tmp.right.x = -tmp.at.y;
+		tmp.right.y = tmp.at.x;
+		tmp.right.z = 0.0f;;
+		tmp.up.set(0.0f, 0.0f, 1.0f);
+		tmp.pos.set(0.0f, 0.0f, 0.0f);
+		tmp.flags = Matrix::TYPEORTHONORMAL;
+
+		RawMatrix invMtx;
+		Matrix::invert(&invMat, &tmp);
+		convMatrix(&invMtx, &invMat);
+		RawMatrix::mult(&envMtx, &invMtx, &normal2texcoord_flipU);
+	}
+	glUniformMatrix4fv(U(u_texMatrix), 1, GL_FALSE, (float*)&envMtx);
+}
+
+static void
+leedsVehicleRenderCB(rw::Atomic *atomic, rw::gl3::InstanceDataHeader *header)
+{
+	using namespace rw;
+	using namespace rw::gl3;
+
+	Material *m;
+
+	setWorldMatrix(atomic->getFrame()->getLTM());
+	lightingCB(atomic);
+
+#ifdef RW_GL_USE_VAOS
+	glBindVertexArray(header->vao);
+#else
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, header->ibo);
+	glBindBuffer(GL_ARRAY_BUFFER, header->vbo);
+	setAttribPointers(header->attribDesc, header->numAttribs);
+#endif
+
+	InstanceData *inst = header->inst;
+	rw::int32 n = header->numMeshes;
+
+	if(gGlassCarsCheat)
+		leedsVehicleShader_blend->use();
+	else
+		leedsVehicleShader_add->use();
+
+	setTexture(1, EnvMapTex);
+	uploadEnvMatrix(nil);
+
+	SetRenderState(SRCBLEND, BLENDONE);
+
+	float colorscale[4];
+	colorscale[3] = 1.0f;
+
+	while(n--){
+		m = inst->material;
+
+		rw::SetRenderState(VERTEXALPHA, inst->vertexAlpha || m->color.alpha != 0xFF);
+
+		float coef = 0.0f;
+		if(RpMatFXMaterialGetEffects(m) == rpMATFXEFFECTENVMAP){
+			coef = CClock::ms_EnvMapTimeMultiplicator * RpMatFXMaterialGetEnvMapCoefficient(m)*0.5f;
+			if(gGlassCarsCheat)
+				coef = 1.0f;
+		}
+		glUniform1f(U(u_fxparams), coef);
+
+		setMaterial(m->color, m->surfaceProps);
+
+		float cs = 1.0f;
+		// how does the PS2 handle this actually? probably scaled material color?
+		if(VehiclePipeSwitch == VEHICLEPIPE_PSP && m->texture)
+			cs = 2.0f;
+		colorscale[0] = colorscale[1] = colorscale[2] = cs;
+		glUniform4fv(U(u_colorscale), 1, colorscale);
+
+		setTexture(0, m->texture);
+
+		drawInst(header, inst);
+		inst++;
+	}
+
+	setTexture(1, nil);
+
+	SetRenderState(SRCBLEND, BLENDSRCALPHA);
+
+#ifndef RW_GL_USE_VAOS
+	disableAttribPointers(header->attribDesc, header->numAttribs);
+#endif
+}
+
+void
+uploadWorldLights(void)
+{
+	using namespace rw;
+	using namespace rw::gl3;
+
+	RGBAf amb, emiss;
+	amb.red = CTimeCycle::GetAmbientRed();
+	amb.green = CTimeCycle::GetAmbientGreen();
+	amb.blue = CTimeCycle::GetAmbientBlue();
+	amb.alpha = 1.0f;
+	emiss = pAmbient->color;
+
+	glUniform4fv(U(CustomPipes::u_amb), 1, (float*)&amb);
+	glUniform4fv(U(CustomPipes::u_emiss), 1, (float*)&emiss);
+}
+
+static void
+leedsVehicleRenderCB_mobile(rw::Atomic *atomic, rw::gl3::InstanceDataHeader *header)
+{
+	using namespace rw;
+	using namespace rw::gl3;
+
+	Material *m;
+
+	setWorldMatrix(atomic->getFrame()->getLTM());
+	lightingCB(atomic);
+
+#ifdef RW_GL_USE_VAOS
+	glBindVertexArray(header->vao);
+#else
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, header->ibo);
+	glBindBuffer(GL_ARRAY_BUFFER, header->vbo);
+	setAttribPointers(header->attribDesc, header->numAttribs);
+#endif
+
+	InstanceData *inst = header->inst;
+	rw::int32 n = header->numMeshes;
+
+	leedsVehicleShader_mobile->use();
+
+	uploadWorldLights();
+
+	RGBAf skyTop, skyBot;
+	skyTop.red = CTimeCycle::GetSkyTopRed()/255.0f;
+	skyTop.green = CTimeCycle::GetSkyTopGreen()/255.0f;
+	skyTop.blue = CTimeCycle::GetSkyTopBlue()/255.0f;
+	skyBot.red = CTimeCycle::GetSkyBottomRed()/255.0f;
+	skyBot.green = CTimeCycle::GetSkyBottomGreen()/255.0f;
+	skyBot.blue = CTimeCycle::GetSkyBottomBlue()/255.0f;
+
+	glUniform3fv(U(u_skyTop), 1, (float*)&skyTop);
+	glUniform3fv(U(u_skyBot), 1, (float*)&skyBot);
+
+	setTexture(1, EnvMapTex);
+
+	while(n--){
+		m = inst->material;
+
+		rw::SetRenderState(VERTEXALPHA, inst->vertexAlpha || m->color.alpha != 0xFF);
+
+		float coef = 0.0f;
+		if(RpMatFXMaterialGetEffects(m) == rpMATFXEFFECTENVMAP){
+			coef = CClock::ms_EnvMapTimeMultiplicator * RpMatFXMaterialGetEnvMapCoefficient(m)*0.5f;
+			if(gGlassCarsCheat)
+				coef = 1.0f;
+		}
+		glUniform1f(U(u_fxparams), coef);
+
+		setMaterial(m->color, m->surfaceProps);
+
+		setTexture(0, m->texture);
+
+		drawInst(header, inst);
+		inst++;
+	}
+
+	setTexture(1, nil);
+
+#ifndef RW_GL_USE_VAOS
+	disableAttribPointers(header->attribDesc, header->numAttribs);
+#endif
+}
 
 static void
 uploadSpecLights(void)
@@ -80,8 +295,13 @@ vehicleRenderCB(rw::Atomic *atomic, rw::gl3::InstanceDataHeader *header)
 	using namespace rw::gl3;
 
 	// TODO: make this less of a kludge
-	if(VehiclePipeSwitch == VEHICLEPIPE_MATFX){
-		matFXGlobals.pipelines[rw::platform]->render(atomic);
+	if(VehiclePipeSwitch == VEHICLEPIPE_PSP || VehiclePipeSwitch == VEHICLEPIPE_PS2){
+		leedsVehicleRenderCB(atomic, header);
+//		matFXGlobals.pipelines[rw::platform]->render(atomic);
+		return;
+	}
+	if(VehiclePipeSwitch == VEHICLEPIPE_MOBILE){
+		leedsVehicleRenderCB_mobile(atomic, header);
 		return;
 	}
 
@@ -148,24 +368,45 @@ CreateVehiclePipe(void)
 	using namespace rw;
 	using namespace rw::gl3;
 
-	if(CFileMgr::LoadFile("neo/carTweakingTable.dat", work_buff, sizeof(work_buff), "r") <= 0)
-		printf("Error: couldn't open 'neo/carTweakingTable.dat'\n");
-	else{
-		char *fp = (char*)work_buff;
-		fp = ReadTweakValueTable(fp, Fresnel);
-		fp = ReadTweakValueTable(fp, Power);
-		fp = ReadTweakValueTable(fp, DiffColor);
-		fp = ReadTweakValueTable(fp, SpecColor);
-	}
+//	if(CFileMgr::LoadFile("neo/carTweakingTable.dat", work_buff, sizeof(work_buff), "r") <= 0)
+//		printf("Error: couldn't open 'neo/carTweakingTable.dat'\n");
+//	else{
+//		char *fp = (char*)work_buff;
+//		fp = ReadTweakValueTable(fp, Fresnel);
+//		fp = ReadTweakValueTable(fp, Power);
+//		fp = ReadTweakValueTable(fp, DiffColor);
+//		fp = ReadTweakValueTable(fp, SpecColor);
+//	}
 
 
 	{
-#include "shaders/neoVehicle_fs_gl.inc"
-#include "shaders/neoVehicle_vs_gl.inc"
+#include "shaders/obj/neoVehicle_frag.inc"
+#include "shaders/obj/neoVehicle_vert.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, neoVehicle_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, neoVehicle_frag_src, nil };
 	neoVehicleShader = Shader::create(vs, fs);
 	assert(neoVehicleShader);
+	}
+
+	{
+#include "shaders/obj/leedsDefault_vert.inc"
+#include "shaders/obj/leedsDefault_frag.inc"
+	const char *vs[] = { shaderDecl, header_vert_src, "#define ENVMAP\n", leedsDefault_vert_src, nil };
+	const char *fs_add[] = { shaderDecl, header_frag_src, "#define PASS_ADD\n", leedsDefault_frag_src, nil };
+	const char *fs_blend[] = { shaderDecl, header_frag_src, "#define PASS_BLEND\n", leedsDefault_frag_src, nil };
+	leedsVehicleShader_add = Shader::create(vs, fs_add);
+	assert(leedsVehicleShader_add);
+	leedsVehicleShader_blend = Shader::create(vs, fs_blend);
+	assert(leedsVehicleShader_blend);
+	}
+
+	{
+#include "shaders/obj/leedsVehicle_mobile_frag.inc"
+#include "shaders/obj/leedsVehicle_mobile_vert.inc"
+	const char *vs[] = { shaderDecl, header_vert_src, leedsVehicle_mobile_vert_src, nil };
+	const char *fs[] = { shaderDecl, header_frag_src, leedsVehicle_mobile_frag_src, nil };
+	leedsVehicleShader_mobile = Shader::create(vs, fs);
+	assert(leedsVehicleShader_mobile);
 	}
 
 
@@ -182,6 +423,15 @@ DestroyVehiclePipe(void)
 	neoVehicleShader->destroy();
 	neoVehicleShader = nil;
 
+	leedsVehicleShader_add->destroy();
+	leedsVehicleShader_add = nil;
+
+	leedsVehicleShader_blend->destroy();
+	leedsVehicleShader_blend = nil;
+
+	leedsVehicleShader_mobile->destroy();
+	leedsVehicleShader_mobile = nil;
+
 	((rw::gl3::ObjPipeline*)vehiclePipe)->destroy();
 	vehiclePipe = nil;
 }
@@ -189,10 +439,11 @@ DestroyVehiclePipe(void)
 
 
 /*
- * Neo World pipe
+ * Leeds World pipe
  */
 
-rw::gl3::Shader *neoWorldShader;
+rw::gl3::Shader *leedsWorldShader;
+rw::gl3::Shader *leedsWorldShader_mobile;
 
 static void
 worldRenderCB(rw::Atomic *atomic, rw::gl3::InstanceDataHeader *header)
@@ -200,15 +451,9 @@ worldRenderCB(rw::Atomic *atomic, rw::gl3::InstanceDataHeader *header)
 	using namespace rw;
 	using namespace rw::gl3;
 
-	if(!LightmapEnable){
-		gl3::defaultRenderCB(atomic, header);
-		return;
-	}
-
 	Material *m;
 
 	setWorldMatrix(atomic->getFrame()->getLTM());
-	lightingCB(atomic);
 
 #ifdef RW_GL_USE_VAOS
 	glBindVertexArray(header->vao);
@@ -221,39 +466,34 @@ worldRenderCB(rw::Atomic *atomic, rw::gl3::InstanceDataHeader *header)
 	InstanceData *inst = header->inst;
 	rw::int32 n = header->numMeshes;
 
-	neoWorldShader->use();
+	if(CustomPipes::WorldPipeSwitch == CustomPipes::WORLDPIPE_MOBILE)
+		CustomPipes::leedsWorldShader_mobile->use();
+	else
+		CustomPipes::leedsWorldShader->use();
 
-	float lightfactor[4];
+	uploadWorldLights();
+
+	float colorscale[4];
+	colorscale[3] = 1.0f;
 
 	while(n--){
 		m = inst->material;
 
-		if(MatFX::getEffects(m) == MatFX::DUAL){
-			MatFX *matfx = MatFX::get(m);
-			Texture *dualtex = matfx->getDualTexture();
-			if(dualtex == nil)
-				goto notex;
-			setTexture(1, dualtex);
-			lightfactor[0] = lightfactor[1] = lightfactor[2] = WorldLightmapBlend.Get()*LightmapMult;
-		}else{
-		notex:
-			setTexture(1, nil);
-			lightfactor[0] = lightfactor[1] = lightfactor[2] = 0.0f;
-		}
-		lightfactor[3] = m->color.alpha/255.0f;
-		glUniform4fv(U(u_lightMap), 1, lightfactor);
-
-		RGBA color = { 255, 255, 255, m->color.alpha };
-		setMaterial(color, m->surfaceProps);
+		float cs = 1.0f;
+		if(WorldPipeSwitch != WORLDPIPE_MOBILE && m->texture)
+			cs = 255/128.0f;
+		colorscale[0] = colorscale[1] = colorscale[2] = cs;
+		glUniform4fv(U(u_colorscale), 1, colorscale);
 
 		setTexture(0, m->texture);
+
+		setMaterial(m->color, m->surfaceProps, CustomPipes::WorldPipeSwitch == CustomPipes::WORLDPIPE_PS2 ? 0.5f : 1.0f);
 
 		rw::SetRenderState(VERTEXALPHA, inst->vertexAlpha || m->color.alpha != 0xFF);
 
 		drawInst(header, inst);
 		inst++;
 	}
-	setTexture(1, nil);
 #ifndef RW_GL_USE_VAOS
 	disableAttribPointers(header->attribDesc, header->numAttribs);
 #endif
@@ -265,18 +505,22 @@ CreateWorldPipe(void)
 	using namespace rw;
 	using namespace rw::gl3;
 
-	if(CFileMgr::LoadFile("neo/worldTweakingTable.dat", work_buff, sizeof(work_buff), "r") <= 0)
-		printf("Error: couldn't open 'neo/worldTweakingTable.dat'\n");
-	else
-		ReadTweakValueTable((char*)work_buff, WorldLightmapBlend);
+//	if(CFileMgr::LoadFile("neo/worldTweakingTable.dat", work_buff, sizeof(work_buff), "r") <= 0)
+//		printf("Error: couldn't open 'neo/worldTweakingTable.dat'\n");
+//	else
+//		ReadTweakValueTable((char*)work_buff, WorldLightmapBlend);
 
 	{
-#include "shaders/neoWorldVC_fs_gl.inc"
-#include "shaders/default_UV2_gl.inc"
-	const char *vs[] = { shaderDecl, header_vert_src, default_UV2_vert_src, nil };
-	const char *fs[] = { shaderDecl, header_frag_src, neoWorldVC_frag_src, nil };
-	neoWorldShader = Shader::create(vs, fs);
-	assert(neoWorldShader);
+#include "shaders/obj/scale_frag.inc"
+#include "shaders/obj/leedsBuilding_vert.inc"
+#include "shaders/obj/leedsBuilding_mobile_vert.inc"
+	const char *vs[] = { shaderDecl, header_vert_src, leedsBuilding_vert_src, nil };
+	const char *vs_mobile[] = { shaderDecl, header_vert_src, leedsBuilding_mobile_vert_src, nil };
+	const char *fs[] = { shaderDecl, header_frag_src, scale_frag_src, nil };
+	leedsWorldShader = Shader::create(vs, fs);
+	assert(leedsWorldShader);
+	leedsWorldShader_mobile = Shader::create(vs_mobile, fs);
+	assert(leedsWorldShader_mobile);
 	}
 
 
@@ -290,8 +534,10 @@ CreateWorldPipe(void)
 void
 DestroyWorldPipe(void)
 {
-	neoWorldShader->destroy();
-	neoWorldShader = nil;
+	leedsWorldShader->destroy();
+	leedsWorldShader = nil;
+	leedsWorldShader_mobile->destroy();
+	leedsWorldShader_mobile = nil;
 
 	((rw::gl3::ObjPipeline*)worldPipe)->destroy();
 	worldPipe = nil;
@@ -333,12 +579,7 @@ glossRenderCB(rw::Atomic *atomic, rw::gl3::InstanceDataHeader *header)
 
 	V3d eyePos = rw::engine->currentCamera->getFrame()->getLTM()->pos;
 	glUniform3fv(U(u_eye), 1, (float*)&eyePos);
-	float reflProps[4];
-	reflProps[0] = GlossMult;
-	reflProps[1] = 0.0f;
-	reflProps[2] = 0.0f;
-	reflProps[3] = 0.0f;
-	glUniform4fv(U(u_reflProps), 1, reflProps);
+	glUniform4fv(U(u_reflProps), 1, (float*)&GlossMult);
 
 	SetRenderState(VERTEXALPHA, TRUE);
 	SetRenderState(SRCBLEND, BLENDONE);
@@ -379,8 +620,8 @@ CreateGlossPipe(void)
 	using namespace rw::gl3;
 
 	{
-#include "shaders/neoGloss_fs_gl.inc"
-#include "shaders/neoGloss_vs_gl.inc"
+#include "shaders/obj/neoGloss_frag.inc"
+#include "shaders/obj/neoGloss_vert.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, neoGloss_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, neoGloss_frag_src, nil };
 	neoGlossShader = Shader::create(vs, fs);
@@ -551,8 +792,8 @@ CreateRimLightPipes(void)
 	}
 
 	{
-#include "shaders/simple_fs_gl.inc"
-#include "shaders/neoRimSkin_gl.inc"
+#include "shaders/obj/simple_frag.inc"
+#include "shaders/obj/neoRimSkin_vert.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, neoRimSkin_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
 	neoRimSkinShader = Shader::create(vs, fs);
@@ -560,8 +801,8 @@ CreateRimLightPipes(void)
 	}
 
 	{
-#include "shaders/simple_fs_gl.inc"
-#include "shaders/neoRim_gl.inc"
+#include "shaders/obj/simple_frag.inc"
+#include "shaders/obj/neoRim_vert.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, neoRim_vert_src, nil };
 	const char *fs[] = { shaderDecl, header_frag_src, simple_frag_src, nil };
 	neoRimShader = Shader::create(vs, fs);
@@ -614,17 +855,22 @@ CustomPipeRegisterGL(void)
 	u_reflProps = rw::gl3::registerUniform("u_reflProps");
 	u_specDir = rw::gl3::registerUniform("u_specDir");
 	u_specColor = rw::gl3::registerUniform("u_specColor");
+
+	u_amb = rw::gl3::registerUniform("u_amb");
+	u_emiss = rw::gl3::registerUniform("u_emiss");
+	u_colorscale = rw::gl3::registerUniform("u_colorscale");
+
+	u_texMatrix = rw::gl3::registerUniform("u_texMatrix");
+	u_fxparams = rw::gl3::registerUniform("u_fxparams");
+
+	u_skyTop = rw::gl3::registerUniform("u_skyTop");
+	u_skyBot = rw::gl3::registerUniform("u_skyBot");
 }
 
 
 }
-
-#endif
 
 #ifdef NEW_RENDERER
-#ifndef LIBRW
-#error "Need librw for NEW_PIPELINES"
-#endif
 
 namespace WorldRender
 {
@@ -666,22 +912,18 @@ AtomicFirstPass(RpAtomic *atomic, int pass)
 	building->fadeAlpha = 255;
 	building->lighting = !!(atomic->geometry->flags & rw::Geometry::LIGHT);
 
-	WorldLights lights;
-	lights.numAmbients = 1;
-	lights.numDirectionals = 0;
-	lights.numLocals = 0;
-	if(building->lighting)
-		lights.ambient = pAmbient->color;
-	else
-		lights.ambient = black;
-
 	bool setupDone = false;
 	bool defer = false;
 	building->matrix = *atomic->getFrame()->getLTM();
 
+	float colorscale[4];
+
 	InstanceData *inst = building->instHeader->inst;
 	for(rw::uint32 i = 0; i < building->instHeader->numMeshes; i++, inst++){
 		Material *m = inst->material;
+
+		if(m->texture == nil)
+			continue;
 
 		if(inst->vertexAlpha || m->color.alpha != 255 ||
 		   IsTextureTransparent(m->texture)){
@@ -691,7 +933,10 @@ AtomicFirstPass(RpAtomic *atomic, int pass)
 
 		// alright we're rendering this atomic
 		if(!setupDone){
-			defaultShader->use();
+			if(CustomPipes::WorldPipeSwitch == CustomPipes::WORLDPIPE_MOBILE)
+				CustomPipes::leedsWorldShader_mobile->use();
+			else
+				CustomPipes::leedsWorldShader->use();
 			setWorldMatrix(&building->matrix);
 #ifdef RW_GL_USE_VAOS
 			glBindVertexArray(building->instHeader->vao);
@@ -700,11 +945,21 @@ AtomicFirstPass(RpAtomic *atomic, int pass)
 			glBindBuffer(GL_ARRAY_BUFFER, building->instHeader->vbo);
 			setAttribPointers(building->instHeader->attribDesc, building->instHeader->numAttribs);
 #endif
-			setLights(&lights);
+
+			CustomPipes::uploadWorldLights();
+
+			colorscale[3] = 1.0f;
+
 			setupDone = true;
 		}
 
-		setMaterial(m->color, m->surfaceProps);
+		setMaterial(m->color, m->surfaceProps, CustomPipes::WorldPipeSwitch == CustomPipes::WORLDPIPE_PS2 ? 0.5f : 1.0f);
+
+		float cs = 1.0f;
+		if(CustomPipes::WorldPipeSwitch != CustomPipes::WORLDPIPE_MOBILE && m->texture)
+			cs = 255/128.0f;
+		colorscale[0] = colorscale[1] = colorscale[2] = cs;
+		glUniform4fv(U(CustomPipes::u_colorscale), 1, colorscale);
 
 		setTexture(0, m->texture);
 
@@ -741,11 +996,15 @@ RenderBlendPass(int pass)
 	using namespace rw;
 	using namespace rw::gl3;
 
-	defaultShader->use();
-	WorldLights lights;
-	lights.numAmbients = 1;
-	lights.numDirectionals = 0;
-	lights.numLocals = 0;
+	if(CustomPipes::WorldPipeSwitch == CustomPipes::WORLDPIPE_MOBILE)
+		CustomPipes::leedsWorldShader_mobile->use();
+	else
+		CustomPipes::leedsWorldShader->use();
+
+	CustomPipes::uploadWorldLights();
+
+	float colorscale[4];
+	colorscale[3] = 1.0f;
 
 	int i;
 	for(i = 0; i < numBlendInsts[pass]; i++){
@@ -759,21 +1018,24 @@ RenderBlendPass(int pass)
 		setAttribPointers(building->instHeader->attribDesc, building->instHeader->numAttribs);
 #endif
 		setWorldMatrix(&building->matrix);
-		if(building->lighting)
-			lights.ambient = pAmbient->color;
-		else
-			lights.ambient = black;
-		setLights(&lights);
 
 		InstanceData *inst = building->instHeader->inst;
 		for(rw::uint32 j = 0; j < building->instHeader->numMeshes; j++, inst++){
 			Material *m = inst->material;
+			if(m->texture == nil)
+				continue;
 			if(!inst->vertexAlpha && m->color.alpha == 255 && !IsTextureTransparent(m->texture) && building->fadeAlpha == 255)
 				continue;	// already done this one
 
 			rw::RGBA color = m->color;
 			color.alpha = (color.alpha * building->fadeAlpha)/255;
-			setMaterial(color, m->surfaceProps);
+			setMaterial(color, m->surfaceProps, CustomPipes::WorldPipeSwitch == CustomPipes::WORLDPIPE_PS2 ? 0.5f : 1.0f);
+
+			float cs = 1.0f;
+			if(CustomPipes::WorldPipeSwitch != CustomPipes::WORLDPIPE_MOBILE && m->texture)
+				cs = 255/128.0f;
+			colorscale[0] = colorscale[1] = colorscale[2] = cs;
+			glUniform4fv(U(CustomPipes::u_colorscale), 1, colorscale);
 
 			setTexture(0, m->texture);
 
@@ -787,4 +1049,5 @@ RenderBlendPass(int pass)
 }
 #endif
 
+#endif
 #endif

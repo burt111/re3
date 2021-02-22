@@ -75,16 +75,23 @@ void CustomPipeInit(void);
 void CustomPipeShutdown(void);
 void SetTxdFindCallback(void);
 
+extern bool gGlassCarsCheat;
 extern bool bRenderingEnvMap;
 extern int32 EnvMapSize;
 extern rw::Camera *EnvMapCam;
 extern rw::Texture *EnvMapTex;
 extern rw::Texture *EnvMaskTex;
+extern rw::RWDEVICE::Im2DVertex EnvScreenQuad[4];
+extern int16 QuadIndices[6];
 void EnvMapRender(void);
 
 enum {
-	VEHICLEPIPE_MATFX,
-	VEHICLEPIPE_NEO
+	VEHICLEPIPE_PSP,
+	VEHICLEPIPE_PS2,
+	VEHICLEPIPE_MOBILE,
+
+//	maybe later again...
+	VEHICLEPIPE_NEO = -1
 };
 extern int32 VehiclePipeSwitch;
 extern float VehicleShininess;
@@ -99,6 +106,12 @@ void DestroyVehiclePipe(void);
 void AttachVehiclePipe(rw::Atomic *atomic);
 void AttachVehiclePipe(rw::Clump *clump);
 
+enum {
+	WORLDPIPE_PSP,
+	WORLDPIPE_PS2,
+	WORLDPIPE_MOBILE
+};
+extern int32 WorldPipeSwitch;
 extern bool LightmapEnable;
 extern float LightmapMult;
 extern InterpolatedFloat WorldLightmapBlend;
@@ -133,8 +146,6 @@ void AttachRimPipe(rw::Clump *clump);
 
 }
 
-#endif
-
 namespace WorldRender{
 extern int numBlendInsts[3];
 void AtomicFirstPass(RpAtomic *atomic, int pass);
@@ -142,4 +153,5 @@ void AtomicFullyTransparent(RpAtomic *atomic, int pass, int fadeAlpha);
 void RenderBlendPass(int pass);
 }
 
+#endif
 #endif
