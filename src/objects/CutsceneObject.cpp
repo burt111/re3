@@ -53,12 +53,15 @@ CCutsceneObject::SetModelIndex(uint32 id)
 void
 CCutsceneObject::CreateShadow(void)
 {
+	// empty in LCS
+	/*
 	if ( IsPedModel(GetModelIndex()) )
 	{
 		m_pShadow = new CCutsceneShadow();
 		if (!m_pShadow->IsInitialized())
 			m_pShadow->Create(m_rwObject, 6, true, 4, true);
 	}
+	*/
 }
 
 void

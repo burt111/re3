@@ -394,7 +394,7 @@ RwStream *RwStreamOpen(RwStreamType type, RwStreamAccessType accessType, const v
 		return nil;
 	}
 }
-RwBool RwStreamClose(RwStream * stream, void *pData) { stream->close(); rwFree(stream); return true; }
+RwBool RwStreamClose(RwStream * stream, void *pData) { if (!stream) return false; stream->close(); rwFree(stream); return true; }
 RwUInt32 RwStreamRead(RwStream * stream, void *buffer, RwUInt32 length) { return stream->read8(buffer, length); }
 RwStream *RwStreamWrite(RwStream * stream, const void *buffer, RwUInt32 length) { stream->write8(buffer, length); return stream; }
 RwStream *RwStreamSkip(RwStream * stream, RwUInt32 offset) { stream->seek(offset); return stream; }
@@ -411,6 +411,9 @@ void RwIm2DVertexSetRecipCameraZ(RwIm2DVertex *vert, RwReal recipz) { vert->setR
 void RwIm2DVertexSetScreenX(RwIm2DVertex *vert, RwReal scrnx) { vert->setScreenX(scrnx); }
 void RwIm2DVertexSetScreenY(RwIm2DVertex *vert, RwReal scrny) { vert->setScreenY(scrny); }
 void RwIm2DVertexSetScreenZ(RwIm2DVertex *vert, RwReal scrnz) { vert->setScreenZ(scrnz); }
+float RwIm2DVertexGetScreenX(RwIm2DVertex *vert) { return vert->getScreenX(); }
+float RwIm2DVertexGetScreenY(RwIm2DVertex *vert) { return vert->getScreenY(); }
+float RwIm2DVertexGetScreenZ(RwIm2DVertex *vert) { return vert->getScreenZ(); }
 void RwIm2DVertexSetU(RwIm2DVertex *vert, RwReal texU, RwReal recipz) { vert->setU(texU, recipz); }
 void RwIm2DVertexSetV(RwIm2DVertex *vert, RwReal texV, RwReal recipz) { vert->setV(texV, recipz); }
 void RwIm2DVertexSetIntRGBA(RwIm2DVertex *vert, RwUInt8 red, RwUInt8 green, RwUInt8 blue, RwUInt8 alpha) { vert->setColor(red, green, blue, alpha); }

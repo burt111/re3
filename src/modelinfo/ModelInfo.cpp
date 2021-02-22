@@ -4,6 +4,7 @@
 #include "TempColModels.h"
 #include "ModelIndices.h"
 #include "ModelInfo.h"
+#include "KeyGen.h"
 
 CBaseModelInfo *CModelInfo::ms_modelInfoPtrs[MODELINFOSIZE];
 
@@ -184,10 +185,11 @@ CModelInfo::AddVehicleModel(int id)
 CBaseModelInfo*
 CModelInfo::GetModelInfo(const char *name, int *id)
 {
+	uint32 hashKey = CKeyGen::GetUppercaseKey(name);
 	CBaseModelInfo *modelinfo;
 	for(int i = 0; i < MODELINFOSIZE; i++){
 		modelinfo = CModelInfo::ms_modelInfoPtrs[i];
-	 	if(modelinfo && !CGeneral::faststricmp(modelinfo->GetModelName(), name)){
+	 	if(modelinfo && hashKey == modelinfo->GetNameHashKey()){
 			if(id)
 				*id = i;
 			return modelinfo;
@@ -199,13 +201,14 @@ CModelInfo::GetModelInfo(const char *name, int *id)
 CBaseModelInfo*
 CModelInfo::GetModelInfo(const char *name, int minIndex, int maxIndex)
 {
+	uint32 hashKey = CKeyGen::GetUppercaseKey(name);
 	if (minIndex > maxIndex)
 		return 0;
 
 	CBaseModelInfo *modelinfo;
 	for(int i = minIndex; i <= maxIndex; i++){
 		modelinfo = CModelInfo::ms_modelInfoPtrs[i];
-	 	if(modelinfo && !CGeneral::faststricmp(modelinfo->GetModelName(), name))
+	 	if(modelinfo && hashKey == modelinfo->GetNameHashKey())
 			return modelinfo;
 	}
 	return nil;
