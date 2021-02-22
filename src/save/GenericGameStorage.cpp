@@ -42,7 +42,7 @@
 #include "Fluff.h"
 
 #define BLOCK_COUNT 22
-#define SIZE_OF_SIMPLEVARS 0xE4
+#define SIZE_OF_SIMPLEVARS 0xE8
 
 const uint32 SIZE_OF_ONE_GAME_IN_BYTES = 201729;
 
@@ -67,16 +67,16 @@ bool StillToFadeOut;
 uint32 TimeStartedCountingForFade;
 uint32 TimeToStayFadedBeforeFadeOut = 1750;
 
-int32 RadioStationPosition[NUM_RADIOS];
+uint32 RadioStationPosition[NUM_RADIOS];
 
 void
 InitRadioStationPositionList()
 {
 	for (int i = 0; i < NUM_RADIOS; i++)
-		RadioStationPosition[i] = -1;
+		RadioStationPosition[i] = 0;
 }
 
-int32
+uint32
 GetSavedRadioStationPosition(int32 station)
 {
 	return RadioStationPosition[station];
@@ -228,7 +228,7 @@ GenericSave(int file)
 	totalSize = buf - work_buff;
 
 	// Save the rest
-	WriteSaveDataBlock(CPools::SavePedPool, "PedPoolSize");
+	//WriteSaveDataBlock(CPools::SavePedPool, "PedPoolSize");
 	WriteSaveDataBlock(CGarages::Save, "GaragesSize");
 	WriteSaveDataBlock(CGameLogic::Save, "GameLogicSize");
 	WriteSaveDataBlock(CPools::SaveVehiclePool, "VehPoolSize");
@@ -363,8 +363,8 @@ GenericLoad()
 	ReadDataFromBlock("Loading Scripts \n", CTheScripts::LoadAllScripts);
 
 	// Load the rest
-	LoadSaveDataBlock();
-	ReadDataFromBlock("Loading PedPool \n", CPools::LoadPedPool);
+	//LoadSaveDataBlock();
+	//ReadDataFromBlock("Loading PedPool \n", CPools::LoadPedPool);
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading Garages \n", CGarages::Load);
 	LoadSaveDataBlock();

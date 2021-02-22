@@ -9,9 +9,9 @@
 #include "Text.h"
 #include "Timer.h"
 
-wchar WideErrorString[25];
+static wchar WideErrorString[25];
 
-CText TheText;
+CText *CText::msInstance = nil;
 
 CText::CText(void)
 {
@@ -39,7 +39,7 @@ CText::Load(void)
 	CFileMgr::SetDir("TEXT");
 	switch(FrontEndMenuManager.m_PrefsLanguage){
 	case CMenuManager::LANGUAGE_AMERICAN:
-		sprintf(filename, "AMERICAN.GXT");
+		sprintf(filename, "ENGLISH.GXT");
 		break;
 	case CMenuManager::LANGUAGE_FRENCH:
 		sprintf(filename, "FRENCH.GXT");
@@ -91,11 +91,13 @@ CText::Load(void)
 	keyArray.Update(data.chars);
 	CFileMgr::CloseFile(file);
 	CFileMgr::SetDir("");
+	bIsLoaded = true;
 }
 
 void
 CText::Unload(void)
 {
+	bIsLoaded = false;
 	CMessages::ClearAllMessagesDisplayedByGame();
 	keyArray.Unload();
 	data.Unload();
@@ -243,7 +245,7 @@ CText::LoadMissionText(char *MissionTableName)
 	CFileMgr::SetDir("TEXT");
 	switch (FrontEndMenuManager.m_PrefsLanguage) {
 	case CMenuManager::LANGUAGE_AMERICAN:
-		sprintf(filename, "AMERICAN.GXT");
+		sprintf(filename, "ENGLISH.GXT");
 		break;
 	case CMenuManager::LANGUAGE_FRENCH:
 		sprintf(filename, "FRENCH.GXT");
@@ -305,6 +307,11 @@ CText::LoadMissionText(char *MissionTableName)
 	bIsMissionTextLoaded = true;
 }
 
+bool
+CText::IsLoaded()
+{
+	return bIsLoaded;
+}
 
 void
 CKeyArray::Load(size_t length, int file, size_t* offset)

@@ -513,7 +513,7 @@ CWeapon::FireMelee(CEntity *shooter, CVector &fireSource)
 				if ( SQR(victimPedRadius) > (victimPedPos-fireSource).MagnitudeSqr() )
 				{
 					CVector collisionDist;
-					CColModel* victimPedCol = &CTempColModels::ms_colModelPed1;
+					CColModel* victimPedCol = &gpTempColModels->ms_colModelPed1;
 					bool useLocalPos = false;
 					if (victimPed->m_nPedState == PED_FALL
 						|| victimPed->m_nPedState == PED_DIE && victimPed->bIsPedDieAnimPlaying
@@ -649,9 +649,9 @@ CWeapon::FireMelee(CEntity *shooter, CVector &fireSource)
 									CVector dropDir(CGeneral::GetRandomNumberInRange(-0.15f, 0.15f), CGeneral::GetRandomNumberInRange(0.1f, 0.35f), 0.f);
 									CVector dropPos(CGeneral::GetRandomNumberInRange(SCREEN_STRETCH_X(50.0f), SCREEN_STRETCH_FROM_RIGHT(50.0f)),
 										CGeneral::GetRandomNumberInRange(SCREEN_STRETCH_Y(50.0f), SCREEN_STRETCH_FROM_BOTTOM(50.0f)), 1.f);
-									CParticle::AddParticle(PARTICLE_BLOODDROP, dropPos, dropDir, nil, CGeneral::GetRandomNumberInRange(0.1f, 0.15f),
+									/*CParticle::AddParticle(PARTICLE_BLOODDROP, dropPos, dropDir, nil, CGeneral::GetRandomNumberInRange(0.1f, 0.15f),
 										CRGBA(0, 0, 0, 0), 0, 0, CGeneral::GetRandomNumber() & 1, 0);
-
+									*/
 								}
 								if (info->m_AnimToPlay == ASSOCGRP_KNIFE)
 								{
@@ -741,7 +741,7 @@ CWeapon::FireMelee(CEntity *shooter, CVector &fireSource)
 		{
 			nearCar->VehicleDamage(info->m_nDamage * (0.00075f * nearCar->pHandling->fMass), gaTempSphereColPoints[0].pieceB);
 
-			CParticle::AddParticle(PARTICLE_HEATHAZE, gaTempSphereColPoints[0].point, CVector(0.0f, 0.0f, 0.0f), 0, 0.0f, 0, 0, 0, 0);
+			//CParticle::AddParticle(PARTICLE_HEATHAZE, gaTempSphereColPoints[0].point, CVector(0.0f, 0.0f, 0.0f), 0, 0.0f, 0, 0, 0, 0);
 		}
 		else
 		{
@@ -818,7 +818,7 @@ CWeapon::FireMelee(CEntity *shooter, CVector &fireSource)
 				CParticle::AddParticle(PARTICLE_SPARK, gaTempSphereColPoints[0].point, 0.1f * gaTempSphereColPoints[0].normal, 0, 0.0f, 0, 0, 0, 0);
 			}
 
-			CParticle::AddParticle(PARTICLE_HEATHAZE, gaTempSphereColPoints[0].point, CVector(0.0f, 0.0f, 0.0f), 0, 0.0f, 0, 0, 0, 0);
+			//CParticle::AddParticle(PARTICLE_HEATHAZE, gaTempSphereColPoints[0].point, CVector(0.0f, 0.0f, 0.0f), 0, 0.0f, 0, 0, 0, 0);
 			
 			if (!damageEntityRegistered)
 			{

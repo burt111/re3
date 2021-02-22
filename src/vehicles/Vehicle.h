@@ -245,11 +245,14 @@ public:
 #endif
 	uint8 bDriverLastFrame : 1;
 
+	uint8 bAllowGarageToStore : 1; // <- many LCS flags before
+
 	int8 m_numPedsUseItAsCover;
 	uint8 m_nAmmoInClip;    // Used to make the guns on boat do a reload (20 by default)
 	int8 m_nPacManPickupsCarried;
 	uint8 m_nRoadblockType;
 	float m_fHealth;           // 1000.0f = full health. 250.0f = fire. 0 -> explode
+	float m_fEngineEnergy;	// TODO(LCS): better name. it adds up acceleration force, so possibly kinetic energy??
 	uint8 m_nCurrentGear;
 	float m_fChangeGearTime;
 #if (!defined GTA_PS2 || defined FIX_BUGS)
@@ -266,7 +269,7 @@ public:
 	eCarLock m_nDoorLock;
 	int8 m_nLastWeaponDamage; // see eWeaponType, -1 if no damage
 	CEntity *m_pLastDamageEntity;
-	uint8 m_nRadioStation;
+	int8 m_nRadioStation;
 	uint8 m_bRainAudioCounter;
 	uint8 m_bRainSamplesCounter;
 	uint32 m_nCarHornTimer;
@@ -288,6 +291,7 @@ public:
 	~CVehicle(void);
 	// from CEntity
 	void SetModelIndex(uint32 id);
+	void PreRender(void) {}
 	bool SetupLighting(void);
 	void RemoveLighting(bool);
 	void FlagToDestroyWhenNextProcessed(void) {}
@@ -384,8 +388,8 @@ public:
 
 	bool IsAlarmOn(void) { return m_nAlarmState != 0 && m_nAlarmState != -1 && GetStatus() != STATUS_WRECKED; }
 	CVehicleModelInfo* GetModelInfo() { return (CVehicleModelInfo*)CModelInfo::GetModelInfo(GetModelIndex()); }
-	bool IsTaxi(void) { return GetModelIndex() == MI_TAXI || GetModelIndex() == MI_CABBIE || GetModelIndex() == MI_ZEBRA || GetModelIndex() == MI_KAUFMAN; }
-	bool IsLimo(void) { return GetModelIndex() == MI_STRETCH || GetModelIndex() == MI_LOVEFIST; }
+	bool IsTaxi(void) { return GetModelIndex() == MI_TAXI || GetModelIndex() == MI_CABBIE || GetModelIndex() == MI_BORGNINE; }
+	bool IsLimo(void) { return GetModelIndex() == MI_STRETCH; }
 	bool IsRealHeli(void) { return !!(pHandling->Flags & HANDLING_IS_HELI); }
 	bool IsRealPlane(void) { return !!(pHandling->Flags & HANDLING_IS_PLANE); }
 

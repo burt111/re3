@@ -362,6 +362,51 @@ CPed::SetObjective(eObjective newObj, void *entity)
 	}
 }
 
+void
+CPed::SetObjective(eObjective newObj, CVector dest, float safeDist)
+{
+	if (DyingOrDead())
+		return;
+
+	if (m_prevObjective != OBJECTIVE_NONE && m_prevObjective == newObj)
+		return;
+
+	if (m_objective == newObj) {
+		if (newObj == OBJECTIVE_GOTO_AREA_ANY_MEANS || newObj == OBJECTIVE_GOTO_AREA_ON_FOOT || newObj == OBJECTIVE_RUN_TO_AREA || newObj == OBJECTIVE_SPRINT_TO_AREA) {
+			if (m_nextRoutePointPos == dest && m_distanceToCountSeekDone == safeDist)
+				return;
+		}
+		else if (newObj == OBJECTIVE_GUARD_SPOT) {
+			if (m_vecSpotToGuard == dest && m_radiusToGuard == safeDist)
+				return;
+		}
+	}
+
+	ClearPointGunAt();
+	SetObjectiveTimer(0);
+	bObjectiveCompleted = false;
+	if (IsTemporaryObjective(m_objective)) {
+		m_prevObjective = newObj;
+	}
+	else {
+		if (m_objective != newObj)
+			SetStoredObjective();
+
+		m_objective = newObj;
+	}
+
+	if (newObj == OBJECTIVE_GUARD_SPOT) {
+		m_vecSpotToGuard = dest;
+		m_radiusToGuard = safeDist;
+	}
+	else if (newObj == OBJECTIVE_GOTO_AREA_ANY_MEANS || newObj == OBJECTIVE_GOTO_AREA_ON_FOOT || newObj == OBJECTIVE_RUN_TO_AREA || newObj == OBJECTIVE_SPRINT_TO_AREA) {
+		m_pNextPathNode = nil;
+		m_nextRoutePointPos = dest;
+		m_vecSeekPos = m_nextRoutePointPos;
+		bUsePedNodeSeek = true;
+	}
+}
+
 // Only used in 01E1: SET_CHAR_OBJ_FOLLOW_ROUTE opcode
 // IDA fails very badly in here, puts a fake loop and ignores SetFollowRoute call...
 void
@@ -6365,7 +6410,7 @@ CPed::KillCharOnFootArmed(CVector &ourPos, CVector &targetPos, CVector &distWith
 		}
 	}
 	if (m_pedInObjective->IsPlayer() && m_nPedType != PEDTYPE_COP
-		&& CharCreatedBy != MISSION_CHAR && FindPlayerPed()->m_pWanted->m_CurrentCops != 0) {
+		&& CharCreatedBy != MISSION_CHAR && FindPlayerPed()->m_pWanted->m_CurrentCops != 0/* TODO: && !bAttacksPlayerWithCops*/) {
 		SetObjective(OBJECTIVE_FLEE_ON_FOOT_TILL_SAFE);
 
 		return CANT_ATTACK;
