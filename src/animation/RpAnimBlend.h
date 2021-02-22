@@ -26,6 +26,7 @@ void RpAnimBlendClumpInit(RpClump *clump);
 bool RpAnimBlendClumpIsInitialized(RpClump *clump);
 void RpAnimBlendClumpFillFrameArray(RpClump* clump, AnimBlendFrameData** frames);
 AnimBlendFrameData *RpAnimBlendClumpFindFrame(RpClump *clump, const char *name);
+AnimBlendFrameData *RpAnimBlendClumpFindBone(RpClump *clump, uint32 boneTag);
 void FillFrameArrayCallBack(AnimBlendFrameData *frame, void *arg);
 CAnimBlendAssociation *RpAnimBlendClumpGetAssociation(RpClump *clump, uint32 id);
 CAnimBlendAssociation *RpAnimBlendClumpGetMainAssociation(RpClump *clump, CAnimBlendAssociation **assocRet, float *blendRet);
@@ -34,9 +35,14 @@ CAnimBlendAssociation *RpAnimBlendClumpGetMainAssociation_N(RpClump *clump, int 
 CAnimBlendAssociation *RpAnimBlendClumpGetMainPartialAssociation_N(RpClump *clump, int n);
 CAnimBlendAssociation *RpAnimBlendClumpGetFirstAssociation(RpClump *clump, uint32 mask);
 CAnimBlendAssociation *RpAnimBlendClumpGetFirstAssociation(RpClump *clump);
-void RpAnimBlendClumpUpdateAnimations(RpClump* clump, float timeDelta);
+void RpAnimBlendNodeUpdateKeyframes(AnimBlendFrameData *frames, AnimBlendFrameUpdateData *updateData, int32 numNodes);
+void RpAnimBlendClumpUpdateAnimations(RpClump* clump, float timeDelta, bool doRender = true);
 
 
 extern CAnimBlendClumpData *gpAnimBlendClump;
 void FrameUpdateCallBackNonSkinned(AnimBlendFrameData *frame, void *arg);
 void FrameUpdateCallBackSkinned(AnimBlendFrameData *frame, void *arg);
+void FrameUpdateCallBackOffscreen(AnimBlendFrameData *frame, void *arg);
+
+void FrameUpdateCallBackNonSkinnedCompressed(AnimBlendFrameData *frame, void *arg);
+void FrameUpdateCallBackSkinnedCompressed(AnimBlendFrameData *frame, void *arg);

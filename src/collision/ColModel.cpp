@@ -1,7 +1,9 @@
 #include "common.h"
 #include "ColModel.h"
+#include "Collision.h"
 #include "Game.h"
 #include "MemoryHeap.h"
+#include "Pools.h"
 
 CColModel::CColModel(void)
 {
@@ -15,14 +17,27 @@ CColModel::CColModel(void)
 	vertices = nil;
 	triangles = nil;
 	trianglePlanes = nil;
-	level = CGame::currLevel;
+	level = LEVEL_GENERIC;	// generic col slot
 	ownsCollisionVolumes = true;
 }
 
 CColModel::~CColModel(void)
 {
 	RemoveCollisionVolumes();
-	RemoveTrianglePlanes();
+}
+
+void*
+CColModel::operator new(size_t)
+{
+	CColModel* node = CPools::GetColModelPool()->New();
+	assert(node);
+	return node;
+}
+
+void
+CColModel::operator delete(void *p, size_t)
+{
+	CPools::GetColModelPool()->Delete((CColModel*)p);
 }
 
 void
@@ -34,6 +49,7 @@ CColModel::RemoveCollisionVolumes(void)
 		RwFree(boxes);
 		RwFree(vertices);
 		RwFree(triangles);
+		CCollision::RemoveTrianglePlanes(this);
 	}
 	numSpheres = 0;
 	numLines = 0;

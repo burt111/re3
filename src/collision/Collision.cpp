@@ -21,7 +21,8 @@
 #include "SurfaceTable.h"
 #include "Lines.h"
 #include "Collision.h"
-#include "Frontend.h"
+#include "Camera.h"
+#include "ColStore.h"
 
 #ifdef VU_COLLISION
 #include "VuCollision.h"
@@ -75,52 +76,22 @@ CCollision::Init(void)
 {
 	ms_colModelCache.Init(NUMCOLCACHELINKS);
 	ms_collisionInMemory = LEVEL_GENERIC;
+	CColStore::Initialise();
 }
 
 void
 CCollision::Shutdown(void)
 {
 	ms_colModelCache.Shutdown();
+	CColStore::Shutdown();
 }
 
 void
 CCollision::Update(void)
 {
-	CVector playerCoors;
-	playerCoors = FindPlayerCoors();
-	eLevelName level = CTheZones::m_CurrLevel;
-	bool forceLevelChange = false;
-
-	if(CTimer::GetTimeInMilliseconds() < 2000 || CCutsceneMgr::IsCutsceneProcessing())
-		return;
-
-	// hardcode a level if there are no zones
-	if(level == LEVEL_GENERIC){
-		if(CGame::currLevel == LEVEL_INDUSTRIAL &&
-		   playerCoors.x < 400.0f){
-			level = LEVEL_COMMERCIAL;
-			forceLevelChange = true;
-		}else if(CGame::currLevel == LEVEL_SUBURBAN &&
-		         playerCoors.x > -450.0f && playerCoors.y < -1400.0f){
-			level = LEVEL_COMMERCIAL;
-			forceLevelChange = true;
-		}else{
-			if(playerCoors.x > 800.0f){
-				level = LEVEL_INDUSTRIAL;
-				forceLevelChange = true;
-			}else if(playerCoors.x < -800.0f){
-				level = LEVEL_SUBURBAN;
-				forceLevelChange = true;
-			}
-		}
-	}
-	if(level != LEVEL_GENERIC && level != CGame::currLevel)
-		CGame::currLevel = level;
-	if(ms_collisionInMemory != CGame::currLevel)
-		LoadCollisionWhenINeedIt(forceLevelChange);
-	CStreaming::HaveAllBigBuildingsLoaded(CGame::currLevel);
 }
 
+// unused
 eLevelName
 GetCollisionInSectorList(CPtrList &list)
 {
@@ -137,6 +108,7 @@ GetCollisionInSectorList(CPtrList &list)
 	return LEVEL_GENERIC;
 }
 
+// unused
 // Get a level this sector is in based on collision models
 eLevelName
 GetCollisionInSector(CSector &sect)
@@ -160,155 +132,13 @@ GetCollisionInSector(CSector &sect)
 void
 CCollision::LoadCollisionWhenINeedIt(bool forceChange)
 {
-	eLevelName level, l;
-	bool multipleLevels;
-	CVector playerCoors;
-	CVehicle *veh;
-	CEntryInfoNode *ei;
-	int sx, sy;
-	int xmin, xmax, ymin, ymax;
-	int x, y;
-
-	level = LEVEL_GENERIC;
-
-	playerCoors = FindPlayerCoors();
-	sx = CWorld::GetSectorIndexX(playerCoors.x);
-	sy = CWorld::GetSectorIndexY(playerCoors.y);
-	multipleLevels = false;
-
-	veh = FindPlayerVehicle();
-	if(veh && veh->IsTrain()){
-		if(((CTrain*)veh)->m_nDoorState != TRAIN_DOOR_OPEN)
-			return;
-	}else if(playerCoors.z < -4.0f && !CCullZones::DoINeedToLoadCollision())
-		return;
-
-	// Figure out whose level's collisions we're most likely to be interested in
-	if(!forceChange){
-		if(veh && veh->IsBoat()){
-			// on water we expect to be between levels
-			multipleLevels = true;
-		}else{
-			xmin = Max(sx - 1, 0);
-			xmax = Min(sx + 1, NUMSECTORS_X-1);
-			ymin = Max(sy - 1, 0);
-			ymax = Min(sy + 1, NUMSECTORS_Y-1);
-
-			for(x = xmin; x <= xmax; x++)
-				for(y = ymin; y <= ymax; y++){
-					l = GetCollisionInSector(*CWorld::GetSector(x, y));
-					if(l != LEVEL_GENERIC){
-						if(level == LEVEL_GENERIC)
-							level = l;
-						if(level != l)
-							multipleLevels = true;
-					}
-				}
-		}
-
-		if(multipleLevels && veh && veh->IsBoat())
-			for(ei = veh->m_entryInfoList.first; ei; ei = ei->next){
-				level = GetCollisionInSector(*ei->sector);
-				if(level != LEVEL_GENERIC)
-					break;
-			}
-	}
-
-	if (level == CGame::currLevel || forceChange) {
-#ifdef FIX_BUGS
-		CTimer::Suspend();
-#else
-		CTimer::Stop();
-#endif
-		ISLAND_LOADING_IS(LOW)
-		{
-			DMAudio.SetEffectsFadeVol(0);
-			CPad::StopPadsShaking();
-			LoadCollisionScreen(CGame::currLevel);
-			DMAudio.Service();
-		}
-
-		CPopulation::DealWithZoneChange(ms_collisionInMemory, CGame::currLevel, false);
-
-		ISLAND_LOADING_ISNT(HIGH)
-		{
-			CStreaming::RemoveIslandsNotUsed(LEVEL_INDUSTRIAL);
-			CStreaming::RemoveIslandsNotUsed(LEVEL_COMMERCIAL);
-			CStreaming::RemoveIslandsNotUsed(LEVEL_SUBURBAN);
-		}
-		ISLAND_LOADING_IS(LOW)
-		{
-			CStreaming::RemoveBigBuildings(LEVEL_INDUSTRIAL);
-			CStreaming::RemoveBigBuildings(LEVEL_COMMERCIAL);
-			CStreaming::RemoveBigBuildings(LEVEL_SUBURBAN);
-			CModelInfo::RemoveColModelsFromOtherLevels(CGame::currLevel);
-			CStreaming::RemoveUnusedModelsInLoadedList();
-			CGame::TidyUpMemory(true, true);
-			CFileLoader::LoadCollisionFromDatFile(CGame::currLevel);
-		}
-
-		ms_collisionInMemory = CGame::currLevel;
-		CReplay::EmptyReplayBuffer();
-		ISLAND_LOADING_IS(LOW)
-		{
-			if (CGame::currLevel != LEVEL_GENERIC)
-				LoadSplash(GetLevelSplashScreen(CGame::currLevel));
-			CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
-			CStreaming::RemoveUnusedBuildings(CGame::currLevel);
-			CStreaming::RequestBigBuildings(CGame::currLevel);
-		}
-#ifdef NO_ISLAND_LOADING
-		else if (CMenuManager::m_PrefsIslandLoading == CMenuManager::ISLAND_LOADING_MEDIUM)
-			CStreaming::RequestIslands(CGame::currLevel);
-#endif
-		CStreaming::LoadAllRequestedModels(true);
-
-		ISLAND_LOADING_IS(LOW)
-		{
-			CStreaming::HaveAllBigBuildingsLoaded(CGame::currLevel);
-
-			CGame::TidyUpMemory(true, true);
-		}
-#ifdef FIX_BUGS
-		CTimer::Resume();
-#else
-		CTimer::Update();
-#endif
-		ISLAND_LOADING_IS(LOW)
-			DMAudio.SetEffectsFadeVol(127);
-	}
 }
 
-#ifdef NO_ISLAND_LOADING
-bool CCollision::bAlreadyLoaded = false;
-#endif
 void
 CCollision::SortOutCollisionAfterLoad(void)
 {
-	if(ms_collisionInMemory == CGame::currLevel)
-		return;
-	ISLAND_LOADING_IS(LOW)
-		CModelInfo::RemoveColModelsFromOtherLevels(CGame::currLevel);
-
-	if (CGame::currLevel != LEVEL_GENERIC) {
-#ifdef NO_ISLAND_LOADING
-		if (CMenuManager::m_PrefsIslandLoading != CMenuManager::ISLAND_LOADING_LOW) {
-			if (bAlreadyLoaded) {
-				ms_collisionInMemory = CGame::currLevel;
-				return;
-			}
-			bAlreadyLoaded = true;
-			CFileLoader::LoadCollisionFromDatFile(LEVEL_INDUSTRIAL);
-			CFileLoader::LoadCollisionFromDatFile(LEVEL_COMMERCIAL);
-			CFileLoader::LoadCollisionFromDatFile(LEVEL_SUBURBAN);
-		} else
-#endif
-		CFileLoader::LoadCollisionFromDatFile(CGame::currLevel);
-		if(!CGame::playingIntro)
-			LoadSplash(GetLevelSplashScreen(CGame::currLevel));
-	}
-	ms_collisionInMemory = CGame::currLevel;
-	CGame::TidyUpMemory(true, false);
+	CColStore::LoadCollision(TheCamera.GetPosition());
+	CStreaming::LoadAllRequestedModels(false);
 }
 
 void
@@ -332,14 +162,14 @@ CCollision::LoadCollisionScreen(eLevelName level)
 
 
 bool
-CCollision::TestSphereSphere(const CColSphere &s1, const CColSphere &s2)
+CCollision::TestSphereSphere(const CSphere &s1, const CSphere &s2)
 {
 	float d = s1.radius + s2.radius;
 	return (s1.center - s2.center).MagnitudeSqr() < d*d;
 }
 
 bool
-CCollision::TestSphereBox(const CColSphere &sph, const CColBox &box)
+CCollision::TestSphereBox(const CSphere &sph, const CBox &box)
 {
 	if(sph.center.x + sph.radius < box.min.x) return false;
 	if(sph.center.x - sph.radius > box.max.x) return false;
@@ -351,7 +181,7 @@ CCollision::TestSphereBox(const CColSphere &sph, const CColBox &box)
 }
 
 bool
-CCollision::TestLineBox(const CColLine &line, const CColBox &box)
+CCollision::TestLineBox(const CColLine &line, const CBox &box)
 {
 	float t, x, y, z;
 	// If either line point is in the box, we have a collision
@@ -436,7 +266,7 @@ CCollision::TestLineBox(const CColLine &line, const CColBox &box)
 }
 
 bool
-CCollision::TestVerticalLineBox(const CColLine &line, const CColBox &box)
+CCollision::TestVerticalLineBox(const CColLine &line, const CBox &box)
 {
 	if(line.p0.x <= box.min.x) return false;
 	if(line.p0.y <= box.min.y) return false;
@@ -636,6 +466,8 @@ CCollision::TestSphereTriangle(const CColSphere &sphere,
 	int testcase = insideAB + insideAC + insideBC;
 	float dist = 0.0f;
 	switch(testcase){
+	case 0:
+		return false;	// shouldn't happen
 	case 1:
 		// closest to a vertex
 		if(insideAB) dist = (sphere.center - vc).Magnitude();
@@ -664,7 +496,7 @@ CCollision::TestSphereTriangle(const CColSphere &sphere,
 }
 
 bool
-CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColModel &model, bool ignoreSeeThrough)
+CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColModel &model, bool ignoreSeeThrough, bool ignoreShootThrough)
 {
 #ifdef VU_COLLISION
 	CMatrix matTransform;
@@ -681,12 +513,14 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 
 	for(i = 0; i < model.numSpheres; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.spheres[i].surface)) continue;
 		if(TestLineSphere(*(CColLine*)newline, model.spheres[i]))
 			return true;
 	}
 
 	for(i = 0; i < model.numBoxes; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.boxes[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.boxes[i].surface)) continue;
 		if(TestLineBox(*(CColLine*)newline, model.boxes[i]))
 			return true;
 	}
@@ -696,6 +530,7 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 	VuTriangle vutri;
 	for(i = 0; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 
 		CColTriangle *tri = &model.triangles[i];
 		model.vertices[tri->a].Unpack(vutri.v0);
@@ -713,6 +548,7 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 #endif
 	for(; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 
 		CColTriangle *tri = &model.triangles[i];
 		model.vertices[tri->a].Unpack(vutri.v0);
@@ -745,12 +581,14 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 
 	for(i = 0; i < model.numSpheres; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.spheres[i].surface)) continue;
 		if(TestLineSphere(newline, model.spheres[i]))
 			return true;
 	}
 
 	for(i = 0; i < model.numBoxes; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.boxes[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.boxes[i].surface)) continue;
 		if(TestLineBox(newline, model.boxes[i]))
 			return true;
 	}
@@ -758,6 +596,7 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 	CalculateTrianglePlanes(&model);
 	for(i = 0; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 		if(TestLineTriangle(newline, model.vertices, model.triangles[i], model.trianglePlanes[i]))
 			return true;
 	}
@@ -766,6 +605,7 @@ CCollision::TestLineOfSight(const CColLine &line, const CMatrix &matrix, CColMod
 #endif
 }
 
+// TODO: TestPillWithSpheresInColModel, but only called from overloaded CWeapon::FireMelee which isn't used
 
 //
 // Process
@@ -1046,6 +886,7 @@ CCollision::ProcessLineSphere(const CColLine &line, const CColSphere &sphere, CC
 	return true;
 }
 
+// unused
 bool
 CCollision::ProcessVerticalLineTriangle(const CColLine &line,
 	const CompressedVector *verts, const CColTriangle &tri, const CColTrianglePlane &plane,
@@ -1262,7 +1103,7 @@ CCollision::IsStoredPolyStillValidVerticalLine(const CVector &pos, float z, CCol
 bool
 CCollision::ProcessLineTriangle(const CColLine &line,
 	const CompressedVector *verts, const CColTriangle &tri, const CColTrianglePlane &plane,
-	CColPoint &point, float &mindist)
+	CColPoint &point, float &mindist, CStoredCollPoly *poly)
 {
 #ifdef VU_COLLISION
 	// not used in favour of optimized loops
@@ -1366,6 +1207,12 @@ CCollision::ProcessLineTriangle(const CColLine &line,
 	point.pieceA = 0;
 	point.surfaceB = tri.surface;
 	point.pieceB = 0;
+	if(poly){
+		poly->verts[0] = va;
+		poly->verts[1] = vb;
+		poly->verts[2] = vc;
+		poly->valid = true;
+	}
 	mindist = t;
 	return true;
 #endif
@@ -1436,6 +1283,8 @@ CCollision::ProcessSphereTriangle(const CColSphere &sphere,
 	float dist = 0.0f;
 	CVector p;
 	switch(testcase){
+	case 0:
+		return false;	// shouldn't happen
 	case 1:
 		// closest to a vertex
 		if(insideAB) p = vc;
@@ -1482,7 +1331,7 @@ CCollision::ProcessSphereTriangle(const CColSphere &sphere,
 bool
 CCollision::ProcessLineOfSight(const CColLine &line,
 	const CMatrix &matrix, CColModel &model,
-	CColPoint &point, float &mindist, bool ignoreSeeThrough)
+	CColPoint &point, float &mindist, bool ignoreSeeThrough, bool ignoreShootThrough)
 {
 #ifdef VU_COLLISION
 	CMatrix matTransform;
@@ -1503,6 +1352,7 @@ CCollision::ProcessLineOfSight(const CColLine &line,
 	float coldist = 1.0f;
 	for(i = 0; i < model.numSpheres; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.spheres[i].surface)) continue;
 		if(ProcessLineSphere(*(CColLine*)newline, model.spheres[i], point, coldist))
 			point.Set(0, 0, model.spheres[i].surface, model.spheres[i].piece);
 	}
@@ -1518,6 +1368,7 @@ CCollision::ProcessLineOfSight(const CColLine &line,
 	CColTriangle *lasttri = nil;
 	for(i = 0; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 
 		CColTriangle *tri = &model.triangles[i];
 		model.vertices[tri->a].Unpack(vutri.v0);
@@ -1537,6 +1388,7 @@ CCollision::ProcessLineOfSight(const CColLine &line,
 	float dist;
 	for(; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 
 		CColTriangle *tri = &model.triangles[i];
 		model.vertices[tri->a].Unpack(vutri.v0);
@@ -1586,17 +1438,20 @@ CCollision::ProcessLineOfSight(const CColLine &line,
 	float coldist = mindist;
 	for(i = 0; i < model.numSpheres; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.spheres[i].surface)) continue;
 		ProcessLineSphere(newline, model.spheres[i], point, coldist);
 	}
 
 	for(i = 0; i < model.numBoxes; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.boxes[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.boxes[i].surface)) continue;
 		ProcessLineBox(newline, model.boxes[i], point, coldist);
 	}
 
 	CalculateTrianglePlanes(&model);
 	for(i = 0; i < model.numTriangles; i++){
 		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+		if(ignoreShootThrough && IsShootThrough(model.triangles[i].surface)) continue;
 		ProcessLineTriangle(newline, model.vertices, model.triangles[i], model.trianglePlanes[i], point, coldist);
 	}
 
@@ -1613,7 +1468,7 @@ CCollision::ProcessLineOfSight(const CColLine &line,
 bool
 CCollision::ProcessVerticalLine(const CColLine &line,
 	const CMatrix &matrix, CColModel &model,
-	CColPoint &point, float &mindist, bool ignoreSeeThrough, CStoredCollPoly *poly)
+	CColPoint &point, float &mindist, bool ignoreSeeThrough, bool ignoreShootThrough, CStoredCollPoly *poly)
 {
 #ifdef VU_COLLISION
 	static CStoredCollPoly TempStoredPoly;
@@ -1633,13 +1488,13 @@ CCollision::ProcessVerticalLine(const CColLine &line,
 
 	float coldist = 1.0f;
 	for(i = 0; i < model.numSpheres; i++){
-		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreSeeThrough && IsSeeThroughVertical(model.spheres[i].surface)) continue;
 		if(ProcessLineSphere(*(CColLine*)newline, model.spheres[i], point, coldist))
 			point.Set(0, 0, model.spheres[i].surface, model.spheres[i].piece);
 	}
 
 	for(i = 0; i < model.numBoxes; i++){
-		if(ignoreSeeThrough && IsSeeThrough(model.boxes[i].surface)) continue;
+		if(ignoreSeeThrough && IsSeeThroughVertical(model.boxes[i].surface)) continue;
 		if(ProcessLineBox(*(CColLine*)newline, model.boxes[i], point, coldist))
 			point.Set(0, 0, model.boxes[i].surface, model.boxes[i].piece);
 	}
@@ -1651,7 +1506,7 @@ CCollision::ProcessVerticalLine(const CColLine &line,
 		CColTriangle *lasttri = nil;
 		VuTriangle vutri;
 		for(i = 0; i < model.numTriangles; i++){
-			if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+			if(ignoreSeeThrough && IsSeeThroughVertical(model.triangles[i].surface)) continue;
 
 			CColTriangle *tri = &model.triangles[i];
 			model.vertices[tri->a].Unpack(vutri.v0);
@@ -1670,7 +1525,7 @@ CCollision::ProcessVerticalLine(const CColLine &line,
 		CVuVector pnt, normal;
 		float dist;
 		for(; i < model.numTriangles; i++){
-			if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
+			if(ignoreSeeThrough && IsSeeThroughVertical(model.triangles[i].surface)) continue;
 
 			CColTriangle *tri = &model.triangles[i];
 			model.vertices[tri->a].Unpack(vutri.v0);
@@ -1740,28 +1595,27 @@ CCollision::ProcessVerticalLine(const CColLine &line,
 	// transform line to model space
 	// Why does the game seem to do this differently than above?
 	CColLine newline(MultiplyInverse(matrix, line.p0), MultiplyInverse(matrix, line.p1));
-	newline.p1.x = newline.p0.x;
-	newline.p1.y = newline.p0.y;
 
-	if(!TestVerticalLineBox(newline, model.boundingBox))
+	if(!TestLineBox(newline, model.boundingBox))
 		return false;
 
+	// BUG? is IsSeeThroughVertical really the right thing? also not checking shoot through
 	float coldist = mindist;
 	for(i = 0; i < model.numSpheres; i++){
-		if(ignoreSeeThrough && IsSeeThrough(model.spheres[i].surface)) continue;
+		if(ignoreSeeThrough && IsSeeThroughVertical(model.spheres[i].surface)) continue;
 		ProcessLineSphere(newline, model.spheres[i], point, coldist);
 	}
 
 	for(i = 0; i < model.numBoxes; i++){
-		if(ignoreSeeThrough && IsSeeThrough(model.boxes[i].surface)) continue;
+		if(ignoreSeeThrough && IsSeeThroughVertical(model.boxes[i].surface)) continue;
 		ProcessLineBox(newline, model.boxes[i], point, coldist);
 	}
 
 	CalculateTrianglePlanes(&model);
 	TempStoredPoly.valid = false;
 	for(i = 0; i < model.numTriangles; i++){
-		if(ignoreSeeThrough && IsSeeThrough(model.triangles[i].surface)) continue;
-		ProcessVerticalLineTriangle(newline, model.vertices, model.triangles[i], model.trianglePlanes[i], point, coldist, &TempStoredPoly);
+		if(ignoreSeeThrough && IsSeeThroughVertical(model.triangles[i].surface)) continue;
+		ProcessLineTriangle(newline, model.vertices, model.triangles[i], model.trianglePlanes[i], point, coldist, &TempStoredPoly);
 	}
 
 	if(coldist < mindist){
@@ -2319,6 +2173,15 @@ CCollision::CalculateTrianglePlanes(CColModel *model)
 }
 
 void
+CCollision::RemoveTrianglePlanes(CColModel *model)
+{
+	if(model->trianglePlanes){
+		ms_colModelCache.Remove(model->GetLinkPtr());
+		model->RemoveTrianglePlanes();
+	}
+}
+
+void
 CCollision::DrawColModel(const CMatrix &mat, const CColModel &colModel)
 {
 	int i;
@@ -2540,15 +2403,75 @@ CCollision::DrawColModel(const CMatrix &mat, const CColModel &colModel)
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
 }
 
+static void
+GetSurfaceColor(uint8 surf, uint8 &r, uint8 &g, uint8 &b)
+{
+	// game doesn't do this
+	r = 255;
+	g = 128;
+	b = 0;
+
+	switch(CSurfaceTable::GetAdhesionGroup(surf)){
+	case ADHESIVE_RUBBER:
+		r = 255;
+		g = 0;
+		b = 0;
+		break;
+	case ADHESIVE_HARD:
+		r = 255;
+		g = 255;
+		b = 128;
+		break;
+	case ADHESIVE_ROAD:
+		r = 128;
+		g = 128;
+		b = 128;
+		break;
+	case ADHESIVE_LOOSE:
+		r = 0;
+		g = 255;
+		b = 0;
+		break;
+	case ADHESIVE_SAND:
+		r = 255;
+		g = 128;
+		b = 128;
+		break;
+	case ADHESIVE_WET:
+		r = 0;
+		g = 0;
+		b = 255;
+		break;
+	}
+
+	if(surf == SURFACE_SAND || surf == SURFACE_SAND_BEACH){
+		r = 255;
+		g = 255;
+		b = 0;
+	}
+
+	float f = (surf & 0xF)/32.0f + 0.5f;
+	r *= f;
+	g *= f;
+	b *= f;
+
+	if(surf == SURFACE_TRANSPARENT_CLOTH || surf == SURFACE_METAL_CHAIN_FENCE ||
+	   surf == SURFACE_TRANSPARENT_STONE || surf == SURFACE_SCAFFOLD_POLE)
+		if(CTimer::GetFrameCounter() & 1){
+			r = 0;
+			g = 0;
+			b = 0;
+		}
+}
+
 void
 CCollision::DrawColModel_Coloured(const CMatrix &mat, const CColModel &colModel, int32 id)
 {
 	int i;
 	int s;
-	float f;
 	CVector verts[8];
 	CVector min, max;
-	int r, g, b;
+	uint8 r, g, b;
 	RwImVertexIndex *iptr;
 	RwIm3DVertex *vptr;
 
@@ -2567,53 +2490,8 @@ CCollision::DrawColModel_Coloured(const CMatrix &mat, const CColModel &colModel,
 		verts[1] = mat * verts[1];
 		verts[2] = mat * verts[2];
 
-		// game doesn't do this
-		r = 255;
-		g = 128;
-		b = 0;
-
 		s = colModel.triangles[i].surface;
-		f = (s & 0xF)/32.0f + 0.5f;
-		switch(CSurfaceTable::GetAdhesionGroup(s)){
-		case ADHESIVE_RUBBER:
-			r = f * 255.0f;
-			g = 0;
-			b = 0;
-			break;
-		case ADHESIVE_HARD:
-			r = f*255.0f;
-			g = f*255.0f;
-			b = f*128.0f;
-			break;
-		case ADHESIVE_ROAD:
-			r = f*128.0f;
-			g = f*128.0f;
-			b = f*128.0f;
-			break;
-		case ADHESIVE_LOOSE:
-			r = 0;
-			g = f * 255.0f;
-			b = 0;
-			break;
-		case ADHESIVE_WET:
-			r = 0;
-			g = 0;
-			b = f * 255.0f;
-			break;
-		default:
-			// this doesn't make much sense
-			r *= f;
-			g *= f;
-			b *= f;
-		}
-
-		if(s == SURFACE_TRANSPARENT_CLOTH || s == SURFACE_METAL_CHAIN_FENCE ||
-		   s == SURFACE_TRANSPARENT_STONE || s == SURFACE_SCAFFOLD_POLE)
-			if(CTimer::GetFrameCounter() & 1){
-				r = 0;
-				g = 0;
-				b = 0;
-			}
+		GetSurfaceColor(s, r, g, b);
 
 		if(s > SURFACE_METAL_GATE){
 			r = CGeneral::GetRandomNumber();
@@ -2654,47 +2532,7 @@ CCollision::DrawColModel_Coloured(const CMatrix &mat, const CColModel &colModel,
 		verts[7] = mat * CVector(max.x, max.y, max.z);
 
 		s = colModel.boxes[i].surface;
-		f = (s & 0xF)/32.0f + 0.5f;
-		switch(CSurfaceTable::GetAdhesionGroup(s)){
-		case ADHESIVE_RUBBER:
-			r = f * 255.0f;
-			g = 0;
-			b = 0;
-			break;
-		case ADHESIVE_HARD:
-			r = f*255.0f;
-			g = f*255.0f;
-			b = f*128.0f;
-			break;
-		case ADHESIVE_ROAD:
-			r = f*128.0f;
-			g = f*128.0f;
-			b = f*128.0f;
-			break;
-		case ADHESIVE_LOOSE:
-			r = 0;
-			g = f * 255.0f;
-			b = 0;
-			break;
-		case ADHESIVE_WET:
-			r = 0;
-			g = 0;
-			b = f * 255.0f;
-			break;
-		default:
-			// this doesn't make much sense
-			r *= f;
-			g *= f;
-			b *= f;
-		}
-
-		if(s == SURFACE_TRANSPARENT_CLOTH || s == SURFACE_METAL_CHAIN_FENCE ||
-		   s == SURFACE_TRANSPARENT_STONE || s == SURFACE_SCAFFOLD_POLE)
-			if(CTimer::GetFrameCounter() & 1){
-				r = 0;
-				g = 0;
-				b = 0;
-			}
+		GetSurfaceColor(s, r, g, b);
 
 		RenderBuffer::StartStoring(36, 8, &iptr, &vptr);
 		RwIm3DVertexSetRGBA(&vptr[0], r, g, b, 255);

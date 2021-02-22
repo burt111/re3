@@ -9,6 +9,7 @@
 
 CAnimBlendAssociation::CAnimBlendAssociation(void)
 {
+	groupId = -1;
 	nodes = nil;
 	blendAmount = 1.0f;
 	blendDelta = 0.0f;
@@ -54,8 +55,8 @@ CAnimBlendAssociation::AllocateAnimBlendNodeArray(int n)
 void
 CAnimBlendAssociation::FreeAnimBlendNodeArray(void)
 {
-	assert(nodes != nil);
-	RwFreeAlign(nodes);
+	if(nodes)
+		RwFreeAlign(nodes);
 }
 
 void
@@ -75,7 +76,10 @@ CAnimBlendAssociation::Init(RpClump *clump, CAnimBlendHierarchy *hier)
 	// NB: This is where the order of nodes is defined
 	for(i = 0; i < hier->numSequences; i++){
 		CAnimBlendSequence *seq = &hier->sequences[i];
-		frame = RpAnimBlendClumpFindFrame(clump, seq->name);
+		if(seq->boneTag == -1)
+			frame = RpAnimBlendClumpFindFrame(clump, seq->name);
+		else
+			frame = RpAnimBlendClumpFindBone(clump, seq->boneTag);
 		if(frame && seq->numFrames > 0)
 			nodes[frame - clumpData->frames].sequence = seq;
 	}
@@ -90,6 +94,7 @@ CAnimBlendAssociation::Init(CAnimBlendAssociation &assoc)
 	numNodes = assoc.numNodes;
 	flags = assoc.flags;
 	animId = assoc.animId;
+	groupId = assoc.groupId;
 	AllocateAnimBlendNodeArray(numNodes);
 	for(i = 0; i < numNodes; i++){
 		nodes[i] = assoc.nodes[i];
@@ -126,12 +131,25 @@ CAnimBlendAssociation::SetCurrentTime(float time)
 	int i;
 
 	for(currentTime = time; currentTime >= hierarchy->totalLength; currentTime -= hierarchy->totalLength)
-		if(!IsRepeating())
-			return;
+		if (!IsRepeating()) {
+			currentTime = hierarchy->totalLength;
+			break;
+		}
+
 	CAnimManager::UncompressAnimation(hierarchy);
-	for(i = 0; i < numNodes; i++)
-		if(nodes[i].sequence)
-			nodes[i].FindKeyFrame(currentTime);
+#ifdef ANIM_COMPRESSION
+	// strangely PC has this but android doesn't
+	if(hierarchy->keepCompressed){
+		for(i = 0; i < numNodes; i++)
+			if(nodes[i].sequence)
+				nodes[i].SetupKeyFrameCompressed();
+	}else
+#endif
+	{
+		for(i = 0; i < numNodes; i++)
+			if(nodes[i].sequence)
+				nodes[i].FindKeyFrame(currentTime);
+	}
 }
 
 void
@@ -147,13 +165,23 @@ CAnimBlendAssociation::Start(float time)
 	SetCurrentTime(time);
 }
 
+void
+CAnimBlendAssociation::UpdateTimeStep(float timeDelta, float relSpeed)
+{
+	if(IsRunning())
+		timeStep = (flags & ASSOC_MOVEMENT ? relSpeed*hierarchy->totalLength : speed) * timeDelta;
+}
+
 bool
 CAnimBlendAssociation::UpdateTime(float timeDelta, float relSpeed)
 {
 	if(!IsRunning())
 		return true;
+	if(currentTime >= hierarchy->totalLength){
+		flags &= ~ASSOC_RUNNING;
+		return true;
+	}
 
-	timeStep = (flags & ASSOC_MOVEMENT ? relSpeed*hierarchy->totalLength : speed) * timeDelta;
 	currentTime += timeStep;
 
 	if(currentTime >= hierarchy->totalLength){
@@ -163,7 +191,6 @@ CAnimBlendAssociation::UpdateTime(float timeDelta, float relSpeed)
 			currentTime -= hierarchy->totalLength;
 		else{
 			currentTime = hierarchy->totalLength;
-			flags &= ~ASSOC_RUNNING;
 			if(flags & ASSOC_FADEOUTWHENDONE){
 				flags |= ASSOC_DELETEFADEDOUT;
 				blendDelta = -4.0f;

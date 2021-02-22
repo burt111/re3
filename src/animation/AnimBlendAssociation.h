@@ -12,12 +12,13 @@ enum {
 	ASSOC_PARTIAL = 0x10,
 	ASSOC_MOVEMENT = 0x20,	// ???
 	ASSOC_HAS_TRANSLATION = 0x40,
-	ASSOC_WALK = 0x80,	// for CPed::PlayFootSteps(void)
-	ASSOC_IDLE = 0x100,	// only used by xpress scratch, see CPed::Chat(void)
-	ASSOC_NOWALK = 0x200,	// see CPed::PlayFootSteps(void)
-	ASSOC_BLOCK = 0x400,	// unused in assoc description, blocks other anims from being played
-	ASSOC_FRONTAL = 0x800, // anims that we fall to front
-	ASSOC_HAS_X_TRANSLATION = 0x1000,	// for 2d velocity extraction
+	ASSOC_HAS_X_TRANSLATION = 0x80,	// for 2d velocity extraction
+	ASSOC_WALK = 0x100,	// for CPed::PlayFootSteps(void)
+	ASSOC_IDLE = 0x200,	// only xpress scratch has it by default, but game adds it to player's idle animations later
+	ASSOC_NOWALK = 0x400,	// see CPed::PlayFootSteps(void)
+	ASSOC_BLOCK = 0x800,	// unused in assoc description, blocks other anims from being played
+	ASSOC_FRONTAL = 0x1000, // anims that we fall to front
+	ASSOC_DRIVING = 0x2000,	// new in VC
 };
 
 // Anim hierarchy associated with a clump
@@ -35,7 +36,8 @@ public:
 
 	CAnimBlendLink link;
 
-	int numNodes;			// taken from CAnimBlendClumpData::numFrames
+	int16 numNodes;			// taken from CAnimBlendClumpData::numFrames
+	int16 groupId;		// ID of CAnimBlendAssocGroup this is in
 	// NB: Order of these depends on order of nodes in Clump this was built from
 	CAnimBlendNode *nodes;
 	CAnimBlendHierarchy *hierarchy;
@@ -44,8 +46,8 @@ public:
 	float currentTime;
 	float speed;
 	float timeStep;
-	int32 animId;
-	int32 flags;
+	int16 animId;
+	int16 flags;
 	int32 callbackType;
 	void (*callback)(CAnimBlendAssociation*, void*);
 	void *callbackArg;
@@ -76,16 +78,16 @@ public:
 	void SetCurrentTime(float time);
 	void SyncAnimation(CAnimBlendAssociation *other);
 	void Start(float time);
+	void UpdateTimeStep(float timeDelta, float relSpeed);
 	bool UpdateTime(float timeDelta, float relSpeed);
 	bool UpdateBlend(float timeDelta);
 
 	void SetRun(void) { flags |= ASSOC_RUNNING; }
 
-	inline float GetTimeLeft() { return hierarchy->totalLength - currentTime; }
+	float GetTimeLeft() { return hierarchy->totalLength - currentTime; }
+	float GetProgress() { return currentTime / hierarchy->totalLength; }
 
 	static CAnimBlendAssociation *FromLink(CAnimBlendLink *l) {
 		return (CAnimBlendAssociation*)((uint8*)l - offsetof(CAnimBlendAssociation, link));
 	}
 };
-
-VALIDATE_SIZE(CAnimBlendAssociation, 0x40);

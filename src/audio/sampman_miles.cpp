@@ -15,7 +15,7 @@
 #include "MusicManager.h"
 #include "Frontend.h"
 #include "Timer.h"
-
+#include "crossplatform.h"
 
 #pragma comment( lib, "mss32.lib" )
 
@@ -60,14 +60,10 @@ char _mp3DirectoryPath[MAX_PATH];
 HSTREAM mp3Stream [MAX_STREAMS];
 int8 nStreamPan   [MAX_STREAMS];
 int8 nStreamVolume[MAX_STREAMS];
+uint8 nStreamLoopedFlag[MAX_STREAMS];
 uint32 _CurMP3Index;
 int32 _CurMP3Pos;
 bool _bIsMp3Active;
-
-#if GTA_VERSION >= GTA3_PC_11 || defined(NO_CDCHECK)
-bool _bUseHDDAudio;
-char _aHDDPath[MAX_PATH];
-#endif
 ///////////////////////////////////////////////////////////////
 
 
@@ -263,10 +259,63 @@ set_new_provider(S32 index)
 	return false;
 }
 
+U32 RadioHandlers[9];
+
+U32 WINAPI vfs_open_callback(char const* Filename, U32* FileHandle)
+{
+	*FileHandle = (U32)fopen(Filename, "rb");
+
+	// couldn't they just use stricmp once? and strlen? this is very inefficient
+	if ((strcmp(Filename + strlen(Filename) - 4, ".adf") == 0) || (strcmp(Filename + strlen(Filename) - 4, ".ADF") == 0)) {
+		for (int i = 0; i < ARRAY_SIZE(RadioHandlers); i++) {
+			if (RadioHandlers[i] == NULL) {
+				RadioHandlers[i] = *FileHandle;
+				break;
+			}
+		}
+		strcpy((char*)Filename + strlen(Filename) - 4, ".mp3");
+	}
+	return *FileHandle;
+}
+
+void WINAPI vfs_close_callback(U32 FileHandle)
+{
+	for (int i = 0; i < ARRAY_SIZE(RadioHandlers); i++) {
+		if (RadioHandlers[i] == FileHandle) {
+			RadioHandlers[i] = NULL;
+			break;
+		}
+	}
+	fclose((FILE*)FileHandle);
+}
+
+S32 WINAPI vfs_seek_callback(U32 FileHandle, S32 Offset, U32 Type)
+{
+	fseek((FILE*)FileHandle, Offset, Type);
+	return ftell((FILE*)FileHandle);
+}
+
+U32 WINAPI vfs_read_callback(U32 FileHandle, void* Buffer, U32 Bytes)
+{
+	fread(Buffer, Bytes, 1, (FILE*)FileHandle);
+	uint8* _Buffer = (uint8*)Buffer;
+
+	for (int i = 0; i < ARRAY_SIZE(RadioHandlers); i++) {
+		if (FileHandle == RadioHandlers[i]) {
+			for (U32 k = 0; k < Bytes; k++)
+				_Buffer[k] ^= 0x22;
+			break;
+		}
+	}
+	return Bytes;
+}
+
 cSampleManager::cSampleManager(void) : 
 	m_nNumberOfProviders(0)
 {
 	;
+
+	AIL_set_file_callbacks(vfs_open_callback, vfs_close_callback, vfs_seek_callback, vfs_read_callback);
 }
 
 cSampleManager::~cSampleManager(void)
@@ -351,6 +400,63 @@ cSampleManager::SetCurrent3DProvider(uint8 nProvider)
 	}
 	else
 		return curprovider;
+}
+
+int8
+cSampleManager::AutoDetect3DProviders()
+{
+	if (!AudioManager.IsAudioInitialised())
+		return -1;
+
+	int eax = -1, eax2 = -1, eax3 = -1, ds3dh = -1, ds3ds = -1;
+
+	for (uint32 i = 0; i < GetNum3DProvidersAvailable(); i++)
+	{
+		char* providername = Get3DProviderName(i);
+
+		if (!strcasecmp(providername, "CREATIVE LABS EAX (TM)")) {
+			AudioManager.SetCurrent3DProvider(i);
+			if (GetCurrent3DProviderIndex() == i)
+				eax = i;
+		}
+
+		if (!strcasecmp(providername, "CREATIVE LABS EAX 2 (TM)")) {
+			AudioManager.SetCurrent3DProvider(i);
+			if (GetCurrent3DProviderIndex() == i)
+				eax2 = i;
+		}
+
+		if (!strcasecmp(providername, "CREATIVE LABS EAX 3 (TM)")) {
+			AudioManager.SetCurrent3DProvider(i);
+			if (GetCurrent3DProviderIndex() == i) {
+				eax3 = i;
+			}
+		}
+
+		if (!strcasecmp(providername, "DIRECTSOUND3D HARDWARE SUPPORT")) {
+			AudioManager.SetCurrent3DProvider(i);
+			if (GetCurrent3DProviderIndex() == i)
+				ds3dh = i;
+		}
+
+		if (!strcasecmp(providername, "DIRECTSOUND3D SOFTWARE EMULATION")) {
+			AudioManager.SetCurrent3DProvider(i);
+			if (GetCurrent3DProviderIndex() == i)
+				ds3ds = i;
+		}
+	}
+
+	if (eax3 != -1)
+		return eax3;
+	if (eax2 != -1)
+		return eax2;
+	if (eax != -1)
+		return eax;
+	if (ds3dh != -1)
+		return ds3dh;
+	if (ds3ds != -1)
+		return ds3ds;
+	return -1;
 }
 
 static bool
@@ -448,15 +554,6 @@ _FindMP3s(void)
 		FindClose(hFind);
 		return;
 	}
-	
-	FILE *f = fopen("MP3\\MP3Report.txt", "w");
-	
-	if ( f )
-	{
-		fprintf(f, "MP3 Report File\n\n");
-		fprintf(f, "\"%s\"", fd.cFileName);
-	}
-	
 
 	if ( filepathlen > 4 )
 	{
@@ -466,12 +563,6 @@ _FindMP3s(void)
 			{
 				OutputDebugString("Resolving Link");
 				OutputDebugString(filepath);
-				
-				if ( f ) fprintf(f, " - shortcut to \"%s\"", filepath);
-			}
-			else
-			{
-				if ( f ) fprintf(f, " - couldn't resolve shortcut");
 			}
 			
 			bShortcut = true;
@@ -495,10 +586,6 @@ _FindMP3s(void)
 		if ( _pMP3List == NULL )
 		{
 			FindClose(hFind);
-			
-			if ( f )
-				fclose(f);
-			
 			return;
 		}
 		
@@ -521,9 +608,6 @@ _FindMP3s(void)
 		{
 			_pMP3List->pLinkPath = NULL;
 		}
-		
-		if ( f ) fprintf(f, " - OK\n");
-		
 		bInitFirstEntry = false;
 	}
 	else
@@ -532,8 +616,6 @@ _FindMP3s(void)
 		
 		OutputDebugString(filepath);
 
-		if ( f ) fprintf(f, " - not an MP3 or supported MP3 type\n");
-		
 		bInitFirstEntry = true;
 	}
 	
@@ -549,8 +631,6 @@ _FindMP3s(void)
 			
 			int32 filepathlen = strlen(filepath);
 			
-			if ( f ) fprintf(f, "\"%s\"", fd.cFileName);
-			
 			if ( filepathlen > 0 )
 			{
 				if ( filepathlen > 4 )
@@ -561,12 +641,6 @@ _FindMP3s(void)
 						{
 							OutputDebugString("Resolving Link");
 							OutputDebugString(filepath);
-							
-							if ( f ) fprintf(f, " - shortcut to \"%s\"", filepath);
-						}
-						else
-						{
-							if ( f ) fprintf(f, " - couldn't resolve shortcut");
 						}
 						
 						bShortcut = true;
@@ -577,8 +651,6 @@ _FindMP3s(void)
 						
 						if ( filepathlen > MAX_PATH )
 						{
-							if ( f ) fprintf(f, " - Filename and path too long - %s - IGNORED)\n", filepath);
-							
 							continue;
 						}
 					}
@@ -617,17 +689,13 @@ _FindMP3s(void)
 					}
 					
 					pList = _pMP3List;
-					
-					if ( f ) fprintf(f, " - OK\n");
-					
+
 					bInitFirstEntry = false;
 				}
 				else
 				{
 					strcat(filepath, " - NOT A VALID MP3");
 					OutputDebugString(filepath);
-					
-					if ( f ) fprintf(f, " - not an MP3 or supported MP3 type\n");
 				}
 			}
 		}
@@ -640,8 +708,6 @@ _FindMP3s(void)
 			
 			if ( filepathlen > 0 )
 			{
-				if ( f ) fprintf(f, "\"%s\"", fd.cFileName);
-			
 				if ( filepathlen > 4 )
 				{
 					if ( !strcmp(&filepath[filepathlen - 4], ".lnk") )
@@ -650,12 +716,6 @@ _FindMP3s(void)
 						{
 							OutputDebugString("Resolving Link");
 							OutputDebugString(filepath);
-							
-							if ( f ) fprintf(f, " - shortcut to \"%s\"", filepath);
-						}
-						else
-						{
-							if ( f ) fprintf(f, " - couldn't resolve shortcut");
 						}
 						
 						bShortcut = true;
@@ -700,26 +760,16 @@ _FindMP3s(void)
 					nNumMP3s++;
 					
 					OutputDebugString(fd.cFileName);
-					
-					if ( f ) fprintf(f, " - OK\n");
 				}
 				else
 				{
 					strcat(filepath, " - NOT A VALID MP3");
 					OutputDebugString(filepath);
-					
-					if ( f ) fprintf(f, " - not an MP3 or supported MP3 type\n");
 				}
 			}
 		}
 	}
-	
-	if ( f )
-	{
-		fprintf(f, "\nTOTAL SUPPORTED MP3s: %d\n", nNumMP3s);
-		fclose(f);
-	}
-	
+
 	FindClose(hFind);
 }
 
@@ -931,54 +981,37 @@ cSampleManager::Initialise(void)
 		
 		AIL_set_preference(DIG_MIXER_CHANNELS, MAX_DIGITAL_MIXER_CHANNELS);
 		
-		DIG = AIL_open_digital_driver(DIGITALRATE, DIGITALBITS, DIGITALCHANNELS, 0);
-		if ( DIG == NULL )
-		{
-			OutputDebugString(AIL_last_error());
-			Terminate();
-			return false;
-		}
-		
-		add_providers();
-		
-		if ( !InitialiseSampleBanks() )
-		{
-			Terminate();
-			return false;
-		}
-		
-		nSampleBankMemoryStartAddress[SFX_BANK_0] = (int32)AIL_mem_alloc_lock(nSampleBankSize[SFX_BANK_0]);
-		if ( !nSampleBankMemoryStartAddress[SFX_BANK_0] )
-		{
-			Terminate();
-			return false;
-		}
-
-		nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] = (int32)AIL_mem_alloc_lock(PED_BLOCKSIZE*MAX_PEDSFX);
+		DIG = AIL_open_digital_driver(DIGITALRATE, DIGITALBITS, DIGITALCHANNELS, 0);		
 		
 	}
 	
 #ifdef AUDIO_CACHE
 	TRACE("cache");
-	FILE *cacheFile = fopen("audio\\sound.cache", "rb");
+	FILE *cacheFile = fcaseopen("audio\\sound.cache", "rb");
+	bool CreateCache = false;
 	if (cacheFile) {
 		fread(nStreamLength, sizeof(uint32), TOTAL_STREAMED_SOUNDS, cacheFile);
 		fclose(cacheFile);
-		m_bInitialised = true;
-	}else {
+	}else
+		CreateCache = true;
 #endif
-	TRACE("cdrom");
 	
-	S32 tatalms;
 	char filepath[MAX_PATH];
+	bool bFileNotFound;
+	S32 tatalms;
 
+	TRACE("cdrom");
 	{
 		m_bInitialised = false;
+
 		
 		while (true)
 		{
+
+			// Find path of WAVs (originally in HDD)
 			int32 drive = 'C';
 			
+#ifndef NO_CDCHECK
 			do
 			{
 				char latter[2];
@@ -999,50 +1032,148 @@ cSampleManager::Initialise(void)
 					if ( f )
 					{
 						fclose(f);
-						
-						bool bFileNotFound = false;
-
-						for ( int32 i = 0; i < TOTAL_STREAMED_SOUNDS; i++ )
-						{
-							strcpy(filepath, m_szCDRomRootPath);
-							strcat(filepath, StreamedNameTable[i]);
-							
-							mp3Stream[0] = AIL_open_stream(DIG, filepath, 0);
-							
-							if ( mp3Stream[0] )
-							{
-								AIL_stream_ms_position(mp3Stream[0], &tatalms, NULL);
-								
-								AIL_close_stream(mp3Stream[0]);
-								mp3Stream[0] = NULL;
-								
-								nStreamLength[i] = tatalms;
-							}
-							else
-							{
-								bFileNotFound = true;
-								break;
-							}
-						}
-						
-						if ( !bFileNotFound )
-						{
-							m_bInitialised = true;
-							break;
-						}
-						else
-						{
-							m_bInitialised = false;
-							continue;
-						}
+						strcpy(m_MiscomPath, m_szCDRomRootPath);
+						break;
 					}
 				}
-				
+
 			} while ( ++drive <= 'Z' );
+#else
+			m_MiscomPath[0] = '\0';
+#endif
+
+			if ( DIG == NULL )
+			{
+				OutputDebugString(AIL_last_error());
+				Terminate();
+				return false;
+			}
+			
+			add_providers();
+
+			m_szCDRomRootPath[0] = '\0';
+
+			strcpy(m_WavFilesPath, m_szCDRomRootPath);
+
+#ifdef AUDIO_CACHE
+			if ( CreateCache )
+#endif
+			for ( int32 i = STREAMED_SOUND_MISSION_MOBR1; i < TOTAL_STREAMED_SOUNDS; i++ )
+			{
+				strcpy(filepath, m_szCDRomRootPath);
+				strcat(filepath, StreamedNameTable[i]);
+				
+				mp3Stream[0] = AIL_open_stream(DIG, filepath, 0);
+				
+				if ( mp3Stream[0] )
+				{
+					AIL_stream_ms_position(mp3Stream[0], &tatalms, NULL);
 					
+					AIL_close_stream(mp3Stream[0]);
+					mp3Stream[0] = NULL;
+					
+					nStreamLength[i] = tatalms;
+				}
+				else
+				{
+					m_bInitialised = false;
+					Terminate();
+					return false;
+				}
+			}
+
+			// Find path of MP3s (originally in CD-Rom)
+			// if NO_CDCHECK is NOT defined but AUDIO_CACHE is defined, we still need to find MP3s' path, but will exit after the first file
+#ifndef NO_CDCHECK
+			int32 drive = 'C';
+			do
+			{
+				latter[0] = drive;
+				latter[1] = '\0';
+				
+				strcpy(m_szCDRomRootPath, latter);
+				strcat(m_szCDRomRootPath, ":");
+				strcat(m_MP3FilesPath, m_szCDRomRootPath);
+#else
+			m_MP3FilesPath[0] = '\0';
+			{
+#endif
+
+				for (int32 i = 0; i < STREAMED_SOUND_MISSION_MOBR1; i++)
+				{
+					strcpy(filepath, m_MP3FilesPath);
+					strcat(filepath, StreamedNameTable[i]);
+
+					mp3Stream[0] = AIL_open_stream(DIG, filepath, 0);
+
+					if (mp3Stream[0])
+					{
+						AIL_stream_ms_position(mp3Stream[0], &tatalms, NULL);
+
+						AIL_close_stream(mp3Stream[0]);
+						mp3Stream[0] = NULL;
+
+						bFileNotFound = false;
+#ifdef AUDIO_CACHE
+						if (!CreateCache)
+							break;
+						else
+#endif
+							nStreamLength[i] = tatalms;
+
+					}
+					else
+					{
+						bFileNotFound = true;
+						break;
+					}
+				}
+
+#ifndef NO_CDCHECK
+				if (!bFileNotFound) // otherwise try next drive
+					break;
+
+			}
+			while (++drive <= 'Z');
+#else
+			}
+#endif
+
+			if ( !bFileNotFound ) {
+
+#ifdef AUDIO_CACHE
+			if ( CreateCache )
+#endif
+				for ( int32 i = STREAMED_SOUND_MISSION_COMPLETED4; i < STREAMED_SOUND_MISSION_PAGER; i++ )
+				{
+					strcpy(filepath, m_MiscomPath);
+					strcat(filepath, StreamedNameTable[i]);
+					
+					mp3Stream[0] = AIL_open_stream(DIG, filepath, 0);
+					
+					if ( mp3Stream[0] )
+					{
+						AIL_stream_ms_position(mp3Stream[0], &tatalms, NULL);
+						
+						AIL_close_stream(mp3Stream[0]);
+						mp3Stream[0] = NULL;
+						
+						nStreamLength[i] = tatalms;
+						bFileNotFound = false;
+					}
+					else
+					{
+						bFileNotFound = true;
+						break;
+					}
+				}
+			}
+			
+			m_bInitialised = !bFileNotFound;
+
 			if ( !m_bInitialised )
 			{
-#if GTA_VERSION < GTA3_PC_STEAM && !defined(NO_CDCHECK)
+#if !defined(GTA3_STEAM_PATCH) && !defined(NO_CDCHECK)
 				FrontEndMenuManager.WaitForUserCD();
 				if ( FrontEndMenuManager.m_bQuitGameNoCD )
 				{
@@ -1059,76 +1190,30 @@ cSampleManager::Initialise(void)
 		}
 	}
 
-#if GTA_VERSION >= GTA3_PC_11 || defined(NO_CDCHECK)
-	// hddaudio
-	/**
-		Option for user to play audio files directly from hard disk.
-		Copy the contents of the PLAY discs Audio directory into your installed Grand Theft Auto III Audio directory.
-		Grand Theft Auto III still requires the presence of the PLAY disc when started.
-		This may give better performance on some machines (though worse on others).
-	**/
-	TRACE("hddaudio 1.1 patch");
-	{
-		int32 streamLength[TOTAL_STREAMED_SOUNDS];
-		
-		bool bFileNotFound = false;
-		char rootpath[MAX_PATH];
-		
-		strcpy(_aHDDPath, m_szCDRomRootPath);
-		rootpath[0] = '\0';
-		
-		FILE *f = fopen(StreamedNameTable[0], "rb");
-		
-		if ( f )
-		{
-			fclose(f);
-			
-			for ( int32 i = 0; i < TOTAL_STREAMED_SOUNDS; i++ )
-			{
-				strcpy(filepath, rootpath);
-				strcat(filepath, StreamedNameTable[i]);
-				
-				mp3Stream[0] = AIL_open_stream(DIG, filepath, 0);
-				
-				if ( mp3Stream[0] )
-				{
-					AIL_stream_ms_position(mp3Stream[0], &tatalms, NULL);
-					
-					AIL_close_stream(mp3Stream[0]);
-					mp3Stream[0] = NULL;
-					
-					streamLength[i] = tatalms;
-				}
-				else
-				{
-					bFileNotFound = true;
-					break;
-				}
-			}
-								
-		}
-		else
-			bFileNotFound = true;
-		
-		if ( !bFileNotFound )
-		{
-			strcpy(m_szCDRomRootPath, rootpath);
-			
-			for ( int32 i = 0; i < TOTAL_STREAMED_SOUNDS; i++ )
-				nStreamLength[i] = streamLength[i];
-			
-			_bUseHDDAudio = true;
-		}
-		else
-			_bUseHDDAudio = false;
-	}
-#endif
 #ifdef AUDIO_CACHE
-	cacheFile = fopen("audio\\sound.cache", "wb");
-	fwrite(nStreamLength, sizeof(uint32), TOTAL_STREAMED_SOUNDS, cacheFile);
-	fclose(cacheFile);
+	if (CreateCache) {
+		cacheFile = fcaseopen("audio\\sound.cache", "wb");
+		fwrite(nStreamLength, sizeof(uint32), TOTAL_STREAMED_SOUNDS, cacheFile);
+		fclose(cacheFile);
 	}
 #endif
+
+	if ( !InitialiseSampleBanks() )
+	{
+		Terminate();
+		return false;
+	}
+	
+	nSampleBankMemoryStartAddress[SFX_BANK_0] = (int32)AIL_mem_alloc_lock(nSampleBankSize[SFX_BANK_0]);
+	if ( !nSampleBankMemoryStartAddress[SFX_BANK_0] )
+	{
+		Terminate();
+		return false;
+	}
+
+	nSampleBankMemoryStartAddress[SFX_BANK_PED_COMMENTS] = (int32)AIL_mem_alloc_lock(PED_BLOCKSIZE*MAX_PEDSFX);
+
+	LoadSampleBank(SFX_BANK_0);
 
 	TRACE("stream");
 	{
@@ -1158,7 +1243,7 @@ cSampleManager::Initialise(void)
 		
 		while ( n < m_nNumberOfProviders )
 		{
-			if ( !strcmp(providers[n].name, "Miles Fast 2D Positional Audio") )
+			if ( !strcmp(strupr(providers[n].name), "DIRECTSOUND3D SOFTWARE EMULATION") )
 			{
 				set_new_provider(n);
 				break;
@@ -1172,10 +1257,6 @@ cSampleManager::Initialise(void)
 			return false;
 		}
 	}
-	
-	TRACE("bank");
-	
-	LoadSampleBank(SFX_BANK_0);
 	
 	// mp3
 	TRACE("mp3");
@@ -1296,60 +1377,42 @@ cSampleManager::Terminate(void)
 bool
 cSampleManager::CheckForAnAudioFileOnCD(void)
 {
-#if GTA_VERSION < GTA3_PC_STEAM && !defined(NO_CDCHECK)
+#if !defined(NO_CDCHECK) // TODO: check steam, probably GTAVC_STEAM_PATCH needs to be added
 	char filepath[MAX_PATH];
 	
-#if GTA_VERSION >= GTA3_PC_11
-	if (_bUseHDDAudio)
-		strcpy(filepath, _aHDDPath);
-	else
-		strcpy(filepath, m_szCDRomRootPath);
-#else
-	strcpy(filepath, m_szCDRomRootPath);
-#endif // #if GTA_VERSION >= GTA3_PC_11
+	strcpy(filepath, m_MiscomPath);
+	strcat(filepath, StreamedNameTable[STREAMED_SOUND_MISSION_COMPLETED4]);
 
-	strcat(filepath, StreamedNameTable[AudioManager.GetRandomNumber(1) % TOTAL_STREAMED_SOUNDS]);
-	
 	FILE *f = fopen(filepath, "rb");
-	
+
 	if ( f )
 	{
 		fclose(f);
+		DMAudio.SetMusicMasterVolume(FrontEndMenuManager.m_PrefsMusicVolume);
+		DMAudio.SetEffectsMasterVolume(FrontEndMenuManager.m_PrefsSfxVolume);
+		DMAudio.Service();
 
 		return true;
 	}
-	
+
+	DMAudio.SetMusicMasterVolume(0);
+	DMAudio.SetEffectsMasterVolume(0);
+	DMAudio.Service();
+
 	return false;
 	
 #else
 	return true;
-#endif // #if GTA_VERSION < GTA3_PC_STEAM && !defined(NO_CDCHECK)
+#endif // #if !defined(NO_CDCHECK)
 }
 
 char
 cSampleManager::GetCDAudioDriveLetter(void)
 {
-#if GTA_VERSION >= GTA3_PC_11 || defined(NO_CDCHECK)
-	if (_bUseHDDAudio)
-	{
-		if ( strlen(_aHDDPath) != 0 )
-			return _aHDDPath[0];
-		else
-			return '\0';
-	}
-	else
-	{
-		if ( strlen(m_szCDRomRootPath) != 0 )
-			return m_szCDRomRootPath[0];
-		else
-			return '\0';
-	}
-#else
-	if ( strlen(m_szCDRomRootPath) != 0 )
-		return m_szCDRomRootPath[0];
+	if ( strlen(m_MiscomPath) != 0 )
+		return m_MiscomPath[0];
 	else
 		return '\0';
-#endif
 }
 
 void
@@ -1399,6 +1462,12 @@ void
 cSampleManager::SetMusicMasterVolume(uint8 nVolume)
 {
 	m_nMusicVolume = nVolume;
+}
+
+void
+cSampleManager::SetMP3BoostVolume(uint8 nVolume)
+{
+	m_nMP3BoostVolume = nVolume;
 }
 
 void
@@ -1511,14 +1580,6 @@ cSampleManager::LoadPedComment(uint32 nComment)
 
 				break;
 			}
-			
-			case MUSICMODE_FRONTEND:
-			{
-				if ( MusicManager.GetNextTrack() == STREAMED_SOUND_GAME_COMPLETED )
-					return false;
-
-				break;
-			}
 		}
 	}
 	
@@ -1581,69 +1642,45 @@ cSampleManager::UpdateReverb(void)
 	
 	if ( AudioManager.GetFrameCounter() & 15 )
 		return false;
-			
-	float y = AudioManager.GetReflectionsDistance(REFLECTION_TOP)  + AudioManager.GetReflectionsDistance(REFLECTION_BOTTOM);
-	float x = AudioManager.GetReflectionsDistance(REFLECTION_LEFT) + AudioManager.GetReflectionsDistance(REFLECTION_RIGHT);
-	float z = AudioManager.GetReflectionsDistance(REFLECTION_UP);
-	
-	float normy = norm(y, 5.0f, 40.0f);
-	float normx = norm(x, 5.0f, 40.0f);
-	float normz = norm(z, 5.0f, 40.0f);
 
-	float fRatio;
+	float fRatio = 0.0f;
+
+#define MIN_DIST 0.5f
+#define CALCULATE_RATIO(value, maxDist, maxRatio) (value > MIN_DIST && value < maxDist ? value / maxDist * maxRatio : 0)
+
+	fRatio += CALCULATE_RATIO(AudioManager.GetReflectionsDistance(REFLECTION_CEIL_NORTH), 10.0f, 1/2.f);
+	fRatio += CALCULATE_RATIO(AudioManager.GetReflectionsDistance(REFLECTION_CEIL_SOUTH), 10.0f, 1/2.f);
+	fRatio += CALCULATE_RATIO(AudioManager.GetReflectionsDistance(REFLECTION_CEIL_WEST), 10.0f, 1/2.f);
+	fRatio += CALCULATE_RATIO(AudioManager.GetReflectionsDistance(REFLECTION_CEIL_EAST), 10.0f, 1/2.f);
+
+	fRatio += CALCULATE_RATIO((AudioManager.GetReflectionsDistance(REFLECTION_NORTH) + AudioManager.GetReflectionsDistance(REFLECTION_SOUTH)) / 2.f, 4.0f, 1/3.f);
+	fRatio += CALCULATE_RATIO((AudioManager.GetReflectionsDistance(REFLECTION_WEST) + AudioManager.GetReflectionsDistance(REFLECTION_EAST)) / 2.f, 4.0f, 1/3.f);
+
+#undef CALCULATE_RATIO
+#undef MIN_DIST
 	
-	if ( normy == 0.0f )
-	{
-		if ( normx == 0.0f )
-		{
-			if ( normz == 0.0f )
-				fRatio = 0.3f;
-			else
-				fRatio = 0.5f;
-		}
-		else
-		{
-			fRatio = 0.3f;
-		}
-	}
-	else
-	{
-		if ( normx == 0.0f )
-		{
-			if ( normz == 0.0f )
-				fRatio = 0.3f;
-			else
-				fRatio = 0.5f;
-		}
-		else
-		{
-			if ( normz == 0.0f )
-				fRatio = 0.3f;
-			else
-				fRatio = (normy+normx+normz) / 3.0f;
-		}
-	}
-	
-	fRatio = clamp(fRatio, usingEAX3==1 ? 0.0f : 0.30f, 1.0f);
+	fRatio = clamp(fRatio, 0.0f, 0.6f);
 	
 	if ( fRatio == _fPrevEaxRatioDestination )
 		return false;
 	
 	if ( usingEAX3 )
 	{
+		fRatio = Min(fRatio * 1.67f, 1.0f);
 		if ( EAX3ListenerInterpolate(&StartEAX3, &FinishEAX3, fRatio, &EAX3Params, false) )
 		{
 			AIL_set_3D_provider_preference(opened_provider, "EAX all parameters", &EAX3Params);
-			_fEffectsLevel = 1.0f - fRatio * 0.5f;
+			_fEffectsLevel = fRatio * 0.75f;
 		}
 	}
 	else
 	{
 		if ( _usingMilesFast2D )
-			_fEffectsLevel = (1.0f - fRatio) * 0.4f;
+			_fEffectsLevel = fRatio * 0.8f;
 		else
-			_fEffectsLevel = (1.0f - fRatio) * 0.7f;
+			_fEffectsLevel = fRatio * 0.22f;
 	}
+	_fEffectsLevel = Min(_fEffectsLevel, 1.0f);
 
 	_fPrevEaxRatioDestination = fRatio;
 	
@@ -1752,11 +1789,11 @@ cSampleManager::SetChannelEmittingVolume(uint32 nChannel, uint32 nVolume)
 	nChannelVolume[nChannel] = vol;
 	
 	// increase the volume for JB.MP3 and S4_BDBD.MP3
-	if (   MusicManager.GetMusicMode()    == MUSICMODE_CUTSCENE
-		&& MusicManager.GetNextTrack() != STREAMED_SOUND_NEWS_INTRO
-		&& MusicManager.GetNextTrack() != STREAMED_SOUND_CUTSCENE_SAL4_BDBD )
-	{
-		nChannelVolume[nChannel] >>= 2;
+	if (MusicManager.GetMusicMode() == MUSICMODE_CUTSCENE ) {
+		if (MusicManager.GetCurrentTrack() == STREAMED_SOUND_CUTSCENE_FINALE)
+			nChannelVolume[nChannel] = 0;
+		else
+			nChannelVolume[nChannel] >>= 2;
 	}
 
 	if ( opened_samples[nChannel] )
@@ -1792,8 +1829,7 @@ cSampleManager::SetChannelVolume(uint32 nChannel, uint32 nVolume)
 			
 			// increase the volume for JB.MP3 and S4_BDBD.MP3
 			if (   MusicManager.GetMusicMode()    == MUSICMODE_CUTSCENE
-				&& MusicManager.GetNextTrack() != STREAMED_SOUND_NEWS_INTRO
-				&& MusicManager.GetNextTrack() != STREAMED_SOUND_CUTSCENE_SAL4_BDBD )
+				&& MusicManager.GetCurrentTrack() != STREAMED_SOUND_CUTSCENE_FINALE )
 			{
 				nChannelVolume[nChannel] >>= 2;
 			}
@@ -1993,7 +2029,7 @@ cSampleManager::StopChannel(uint32 nChannel)
 }
 
 void
-cSampleManager::PreloadStreamedFile(uint8 nFile, uint8 nStream)
+cSampleManager::PreloadStreamedFile(uint32 nFile, uint8 nStream)
 {
 	if ( m_bInitialised  )
 	{
@@ -2007,7 +2043,7 @@ cSampleManager::PreloadStreamedFile(uint8 nFile, uint8 nStream)
 			
 			char filepath[MAX_PATH];
 			
-			strcpy(filepath, m_szCDRomRootPath);
+			strcpy(filepath, nFile < STREAMED_SOUND_MISSION_COMPLETED4 ? m_MP3FilesPath : (nFile < STREAMED_SOUND_MISSION_MOBR1 ? m_MiscomPath : m_WavFilesPath));
 			strcat(filepath, StreamedNameTable[nFile]);
 			
 			mp3Stream[nStream] = AIL_open_stream(DIG, filepath, 0);
@@ -2044,7 +2080,7 @@ cSampleManager::StartPreloadedStreamedFile(uint8 nStream)
 }
 
 bool
-cSampleManager::StartStreamedFile(uint8 nFile, uint32 nPos, uint8 nStream)
+cSampleManager::StartStreamedFile(uint32 nFile, uint32 nPos, uint8 nStream)
 {
 	uint32 position = nPos;
 	char filename[MAX_PATH];
@@ -2073,14 +2109,15 @@ cSampleManager::StartStreamedFile(uint8 nFile, uint32 nPos, uint8 nStream)
 						if(mp3 == NULL) {
 							_bIsMp3Active = false;
 							nFile = 0;
-							strcpy(filename, m_szCDRomRootPath);
+							strcpy(filename, m_MiscomPath);
 							strcat(filename, StreamedNameTable[nFile]);
 
 							mp3Stream[nStream] =
 							    AIL_open_stream(DIG, filename, 0);
 							if(mp3Stream[nStream]) {
 								AIL_set_stream_loop_count(
-								    mp3Stream[nStream], 1);
+								    mp3Stream[nStream], nStreamLoopedFlag[nStream] ? 0 : 1);
+								nStreamLoopedFlag[nStream] = true;
 								AIL_set_stream_ms_position(
 								    mp3Stream[nStream], position);
 								AIL_pause_stream(mp3Stream[nStream],
@@ -2122,15 +2159,14 @@ cSampleManager::StartStreamedFile(uint8 nFile, uint32 nPos, uint8 nStream)
 					if ( e == NULL )
 					{
 						nFile = 0;
-						strcpy(filename, m_szCDRomRootPath);
+						strcpy(filename, m_MiscomPath);
 						strcat(filename, StreamedNameTable[nFile]);
 						mp3Stream[nStream] =
 						    AIL_open_stream(DIG, filename, 0);
 						if(mp3Stream[nStream]) {
-							AIL_set_stream_loop_count(
-							    mp3Stream[nStream], 1);
-							AIL_set_stream_ms_position(
-							    mp3Stream[nStream], position);
+							AIL_set_stream_loop_count(mp3Stream[nStream], nStreamLoopedFlag[nStream] ? 0 : 1);
+							nStreamLoopedFlag[nStream] = true;
+							AIL_set_stream_ms_position(mp3Stream[nStream], position);
 							AIL_pause_stream(mp3Stream[nStream], 0);
 							return true;
 						}
@@ -2168,13 +2204,14 @@ cSampleManager::StartStreamedFile(uint8 nFile, uint32 nPos, uint8 nStream)
 			nFile = 0;
 		}
 		
-		strcpy(filename, m_szCDRomRootPath);
+		strcpy(filename, m_MiscomPath);
 		strcat(filename, StreamedNameTable[nFile]);
 		
 		mp3Stream[nStream] = AIL_open_stream(DIG, filename, 0);
 		if ( mp3Stream[nStream] )
 		{
-			AIL_set_stream_loop_count(mp3Stream[nStream], 1);
+			AIL_set_stream_loop_count(mp3Stream[nStream], nStreamLoopedFlag[nStream] ? 0 : 1);
+			nStreamLoopedFlag[nStream] = true;
 			AIL_set_stream_ms_position(mp3Stream[nStream], position);
 			AIL_pause_stream(mp3Stream[nStream], 0);
 			return true;
@@ -2238,11 +2275,14 @@ void
 cSampleManager::SetStreamedVolumeAndPan(uint8 nVolume, uint8 nPan, uint8 nEffectFlag, uint8 nStream)
 {
 	uint8 vol = nVolume;
+	float boostMult = 0.0f;
 	
 	if ( m_bInitialised )
 	{
 		if ( vol > MAX_VOLUME ) vol = MAX_VOLUME;
-		if ( vol > MAX_VOLUME ) vol = MAX_VOLUME;
+		
+		if ( MusicManager.GetRadioInCar() == USERTRACK && !MusicManager.CheckForMusicInterruptions() )
+			boostMult = m_nMP3BoostVolume / 64.f;
 		
 		nStreamVolume[nStream] = vol;
 		nStreamPan[nStream]    = nPan;
@@ -2250,9 +2290,14 @@ cSampleManager::SetStreamedVolumeAndPan(uint8 nVolume, uint8 nPan, uint8 nEffect
 		if ( mp3Stream[nStream] )
 		{
 			if ( nEffectFlag )
-				AIL_set_stream_volume(mp3Stream[nStream], m_nEffectsFadeVolume*vol*m_nEffectsVolume >> 14);
+			{
+				if ( nStream == 1 || nStream == 2 )
+					AIL_set_stream_volume(mp3Stream[nStream], 128*vol*m_nEffectsVolume >> 14);
+				else
+					AIL_set_stream_volume(mp3Stream[nStream], m_nEffectsFadeVolume*vol*m_nEffectsVolume >> 14);
+			}
 			else
-				AIL_set_stream_volume(mp3Stream[nStream], m_nMusicFadeVolume*vol*m_nMusicVolume >> 14);
+				AIL_set_stream_volume(mp3Stream[nStream], (m_nMusicFadeVolume*vol*(uint32)(m_nMusicVolume * boostMult + m_nMusicVolume)) >> 14);
 			
 			AIL_set_stream_pan(mp3Stream[nStream], nPan);
 		}
@@ -2328,6 +2373,14 @@ cSampleManager::InitialiseSampleBanks(void)
 	nSampleBankSize[SFX_BANK_PED_COMMENTS] = _nSampleDataEndOffset                       - nSampleBankDiscStartOffset[SFX_BANK_PED_COMMENTS];
 	
 	return true;
+}
+
+
+void
+cSampleManager::SetStreamedFileLoopFlag(uint8 nLoopFlag, uint8 nChannel)
+{
+	if (m_bInitialised)
+		nStreamLoopedFlag[nChannel] = nLoopFlag;
 }
 
 #endif

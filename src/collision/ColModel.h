@@ -9,14 +9,14 @@
 
 struct CColModel
 {
-	CColSphere boundingSphere;
-	CColBox boundingBox;
+	CSphere boundingSphere;
+	CBox boundingBox;
 	int16 numSpheres;
-	int16 numLines;
 	int16 numBoxes;
 	int16 numTriangles;
-	int32 level;
-	bool ownsCollisionVolumes;	// missing on PS2
+	int8 numLines;
+	uint8 level;	// colstore slot but probably still named level
+	bool ownsCollisionVolumes;
 	CColSphere *spheres;
 	CColLine *lines;
 	CColBox *boxes;
@@ -33,5 +33,7 @@ struct CColModel
 	void SetLinkPtr(CLink<CColModel*>*);
 	void GetTrianglePoint(CVector &v, int i) const;
 
+	void *operator new(size_t);
+	void operator delete(void *p, size_t);
 	CColModel& operator=(const CColModel& other);
 };

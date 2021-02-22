@@ -4,7 +4,7 @@
 #include "stream.h"
 #include "sampman.h"
 
-#if defined _MSC_VER && !defined RE3_NO_AUTOLINK
+#if defined _MSC_VER && !defined CMAKE_NO_AUTOLINK
 #ifdef AUDIO_OAL_USE_SNDFILE
 #pragma comment( lib, "libsndfile-1.lib" )
 #endif
@@ -469,10 +469,17 @@ public:
 
 class CMP3File : public IDecoder
 {
+protected:
 	mpg123_handle *m_pMH;
 	bool m_bOpened;
 	uint32 m_nRate;
 	uint32 m_nChannels;
+	
+	CMP3File() :
+		m_pMH(nil),
+		m_bOpened(false),
+		m_nRate(0),
+		m_nChannels(0) {}
 public:
 	CMP3File(const char *path) :
 		m_pMH(nil),
@@ -565,6 +572,54 @@ public:
 		if (GetChannels() == 2)
 			SortStereoBuffer.SortStereo(buffer, size);
 		return (uint32)size;
+	}
+};
+
+class CADFFile : public CMP3File
+{
+	static ssize_t r_read(void* fh, void* buf, size_t size)
+	{
+		size_t bytesRead = fread(buf, 1, size, (FILE*)fh);
+		uint8* _buf = (uint8*)buf;
+		for (size_t i = 0; i < size; i++)
+			_buf[i] ^= 0x22;
+		return bytesRead;
+	}
+	static off_t r_seek(void* fh, off_t pos, int seekType)
+	{
+		fseek((FILE*)fh, pos, seekType);
+		return ftell((FILE*)fh);
+	}
+	static void r_close(void* fh)
+	{
+		fclose((FILE*)fh);
+	}
+public:
+	CADFFile(const char* path)
+	{
+		m_pMH = mpg123_new(nil, nil);
+		if (m_pMH)
+		{
+#ifdef MP3_USE_FUZZY_SEEK
+			mpg123_param(m_pMH, MPG123_FLAGS, MPG123_FUZZY | MPG123_SEEKBUFFER | MPG123_GAPLESS | MPG123_QUIET, 0.0);
+#endif
+			long rate = 0;
+			int channels = 0;
+			int encoding = 0;
+
+			FILE* f = fopen(path, "rb");
+
+			m_bOpened = mpg123_replace_reader_handle(m_pMH, r_read, r_seek, r_close) == MPG123_OK
+				&& mpg123_open_handle(m_pMH, f) == MPG123_OK &&  mpg123_getformat(m_pMH, &rate, &channels, &encoding) == MPG123_OK;
+			m_nRate = rate;
+			m_nChannels = channels;
+
+			if (IsOpened())
+			{
+				mpg123_format_none(m_pMH);
+				mpg123_format(m_pMH, rate, channels, encoding);
+			}
+		}
 	}
 };
 
@@ -954,6 +1009,8 @@ CStream::CStream(char *filename, ALuint *sources, ALuint (&buffers)[NUM_STREAMBU
 #ifdef AUDIO_OAL_USE_MPG123
 	else if (!strcasecmp(&m_aFilename[strlen(m_aFilename) - strlen(".mp3")], ".mp3"))
 		m_pSoundFile = new CMP3File(m_aFilename);
+	else if (!strcasecmp(&m_aFilename[strlen(m_aFilename) - strlen(".adf")], ".adf"))
+		m_pSoundFile = new CADFFile(m_aFilename);
 #endif
 	else if (!strcasecmp(&m_aFilename[strlen(m_aFilename) - strlen(".vb")], ".VB"))
 		m_pSoundFile = new CVbFile(m_aFilename, overrideSampleRate);
@@ -1136,9 +1193,9 @@ bool CStream::FillBuffer(ALuint *alBuffer)
 	uint32 size = m_pSoundFile->Decode(m_pBuffer);
 	if( size == 0 )
 		return false;
-
-	uint32 channelSize = size / m_pSoundFile->GetChannels();
 	
+	uint32 channelSize = size / m_pSoundFile->GetChannels();
+
 	alBufferData(alBuffer[0], AL_FORMAT_MONO16, m_pBuffer, channelSize, m_pSoundFile->GetSampleRate());
 	// TODO: use just one buffer if we play mono
 	if (m_pSoundFile->GetChannels() == 1)
@@ -1165,7 +1222,7 @@ int32 CStream::FillBuffers()
 void CStream::ClearBuffers()
 {
 	if ( !HasSource() ) return;
-
+	
 	ALint buffersQueued[2];
 	alGetSourcei(m_pAlSources[0], AL_BUFFERS_QUEUED, &buffersQueued[0]);
 	alGetSourcei(m_pAlSources[1], AL_BUFFERS_QUEUED, &buffersQueued[1]);
@@ -1221,7 +1278,7 @@ void CStream::SetPlay(bool state)
 	{
 		ALint sourceState = AL_STOPPED;
 		alGetSourcei(m_pAlSources[0], AL_SOURCE_STATE, &sourceState);
-		if (sourceState != AL_STOPPED)
+		if (sourceState != AL_STOPPED )
 			alSourceStop(m_pAlSources[0]);
 
 		sourceState = AL_STOPPED;
