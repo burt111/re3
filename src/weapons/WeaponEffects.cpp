@@ -3,9 +3,11 @@
 #include "WeaponEffects.h"
 #include "TxdStore.h"
 #include "Sprite.h"
+#include "PlayerPed.h"
+#include "World.h"
+#include "WeaponType.h"
 
 RwTexture *gpCrossHairTex;
-RwRaster *gpCrossHairRaster;
 
 CWeaponEffects gCrossHair;
 
@@ -24,10 +26,10 @@ CWeaponEffects::Init(void)
 {
 	gCrossHair.m_bActive = false;
 	gCrossHair.m_vecPos = CVector(0.0f, 0.0f, 0.0f);
-	gCrossHair.m_nRed = 0;
+	gCrossHair.m_nRed = 255;
 	gCrossHair.m_nGreen = 0;
 	gCrossHair.m_nBlue = 0;
-	gCrossHair.m_nAlpha = 255;
+	gCrossHair.m_nAlpha = 127;
 	gCrossHair.m_fSize = 1.0f;
 	gCrossHair.m_fRotation = 0.0f;
 	
@@ -36,8 +38,7 @@ CWeaponEffects::Init(void)
 	int32 slot = CTxdStore::FindTxdSlot("particle");
 	CTxdStore::SetCurrentTxd(slot);
 	
-	gpCrossHairTex    = RwTextureRead("crosshair", nil);
-	gpCrossHairRaster = RwTextureGetRaster(gpCrossHairTex);
+	gpCrossHairTex    = RwTextureRead("target256", "target256m");
 	
 	CTxdStore::PopCurrentTxd();
 }
@@ -46,9 +47,7 @@ void
 CWeaponEffects::Shutdown(void)
 {
 	RwTextureDestroy(gpCrossHairTex);
-#if GTA_VERSION >= GTA3_PC_11
 	gpCrossHairTex = nil;
-#endif
 }
 
 void
@@ -56,10 +55,6 @@ CWeaponEffects::MarkTarget(CVector pos, uint8 red, uint8 green, uint8 blue, uint
 {
 	gCrossHair.m_bActive = true;
 	gCrossHair.m_vecPos = pos;
-	gCrossHair.m_nRed = red;
-	gCrossHair.m_nGreen = green;
-	gCrossHair.m_nBlue = blue;
-	gCrossHair.m_nAlpha = alpha;
 	gCrossHair.m_fSize = size;
 }
 
@@ -72,28 +67,62 @@ CWeaponEffects::ClearCrossHair(void)
 void
 CWeaponEffects::Render(void)
 {
+	static float aCrossHairSize[WEAPONTYPE_TOTALWEAPONS] =
+	{
+		1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+		0.4f, 0.4f,
+		0.5f,
+		0.3f,
+		0.9f, 0.9f, 0.9f,
+		0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+		0.1f, 0.1f,
+		1.0f,
+		0.6f,
+		0.7f,
+		0.0f, 0.0f
+	};
+
+
+
 	if ( gCrossHair.m_bActive )
 	{
+		float size = aCrossHairSize[FindPlayerPed()->GetWeapon()->m_eWeaponType];
+		
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE,      (void *)FALSE);
+		RwRenderStateSet(rwRENDERSTATEZTESTENABLE,       (void *)FALSE);
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void *)TRUE);
-		RwRenderStateSet(rwRENDERSTATESRCBLEND,          (void *)rwBLENDONE);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND,         (void *)rwBLENDONE);
-		RwRenderStateSet(rwRENDERSTATETEXTURERASTER,     (void *)gpCrossHairRaster);
+		RwRenderStateSet(rwRENDERSTATESRCBLEND,          (void *)rwBLENDSRCALPHA);
+#ifdef FIX_BUGS
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND,         (void *)rwBLENDINVSRCALPHA);
+#else
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND,         (void *)rwBLENDINVDESTALPHA);
+#endif
+		RwRenderStateSet(rwRENDERSTATETEXTURERASTER,     (void *)RwTextureGetRaster(gpCrossHairTex));
 
 		RwV3d pos;
 		float w, h;
 		if ( CSprite::CalcScreenCoors(gCrossHair.m_vecPos, &pos, &w, &h, true) )
 		{
 			float recipz = 1.0f / pos.z;
-			CSprite::RenderOneXLUSprite(pos.x, pos.y, pos.z,
-				gCrossHair.m_fSize * w, gCrossHair.m_fSize * h,
-				gCrossHair.m_nRed, gCrossHair.m_nGreen, gCrossHair.m_nBlue, 255,
-				recipz, 255);
+			CSprite::RenderOneXLUSprite_Rotate_Aspect(pos.x, pos.y, pos.z,
+				w, h,
+				255, 88, 100, 158,
+				recipz, gCrossHair.m_fRotation, gCrossHair.m_nAlpha);
+				
+			float recipz2 = 1.0f / pos.z;
+			
+			CSprite::RenderOneXLUSprite_Rotate_Aspect(pos.x, pos.y, pos.z,
+				size*w, size*h,
+				107, 134, 247, 158,
+				recipz2, TWOPI - gCrossHair.m_fRotation, gCrossHair.m_nAlpha);
+						
+			gCrossHair.m_fRotation += 0.02f;
+			if ( gCrossHair.m_fRotation > TWOPI )
+				gCrossHair.m_fRotation = 0.0;
 		}
-		
+			
 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void *)FALSE);
-		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE,      (void *)FALSE);
-		RwRenderStateSet(rwRENDERSTATESRCBLEND,          (void *)rwBLENDSRCALPHA);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND,         (void *)rwBLENDINVSRCALPHA);
+		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE,      (void *)TRUE);
+		RwRenderStateSet(rwRENDERSTATEZTESTENABLE,       (void *)TRUE);
 	}
 }

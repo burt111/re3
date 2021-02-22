@@ -3,6 +3,7 @@
 #include "CarGen.h"
 
 #include "Automobile.h"
+#include "Bike.h"
 #include "Boat.h"
 #include "Camera.h"
 #include "CarCtrl.h"
@@ -12,7 +13,10 @@
 #include "Streaming.h"
 #include "Timer.h"
 #include "Vehicle.h"
+#include "VisibilityPlugins.h"
 #include "World.h"
+#include "Zones.h"
+#include "Occlusion.h"
 
 uint8 CTheCarGenerators::ProcessCounter;
 uint32 CTheCarGenerators::NumOfCarGenerators;
@@ -45,42 +49,50 @@ uint32 CCarGenerator::CalcNextGen()
 
 void CCarGenerator::DoInternalProcessing()
 {
-	if (CheckForBlockage()) {
-		m_nTimer += 4;
-		if (m_nUsesRemaining == 0)
-			--CTheCarGenerators::CurrentActiveCount;
-		return;
-	}
+	int mi;
 	if (CCarCtrl::NumParkedCars >= 10)
 		return;
-	CStreaming::RequestModel(m_nModelIndex, STREAMFLAGS_DEPENDENCY);
-	if (!CStreaming::HasModelLoaded(m_nModelIndex))
+	if (m_nModelIndex >= 0) {
+		if (CheckForBlockage(m_nModelIndex)) {
+			m_nTimer += 4;
+			return;
+		}
+		CStreaming::RequestModel(m_nModelIndex, STREAMFLAGS_DEPENDENCY);
+		mi = m_nModelIndex;
+	}
+	else {
+		mi = -m_nModelIndex;
+		if (m_nModelIndex == -1 || !CStreaming::HasModelLoaded(mi)) {
+			CZoneInfo pZone;
+			CVector pos = FindPlayerCoors();
+			CTheZones::GetZoneInfoForTimeOfDay(&pos, &pZone);
+			mi = CCarCtrl::ChooseCarModel(CCarCtrl::ChooseCarRating(&pZone));
+			if (mi < 0)
+				return;
+			m_nModelIndex = -mi;
+			m_nColor1 = -1;
+			m_nColor2 = -1;
+		}
+		if (CheckForBlockage(mi)) {
+			m_nTimer += 4;
+			return;
+		}
+	}
+	if (!CStreaming::HasModelLoaded(mi))
 		return;
-	if (CModelInfo::IsBoatModel(m_nModelIndex)){
-		CBoat* pBoat = new CBoat(m_nModelIndex, PARKED_VEHICLE);
-		pBoat->SetIsStatic(false);
-		pBoat->bEngineOn = false;
-		CVector pos = m_vecPos;
+	CVehicle* pVehicle;
+
+	CVector pos;
+	if (CModelInfo::IsBoatModel(mi)){
+		CBoat* pBoat = new CBoat(mi, PARKED_VEHICLE);
+		pos = m_vecPos;
+		pVehicle = pBoat;
 		if (pos.z <= -100.0f)
 			pos.z = CWorld::FindGroundZForCoord(pos.x, pos.y);
-		pos.z += pBoat->GetDistanceFromCentreOfMassToBaseOfModel();
-		pBoat->SetPosition(pos);
-		pBoat->SetOrientation(0.0f, 0.0f, DEGTORAD(m_fAngle));
-		pBoat->SetStatus(STATUS_ABANDONED);
-		pBoat->m_nDoorLock = CARLOCK_UNLOCKED;
-		CWorld::Add(pBoat);
-		if (CGeneral::GetRandomNumberInRange(0, 100) < m_nAlarm)
-			pBoat->m_nAlarmState = -1;
-		if (CGeneral::GetRandomNumberInRange(0, 100) < m_nDoorlock)
-			pBoat->m_nDoorLock = CARLOCK_LOCKED;
-		if (m_nColor1 != -1 && m_nColor2){
-			pBoat->m_currentColour1 = m_nColor1;
-			pBoat->m_currentColour2 = m_nColor2;
-		}
-		m_nVehicleHandle = CPools::GetVehiclePool()->GetIndex(pBoat);
+		pBoat->bExtendedRange = true;
 	}else{
 		bool groundFound;
-		CVector pos = m_vecPos;
+		pos = m_vecPos;
 		if (pos.z > -100.0f){
 			pos.z = CWorld::FindGroundZFor3DCoord(pos.x, pos.y, pos.z, &groundFound);
 		}else{
@@ -94,33 +106,43 @@ void CCarGenerator::DoInternalProcessing()
 		}
 		if (!groundFound) {
 			debug("CCarGenerator::DoInternalProcessing - can't find ground z for new car x = %f y = %f \n", m_vecPos.x, m_vecPos.y);
-		}else{
-			CAutomobile* pCar;
-
-			// So game crashes if it's bike :D
-			if (((CVehicleModelInfo*)CModelInfo::GetModelInfo(m_nModelIndex))->m_vehicleType != VEHICLE_TYPE_BIKE)
-				pCar = new CAutomobile(m_nModelIndex, PARKED_VEHICLE);
-
-			pCar->SetIsStatic(false);
-			pCar->bEngineOn = false;
-			pos.z += pCar->GetDistanceFromCentreOfMassToBaseOfModel();
-			pCar->SetPosition(pos);
-			pCar->SetOrientation(0.0f, 0.0f, DEGTORAD(m_fAngle));
-			pCar->SetStatus(STATUS_ABANDONED);
-			pCar->bLightsOn = false;
-			pCar->m_nDoorLock = CARLOCK_UNLOCKED;
-			CWorld::Add(pCar);
-			if (CGeneral::GetRandomNumberInRange(0, 100) < m_nAlarm)
-				pCar->m_nAlarmState = -1;
-			if (CGeneral::GetRandomNumberInRange(0, 100) < m_nDoorlock)
-				pCar->m_nDoorLock = CARLOCK_LOCKED;
-			if (m_nColor1 != -1 && m_nColor2) {
-				pCar->m_currentColour1 = m_nColor1;
-				pCar->m_currentColour2 = m_nColor2;
-			}
-			m_nVehicleHandle = CPools::GetVehiclePool()->GetIndex(pCar);
+			return;
 		}
+		if (((CVehicleModelInfo*)CModelInfo::GetModelInfo(mi))->m_vehicleType == VEHICLE_TYPE_BIKE) {
+			CBike* pBike = new CBike(mi, PARKED_VEHICLE);
+			pBike->bIsStanding = true;
+			pVehicle = pBike;
+		}
+		else {
+			CAutomobile* pCar = new CAutomobile(mi, PARKED_VEHICLE);
+			pVehicle = pCar;
+		}
+		// pVehicle->GetDistanceFromCentreOfMassToBaseOfModel();
+		pVehicle->bLightsOn = false;
 	}
+	pVehicle->bIsStatic = false;
+	pVehicle->bEngineOn = false;
+	pos.z += pVehicle->GetDistanceFromCentreOfMassToBaseOfModel();
+	pVehicle->SetPosition(pos);
+	pVehicle->SetOrientation(0.0f, 0.0f, DEGTORAD(m_fAngle));
+	pVehicle->SetStatus(STATUS_ABANDONED);
+	pVehicle->m_nDoorLock = CARLOCK_UNLOCKED;
+	CWorld::Add(pVehicle);
+	if (CGeneral::GetRandomNumberInRange(0, 100) < m_nAlarm)
+		pVehicle->m_nAlarmState = -1;
+	if (CGeneral::GetRandomNumberInRange(0, 100) < m_nDoorlock)
+		pVehicle->m_nDoorLock = CARLOCK_LOCKED;
+	if (m_nColor1 != -1 && m_nColor2 != -1) {
+		pVehicle->m_currentColour1 = m_nColor1;
+		pVehicle->m_currentColour2 = m_nColor2;
+	}
+	else if (m_nModelIndex < -1) {
+		m_nColor1 = pVehicle->m_currentColour1;
+		m_nColor2 = pVehicle->m_currentColour2;
+	}
+	CVisibilityPlugins::SetClumpAlpha(pVehicle->GetClump(), 0);
+	m_nVehicleHandle = CPools::GetVehiclePool()->GetIndex(pVehicle);
+	/* I don't think this is a correct comparasion */
 #ifdef FIX_BUGS
 	if (m_nUsesRemaining < UINT16_MAX)
 		--m_nUsesRemaining;
@@ -137,7 +159,7 @@ void CCarGenerator::Process()
 {
 	if (m_nVehicleHandle == -1 && 
 		(CTheCarGenerators::GenerateEvenIfPlayerIsCloseCounter || CTimer::GetTimeInMilliseconds() >= m_nTimer) &&
-		m_nUsesRemaining != 0 && CheckIfWithinRangeOfAnyPlayer())
+		m_nUsesRemaining != 0 && CheckIfWithinRangeOfAnyPlayers())
 		DoInternalProcessing();
 	if (m_nVehicleHandle == -1)
 		return;
@@ -152,6 +174,8 @@ void CCarGenerator::Process()
 	m_nVehicleHandle = -1;
 	m_bIsBlocking = true;
 	pVehicle->bExtendedRange = false;
+	if (m_nModelIndex < 0)
+		m_nModelIndex = -1;
 }
 
 void CCarGenerator::Setup(float x, float y, float z, float angle, int32 mi, int16 color1, int16 color2, uint8 force, uint8 alarm, uint8 lock, uint16 min_delay, uint16 max_delay)
@@ -171,25 +195,33 @@ void CCarGenerator::Setup(float x, float y, float z, float angle, int32 mi, int1
 	m_nTimer = CTimer::GetTimeInMilliseconds() + 1;
 	m_nUsesRemaining = 0;
 	m_bIsBlocking = false;
-	m_vecInf = CModelInfo::GetModelInfo(m_nModelIndex)->GetColModel()->boundingBox.min;
-	m_vecSup = CModelInfo::GetModelInfo(m_nModelIndex)->GetColModel()->boundingBox.max;
-	m_fSize = Max(m_vecInf.Magnitude(), m_vecSup.Magnitude());
 }
 
-bool CCarGenerator::CheckForBlockage()
+bool CCarGenerator::CheckForBlockage(int32 mi)
 {
 	int16 entities;
-	CWorld::FindObjectsKindaColliding(CVector(m_vecPos), m_fSize, 1, &entities, 2, nil, false, true, true, false, false);
-	return entities > 0;
+	CEntity* pEntities[8];
+	CColModel* pColModel = CModelInfo::GetModelInfo(mi)->GetColModel();
+	CWorld::FindObjectsKindaColliding(CVector(m_vecPos), pColModel->boundingSphere.radius, 1, &entities, 8, pEntities, false, true, true, false, false);
+	for (int i = 0; i < entities; i++) {
+		if (m_vecPos.z + pColModel->boundingBox.min.z < pEntities[i]->GetPosition().z + pEntities[i]->GetColModel()->boundingBox.max.z + 1.0f &&
+			m_vecPos.z + pColModel->boundingBox.max.z > pEntities[i]->GetPosition().z + pEntities[i]->GetColModel()->boundingBox.min.z - 1.0f) {
+			m_bIsBlocking = true;
+			return true;
+		}
+	}
+	return false;
 }
 
-bool CCarGenerator::CheckIfWithinRangeOfAnyPlayer()
+bool CCarGenerator::CheckIfWithinRangeOfAnyPlayers()
 {
 	CVector2D direction = FindPlayerCentreOfWorld(CWorld::PlayerInFocus) - m_vecPos;
 	float distance = direction.Magnitude();
-	float farclip = 120.0f * TheCamera.GenerationDistMultiplier;
+	float farclip = 110.0f * TheCamera.GenerationDistMultiplier;
 	float nearclip = farclip - 20.0f;
-	if (distance >= farclip){
+	bool canBeRemoved = (m_nModelIndex > 0 && CModelInfo::IsBoatModel(m_nModelIndex) && 165.0f * TheCamera.GenerationDistMultiplier > distance &&
+		TheCamera.IsSphereVisible(m_vecPos, 0.0f) && !COcclusion::IsPositionOccluded(m_vecPos, 0.0f)); 
+	if (distance >= farclip && !canBeRemoved){
 		if (m_bIsBlocking)
 			m_bIsBlocking = false;
 		return false;
@@ -198,7 +230,7 @@ bool CCarGenerator::CheckIfWithinRangeOfAnyPlayer()
 		return true;
 	if (m_bIsBlocking)
 		return false;
-	if (distance < nearclip)
+	if (distance < nearclip && !m_bForceSpawn)
 		return false;
 	return DotProduct2D(direction, FindPlayerSpeed()) <= 0;
 }
@@ -217,8 +249,9 @@ void CTheCarGenerators::Process()
 
 int32 CTheCarGenerators::CreateCarGenerator(float x, float y, float z, float angle, int32 mi, int16 color1, int16 color2, uint8 force, uint8 alarm, uint8 lock, uint16 min_delay, uint16 max_delay)
 {
-	CarGeneratorArray[NumOfCarGenerators].Setup(x, y, z, angle, mi, color1, color2, force, alarm, lock, min_delay, max_delay);
-	return NumOfCarGenerators++;
+	if (NumOfCarGenerators < NUM_CARGENS)
+		CarGeneratorArray[NumOfCarGenerators++].Setup(x, y, z, angle, mi, color1, color2, force, alarm, lock, min_delay, max_delay);
+	return NumOfCarGenerators - 1;
 }
 
 void CTheCarGenerators::Init()
@@ -250,6 +283,11 @@ VALIDATESAVEBUF(*size)
 
 void CTheCarGenerators::LoadAllCarGenerators(uint8* buffer, uint32 size)
 {
+	NumOfCarGenerators = 0;
+	GenerateEvenIfPlayerIsCloseCounter = 0;
+	CurrentActiveCount = 0;
+	ProcessCounter = 0;
+
 	const int32 nGeneralDataSize = sizeof(NumOfCarGenerators) + sizeof(CurrentActiveCount) + sizeof(ProcessCounter) + sizeof(GenerateEvenIfPlayerIsCloseCounter) + sizeof(int16);
 	Init();
 INITSAVEBUF

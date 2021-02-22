@@ -3,32 +3,9 @@
 #include "Vehicle.h"
 #include "DamageManager.h"
 #include "Door.h"
+#include "Skidmarks.h"
 
 class CObject;
-
-enum eCarNodes
-{
-	CAR_WHEEL_RF = 1,
-	CAR_WHEEL_RM,
-	CAR_WHEEL_RB,
-	CAR_WHEEL_LF,
-	CAR_WHEEL_LM,
-	CAR_WHEEL_LB,
-	CAR_BUMP_FRONT,
-	CAR_BUMP_REAR,
-	CAR_WING_RF,
-	CAR_WING_RR,
-	CAR_DOOR_RF,
-	CAR_DOOR_RR,
-	CAR_WING_LF,
-	CAR_WING_LR,
-	CAR_DOOR_LF,
-	CAR_DOOR_LR,
-	CAR_BONNET,
-	CAR_BOOT,
-	CAR_WINDSCREEN,
-	NUM_CAR_NODES,
-};
 
 enum {
 	CARWHEEL_FRONT_LEFT,
@@ -37,28 +14,10 @@ enum {
 	CARWHEEL_REAR_RIGHT
 };
 
-enum eBombType
-{
-	CARBOMB_NONE,
-	CARBOMB_TIMED,
-	CARBOMB_ONIGNITION,
-	CARBOMB_REMOTE,
-	CARBOMB_TIMEDACTIVE,
-	CARBOMB_ONIGNITIONACTIVE,
-};
-
-enum {
-	CAR_DOOR_FLAG_UNKNOWN = 0x0,
-	CAR_DOOR_FLAG_LF = 0x1,
-	CAR_DOOR_FLAG_LR = 0x2,
-	CAR_DOOR_FLAG_RF = 0x4,
-	CAR_DOOR_FLAG_RR = 0x8
-};
 
 class CAutomobile : public CVehicle
 {
 public:
-	// 0x288
 	CDamageManager Damage;
 	CDoor Doors[6];
 	RwFrame *m_aCarNodes[NUM_CAR_NODES];
@@ -67,22 +26,29 @@ public:
 	float m_aSuspensionSpringRatioPrev[4];
 	float m_aWheelTimer[4];		// set to 4.0 when wheel is touching ground, then decremented
 	float m_auto_unused1;
-	bool m_aWheelSkidmarkMuddy[4];
+	eSkidmarkType m_aWheelSkidmarkType[4];
 	bool m_aWheelSkidmarkBloody[4];
+	bool m_aWheelSkidmarkUnk[4];
 	float m_aWheelRotation[4];
 	float m_aWheelPosition[4];
 	float m_aWheelSpeed[4];
 	uint8 m_auto_unused2;
+#if (defined GTA_PS2 && !defined FIX_BUGS)
 	uint8 m_bombType : 3;
+#endif
 	uint8 bTaxiLight : 1;
-	uint8 bDriverLastFrame  : 1;		// for bombs
 	uint8 bFixedColour : 1;
 	uint8 bBigWheels : 1;
 	uint8 bWaterTight : 1;	// no damage for non-player peds
 	uint8 bNotDamagedUpsideDown : 1;
 	uint8 bMoreResistantToDamage : 1;
-	CEntity *m_pBombRigger;
-	int16 m_auto_unk1;
+	uint8 bTankDetonateCars : 1;
+	uint8 bStuckInSand : 1;
+	uint8 bHeliDestroyed : 1;
+#if (defined GTA_PS2 && !defined FIX_BUGS)
+	CEntity* m_pBombRigger;
+#endif
+	int16 m_doingBurnout;
 	uint16 m_hydraulicState;
 	uint32 m_nBusDoorTimerEnd;
 	uint32 m_nBusDoorTimerStart;
@@ -90,6 +56,9 @@ public:
 	float m_aSuspensionLineLength[4];
 	float m_fHeightAboveRoad;
 	float m_fTraction;
+	float m_fTireTemperature;
+	float m_fOrientation;	// for heli and plane go-to
+	float m_fPlaneSteer;	// related to the above
 	float m_fVelocityChangeForAudio;
 	float m_randomValues[6];	// used for what?
 	float m_fFireBlowUpTimer;
@@ -100,6 +69,7 @@ public:
 	float m_weaponDoorTimerRight;
 	float m_fCarGunLR;
 	float m_fCarGunUD;
+	float m_fHeliOrientation;
 	float m_fPropellerRotation;
 	uint8 stuff4[4];
 	uint8 m_nWheelsOnGround;
@@ -133,10 +103,13 @@ public:
 	bool IsDoorFullyOpen(eDoors door);
 	bool IsDoorClosed(eDoors door);
 	bool IsDoorMissing(eDoors door);
+	bool IsDoorReady(uint32 door);
+	bool IsDoorMissing(uint32 door);
+	bool IsOpenTopCar(void);
 	void RemoveRefsToVehicle(CEntity *ent);
 	void BlowUpCar(CEntity *ent);
 	bool SetUpWheelColModel(CColModel *colModel);
-	void BurstTyre(uint8 tyre);
+	void BurstTyre(uint8 tyre, bool applyForces);
 	bool IsRoomForPedToLeaveCar(uint32 component, CVector *doorOffset);
 	float GetHeightAboveRoad(void);
 	void PlayCarHorn(void);
@@ -147,6 +120,7 @@ public:
 	void VehicleDamage(float impulse, uint16 damagedPiece);
 	void ProcessBuoyancy(void);
 	void DoDriveByShootings(void);
+	void DoHoverSuspensionRatios(void);
 	int32 RcbanditCheckHitWheels(void);
 	int32 RcbanditCheck1CarWheels(CPtrList &list);
 	void PlaceOnRoadProperly(void);
@@ -169,6 +143,11 @@ public:
 	void SetBumperDamage(int32 component, ePanels panel, bool noFlyingComponents = false);
 	void SetDoorDamage(int32 component, eDoors door, bool noFlyingComponents = false);
 
+	void TellHeliToGoToCoors(float x, float y, float z, uint8 speed);
+	void TellPlaneToGoToCoors(float x, float y, float z, uint8 speed);
+	void SetHeliOrientation(float orient) { m_fHeliOrientation = orient; }
+	void ClearHeliOrientation(void) { m_fHeliOrientation = -1.0f; }
+
 	void Fix(void);
 	void SetComponentVisibility(RwFrame *frame, uint32 flags);
 	void SetupModelNodes(void);
@@ -177,6 +156,12 @@ public:
 	void HideAllComps(void);
 	void ShowAllComps(void);
 	void ReduceHornCounter(void);
+
+	void PopBoot(void);
+	void PopBootUsingPhysics(void);
+	void CloseAllDoors(void);
+	void KnockPedOutCar(eWeaponType weapon, uint16 door, CPed *ped);
+
 #ifdef COMPATIBLE_SAVES
 	virtual void Save(uint8*& buf);
 	virtual void Load(uint8*& buf);
@@ -186,19 +171,5 @@ public:
 	static void SetAllTaxiLights(bool set);
 };
 
-VALIDATE_SIZE(CAutomobile, 0x5A8);
-
-inline uint8 GetCarDoorFlag(int32 carnode) {
-	switch (carnode) {
-	case CAR_DOOR_LF:
-		return CAR_DOOR_FLAG_LF;
-	case CAR_DOOR_LR:
-		return CAR_DOOR_FLAG_LR;
-	case CAR_DOOR_RF:
-		return CAR_DOOR_FLAG_RF;
-	case CAR_DOOR_RR:
-		return CAR_DOOR_FLAG_RR;
-	default:
-		return CAR_DOOR_FLAG_UNKNOWN;
-	}
-}
+extern CVector vecHunterGunPos;
+extern bool bAllCarCheat;

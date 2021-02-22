@@ -23,6 +23,7 @@
 #include "WeaponInfo.h"
 #include "World.h"
 #include "SurfaceTable.h"
+#include "Heli.h"
 
 #ifdef SQUEEZE_PERFORMANCE
 uint32 bulletInfoInUse;
@@ -32,9 +33,14 @@ uint32 bulletInfoInUse;
 #define NUM_PED_BLOOD_PARTICLES (8)
 #define BLOOD_PARTICLE_OFFSET (CVector(0.0f, 0.0f, 0.0f))
 #define NUM_VEHICLE_SPARKS (16)
+#define NUM_TYRE_POP_SMOKES (4)
 #define NUM_OTHER_SPARKS (8)
 #define BULLET_HIT_FORCE (7.5f)
-#define MAP_BORDER (1960.0f)
+
+#define BULLET_BOUNDARY_MIN_X -2400.0f
+#define BULLET_BOUNDARY_MAX_X 1600.0f
+#define BULLET_BOUNDARY_MIN_Y -2000.0f
+#define BULLET_BOUNDARY_MAX_Y 2000.0f
 
 CBulletInfo gaBulletInfo[CBulletInfo::NUM_BULLETS];
 bool bPlayerSniperBullet;
@@ -91,7 +97,6 @@ void CBulletInfo::Update(void)
 	if (bulletInfoInUse == 0)
 		return;
 #endif
-	bool bAddSound = true;
 	bPlayerSniperBullet = false;
 	for (int i = 0; i < NUM_BULLETS; i++) {
 		CBulletInfo* pBullet = &gaBulletInfo[i];
@@ -107,34 +112,35 @@ void CBulletInfo::Update(void)
 		}
 		CVector vecOldPos = pBullet->m_vecPosition;
 		CVector vecNewPos = pBullet->m_vecPosition + pBullet->m_vecSpeed * CTimer::GetTimeStep() * 0.5f;
-		CWorld::bIncludeCarTyres = true;
+
+		if ( vecNewPos.x <= BULLET_BOUNDARY_MIN_X || vecNewPos.x >= BULLET_BOUNDARY_MAX_X || vecNewPos.y <= BULLET_BOUNDARY_MIN_Y || vecNewPos.y >= BULLET_BOUNDARY_MAX_Y ) {
+			pBullet->m_bInUse = false;
+			continue;
+		}
 		CWorld::bIncludeDeadPeds = true;
+		CWorld::bIncludeBikers = true;
+		CWorld::bIncludeCarTyres = true;
 		CWorld::pIgnoreEntity = pBullet->m_pSource;
 		CColPoint point;
 		CEntity* pHitEntity;
-		if (CWorld::ProcessLineOfSight(vecOldPos, vecNewPos, point, pHitEntity, true, true, true, true, true, true)) {
-			if (pBullet->m_pSource && (pHitEntity->IsPed() || pHitEntity->IsVehicle()))
-				CStats::InstantHitsHitByPlayer++;
+		if (CWorld::ProcessLineOfSight(vecOldPos, vecNewPos, point, pHitEntity, true, true, true, true, true, false, false, true)) {
+
+			CWeapon::CheckForShootingVehicleOccupant(&pHitEntity, &point, pBullet->m_eWeaponType, vecOldPos, vecNewPos);
 			if (pHitEntity->IsPed()) {
 				CPed* pPed = (CPed*)pHitEntity;
 				if (!pPed->DyingOrDead() && pPed != pBullet->m_pSource) {
-					if (pPed->DoesLOSBulletHitPed(point)) {
-						if (pPed->IsPedInControl() && !pPed->bIsDucking) {
-							pPed->ClearAttackByRemovingAnim();
-							CAnimBlendAssociation* pAnim = CAnimManager::AddAnimation(pPed->GetClump(), ASSOCGRP_STD, ANIM_STD_HITBYGUN_FRONT);
-							pAnim->SetBlend(0.0f, 8.0f);
-						}
-						pPed->InflictDamage(pBullet->m_pSource, pBullet->m_eWeaponType, pBullet->m_nDamage, (ePedPieceTypes)point.pieceB, pPed->GetLocalDirection(pPed->GetPosition() - point.point));
-						CEventList::RegisterEvent(pPed->m_nPedType == PEDTYPE_COP ? EVENT_SHOOT_COP : EVENT_SHOOT_PED, EVENT_ENTITY_PED, pPed, (CPed*)pBullet->m_pSource, 1000);
-						pBullet->m_bInUse = false;
+					if (pPed->IsPedInControl() && !pPed->bIsDucking) {
+						pPed->ClearAttackByRemovingAnim();
+						CAnimBlendAssociation* pAnim = CAnimManager::AddAnimation(pPed->GetClump(), ASSOCGRP_STD, ANIM_SHOT_FRONT_PARTIAL);
+						pAnim->SetBlend(0.0f, 8.0f);
+					}
+					pPed->InflictDamage(pBullet->m_pSource, pBullet->m_eWeaponType, pBullet->m_nDamage, (ePedPieceTypes)point.pieceB, pPed->GetLocalDirection(pPed->GetPosition() - point.point));
+					CEventList::RegisterEvent(pPed->m_nPedType == PEDTYPE_COP ? EVENT_SHOOT_COP : EVENT_SHOOT_PED, EVENT_ENTITY_PED, pPed, (CPed*)pBullet->m_pSource, 1000);
+					pBullet->m_bInUse = false;
 #ifdef SQUEEZE_PERFORMANCE
-						bulletInfoInUse--;
+					bulletInfoInUse--;
 #endif
-						vecNewPos = point.point;
-					}
-					else {
-						bAddSound = false;
-					}
+					vecNewPos = point.point;
 				}
 				if (CGame::nastyGame) {
 					CVector vecParticleDirection = (point.point - pPed->GetPosition()) * 0.01f;
@@ -146,9 +152,9 @@ void CBulletInfo::Update(void)
 					if (pPed->GetPedState() == PED_DEAD) {
 						CAnimBlendAssociation* pAnim;
 						if (RpAnimBlendClumpGetFirstAssociation(pPed->GetClump(), ASSOC_FRONTAL))
-							pAnim = CAnimManager::BlendAnimation(pPed->GetClump(), ASSOCGRP_STD, ANIM_STD_HIT_FLOOR_FRONT, 8.0f);
+							pAnim = CAnimManager::BlendAnimation(pPed->GetClump(), ASSOCGRP_STD, ANIM_FLOOR_HIT_F, 8.0f);
 						else
-							pAnim = CAnimManager::BlendAnimation(pPed->GetClump(), ASSOCGRP_STD, ANIM_STD_HIT_FLOOR, 8.0f);
+							pAnim = CAnimManager::BlendAnimation(pPed->GetClump(), ASSOCGRP_STD, ANIM_FLOOR_HIT, 8.0f);
 						if (pAnim) {
 							pAnim->SetCurrentTime(0.0f);
 							pAnim->flags |= ASSOC_RUNNING;
@@ -163,13 +169,24 @@ void CBulletInfo::Update(void)
 				}
 			}
 			else if (pHitEntity->IsVehicle()) {
-				CVehicle* pVehicle = (CVehicle*)pHitEntity;
-				pVehicle->InflictDamage(pBullet->m_pSource, pBullet->m_eWeaponType, pBullet->m_nDamage);
-				if (pBullet->m_eWeaponType == WEAPONTYPE_FLAMETHROWER) // huh?
-					gFireManager.StartFire(pVehicle, pBullet->m_pSource, 0.8f, true);
-				else {
-					for (int j = 0; j < NUM_VEHICLE_SPARKS; j++)
-						CParticle::AddParticle(PARTICLE_SPARK, point.point, point.normal / 20);
+				CEntity *source = pBullet->m_pSource;
+				if ( !source || !source->IsPed() || ((CPed*)source)->m_attachedTo != pHitEntity) {
+					if ( point.pieceB >= CAR_PIECE_WHEEL_LF && point.pieceB <= CAR_PIECE_WHEEL_RR ) {
+						((CVehicle*)pHitEntity)->BurstTyre(point.pieceB, true);
+						for (int j=0; j<NUM_TYRE_POP_SMOKES; j++) {
+							CParticle::AddParticle(PARTICLE_BULLETHIT_SMOKE, point.point, point.normal / 20);
+						}
+					} else {
+						// CVector sth(0.0f, 0.0f, 0.0f); // unused
+						((CVehicle*)pHitEntity)->InflictDamage(source, pBullet->m_eWeaponType, pBullet->m_nDamage);
+						if ( pBullet->m_eWeaponType == WEAPONTYPE_FLAMETHROWER ) {
+							gFireManager.StartFire(pHitEntity, pBullet->m_pSource, 0.8f, 1);
+						} else {
+							for (int j=0; j<NUM_VEHICLE_SPARKS; j++) {
+								CParticle::AddParticle(PARTICLE_SPARK, point.point, point.normal / 20);
+							}
+						}
+					}
 				}
 #ifdef FIX_BUGS
 				pBullet->m_bInUse = false;
@@ -178,19 +195,28 @@ void CBulletInfo::Update(void)
 #endif
 				vecNewPos = point.point;
 #endif
-			}
-			else {
+			} else {
 				for (int j = 0; j < NUM_OTHER_SPARKS; j++)
 					CParticle::AddParticle(PARTICLE_SPARK, point.point, point.normal / 20);
-				if (pHitEntity->IsObject()) {
-					CObject* pObject = (CObject*)pHitEntity;
-					if (!pObject->bInfiniteMass) {
-						if (pObject->GetIsStatic() && pObject->m_fUprootLimit <= 0.0f) {
-							pObject->SetIsStatic(false);
-							pObject->AddToMovingList();
+				CEntity *source = pBullet->m_pSource;
+				if ( !source || !source->IsPed() || ((CPed*)source)->m_attachedTo != pHitEntity) {
+					if (pHitEntity->IsObject()) {
+						CObject *pHitObject = (CObject*)pHitEntity;
+						if ( !pHitObject->bInfiniteMass && pHitObject->m_fCollisionDamageMultiplier < 99.9f) {
+							bool notStatic = !pHitObject->GetIsStatic();
+							if (notStatic && pHitObject->m_fUprootLimit <= 0.0f) {
+								pHitObject->bIsStatic = false;
+								pHitObject->AddToMovingList();
+							}
+
+							notStatic = !pHitObject->GetIsStatic();
+							if (!notStatic) {
+								CVector moveForce = point.normal * -BULLET_HIT_FORCE;
+								pHitObject->ApplyMoveForce(moveForce.x, moveForce.y, moveForce.z);
+							}
+						} else if (pHitObject->m_nCollisionDamageEffect >= DAMAGE_EFFECT_SMASH_COMPLETELY) {
+							pHitObject->ObjectDamage(50.f);
 						}
-						if (!pObject->GetIsStatic())
-							pObject->ApplyMoveForce(-BULLET_HIT_FORCE * point.normal);
 					}
 				}
 #ifdef FIX_BUGS
@@ -201,38 +227,55 @@ void CBulletInfo::Update(void)
 				vecNewPos = point.point;
 #endif
 			}
-			if (pBullet->m_eWeaponType == WEAPONTYPE_SNIPERRIFLE && bAddSound) {
+			if (pBullet->m_eWeaponType == WEAPONTYPE_SNIPERRIFLE || pBullet->m_eWeaponType == WEAPONTYPE_LASERSCOPE) {
 				cAudioScriptObject* pAudio;
 				switch (pHitEntity->GetType()) {
-				case ENTITY_TYPE_BUILDING:
-					pAudio = new cAudioScriptObject();
-					pAudio->Posn = pHitEntity->GetPosition();
-					pAudio->AudioId = SCRIPT_SOUND_BULLET_HIT_GROUND_1;
-					pAudio->AudioEntity = AEHANDLE_NONE;
-					DMAudio.CreateOneShotScriptObject(pAudio);
-					break;
-				case ENTITY_TYPE_OBJECT:
-					pAudio = new cAudioScriptObject();
-					pAudio->Posn = pHitEntity->GetPosition();
-					pAudio->AudioId = SCRIPT_SOUND_BULLET_HIT_GROUND_2;
-					pAudio->AudioEntity = AEHANDLE_NONE;
-					DMAudio.CreateOneShotScriptObject(pAudio);
-					break;
-				case ENTITY_TYPE_DUMMY:
-					pAudio = new cAudioScriptObject();
-					pAudio->Posn = pHitEntity->GetPosition();
-					pAudio->AudioId = SCRIPT_SOUND_BULLET_HIT_GROUND_3;
-					pAudio->AudioEntity = AEHANDLE_NONE;
-					DMAudio.CreateOneShotScriptObject(pAudio);
-					break;
-				case ENTITY_TYPE_PED:
-					DMAudio.PlayOneShot(((CPed*)pHitEntity)->m_audioEntityId, SOUND_WEAPON_HIT_PED, 1.0f);
-					((CPed*)pHitEntity)->Say(SOUND_PED_BULLET_HIT);
-					break;
-				case ENTITY_TYPE_VEHICLE:
-					DMAudio.PlayOneShot(((CVehicle*)pHitEntity)->m_audioEntityId, SOUND_WEAPON_HIT_VEHICLE, 1.0f);
-					break;
-				default: break;
+					case ENTITY_TYPE_BUILDING:
+						if (!DMAudio.IsAudioInitialised())
+							break;
+
+						pAudio = new cAudioScriptObject();
+						if (pAudio)
+							pAudio->Reset();
+						pAudio->Posn = pHitEntity->GetPosition();
+						pAudio->AudioId = SCRIPT_SOUND_BULLET_HIT_GROUND_1;
+						pAudio->AudioEntity = AEHANDLE_NONE;
+						DMAudio.CreateOneShotScriptObject(pAudio);
+						break;
+					case ENTITY_TYPE_OBJECT:
+						if (!DMAudio.IsAudioInitialised())
+							break;
+
+						pAudio = new cAudioScriptObject();
+						if (pAudio)
+							pAudio->Reset();
+						pAudio->Posn = pHitEntity->GetPosition();
+						pAudio->AudioId = SCRIPT_SOUND_BULLET_HIT_GROUND_2;
+						pAudio->AudioEntity = AEHANDLE_NONE;
+						DMAudio.CreateOneShotScriptObject(pAudio);
+						break;
+					case ENTITY_TYPE_DUMMY:
+						if (!DMAudio.IsAudioInitialised())
+							break;
+
+						pAudio = new cAudioScriptObject();
+						if (pAudio)
+							pAudio->Reset();
+						pAudio->Posn = pHitEntity->GetPosition();
+						pAudio->AudioId = SCRIPT_SOUND_BULLET_HIT_GROUND_3;
+						pAudio->AudioEntity = AEHANDLE_NONE;
+						DMAudio.CreateOneShotScriptObject(pAudio);
+						break;
+					case ENTITY_TYPE_PED:
+						++CStats::BulletsThatHit;
+						DMAudio.PlayOneShot(((CPed*)pHitEntity)->m_audioEntityId, SOUND_WEAPON_HIT_PED, 1.0f);
+						((CPed*)pHitEntity)->Say(SOUND_PED_BULLET_HIT);
+						break;
+					case ENTITY_TYPE_VEHICLE:
+						++CStats::BulletsThatHit;
+						DMAudio.PlayOneShot(((CVehicle*)pHitEntity)->m_audioEntityId, SOUND_WEAPON_HIT_VEHICLE, 1.0f);
+						break;
+						default: break;
 				}
 			}
 			CGlass::WasGlassHitByBullet(pHitEntity, point.point);
@@ -241,19 +284,14 @@ void CBulletInfo::Update(void)
 		CWorld::pIgnoreEntity = nil;
 		CWorld::bIncludeDeadPeds = false;
 		CWorld::bIncludeCarTyres = false;
-		if (pBullet->m_eWeaponType == WEAPONTYPE_SNIPERRIFLE) {
+		CWorld::bIncludeBikers = false;
+		if (pBullet->m_eWeaponType == WEAPONTYPE_SNIPERRIFLE || pBullet->m_eWeaponType == WEAPONTYPE_LASERSCOPE) {
 			bPlayerSniperBullet = true;
 			PlayerSniperBulletStart = pBullet->m_vecPosition;
 			PlayerSniperBulletEnd = vecNewPos;
 		}
 		pBullet->m_vecPosition = vecNewPos;
-		if (pBullet->m_vecPosition.x < -MAP_BORDER || pBullet->m_vecPosition.x > MAP_BORDER ||
-			pBullet->m_vecPosition.y < -MAP_BORDER || pBullet->m_vecPosition.y > MAP_BORDER) {
-			pBullet->m_bInUse = false;
-#ifdef SQUEEZE_PERFORMANCE
-			bulletInfoInUse--;
-#endif
-		}
+		CHeli::TestSniperCollision(&PlayerSniperBulletStart, &PlayerSniperBulletEnd);
 	}
 }
 

@@ -305,8 +305,6 @@ RsRwInitialize(void *displayID)
 {
 	RwEngineOpenParams  openParams;
 
-	PUSH_MEMID(MEMID_RENDER);	// NB: not popped on failed return
-
 	/*
 	 * Start RenderWare...
 	 */
@@ -371,10 +369,8 @@ RsRwInitialize(void *displayID)
 
 	psNativeTextureSupport();
 
+	RwTextureSetAutoMipmapping(TRUE);
 	RwTextureSetMipmapping(FALSE);
-	RwTextureSetAutoMipmapping(FALSE);
-
-	POP_MEMID();
 
 	return TRUE;
 }
@@ -401,7 +397,7 @@ RsInitialize(void)
 	 */
 	RwBool              result;
 
-	RsGlobal.appName = RWSTRING("GTA3");
+	RsGlobal.appName = RWSTRING("GTA: Vice City");
 	RsGlobal.maximumWidth = DEFAULT_SCREEN_WIDTH;
 	RsGlobal.maximumHeight = DEFAULT_SCREEN_HEIGHT;
 	RsGlobal.width = DEFAULT_SCREEN_WIDTH;

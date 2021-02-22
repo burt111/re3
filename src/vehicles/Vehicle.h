@@ -6,16 +6,50 @@
 #include "AnimationId.h"
 #include "WeaponType.h"
 #include "Collision.h"
+#include "HandlingMgr.h"
 
 class CPed;
+class CPlayerPed;
+class CCopPed;
 class CFire;
-struct tHandlingData;
 
 enum {
 	RANDOM_VEHICLE = 1,
 	MISSION_VEHICLE = 2,
 	PARKED_VEHICLE = 3,
 	PERMANENT_VEHICLE = 4,
+};
+
+enum eCarNodes
+{
+	CAR_WHEEL_RF = 1,
+	CAR_WHEEL_RM,
+	CAR_WHEEL_RB,
+	CAR_WHEEL_LF,
+	CAR_WHEEL_LM,
+	CAR_WHEEL_LB,
+	CAR_BUMP_FRONT,
+	CAR_BUMP_REAR,
+	CAR_WING_RF,
+	CAR_WING_RR,
+	CAR_DOOR_RF,
+	CAR_DOOR_RR,
+	CAR_WING_LF,
+	CAR_WING_LR,
+	CAR_DOOR_LF,
+	CAR_DOOR_LR,
+	CAR_BONNET,
+	CAR_BOOT,
+	CAR_WINDSCREEN,
+	NUM_CAR_NODES,
+};
+
+enum {
+	CAR_DOOR_FLAG_UNKNOWN = 0x0,
+	CAR_DOOR_FLAG_LF = 0x1,
+	CAR_DOOR_FLAG_LR = 0x2,
+	CAR_DOOR_FLAG_RF = 0x4,
+	CAR_DOOR_FLAG_RR = 0x8
 };
 
 enum eCarLock {
@@ -27,6 +61,16 @@ enum eCarLock {
 	CARLOCK_LOCKED_INITIALLY,
 	CARLOCK_FORCE_SHUT_DOORS,
 	CARLOCK_SKIP_SHUT_DOORS
+};
+
+enum eBombType
+{
+	CARBOMB_NONE,
+	CARBOMB_TIMED,
+	CARBOMB_ONIGNITION,
+	CARBOMB_REMOTE,
+	CARBOMB_TIMEDACTIVE,
+	CARBOMB_ONIGNITIONACTIVE,
 };
 
 enum eDoors
@@ -90,32 +134,54 @@ enum tWheelState
 enum eFlightModel
 {
 	FLIGHT_MODEL_DODO,
-	// not used in III
 	FLIGHT_MODEL_RCPLANE,
-	FLIGHT_MODEL_HELI,
-	FLIGHT_MODEL_SEAPLANE
+	FLIGHT_MODEL_RCHELI,
+	FLIGHT_MODEL_SEAPLANE,
+	FLIGHT_MODEL_PLANE_UNUSED,
+	FLIGHT_MODEL_PLANE,
+	FLIGHT_MODEL_HELI
+};
+
+enum eVehicleAppearance
+{
+	VEHICLE_APPEARANCE_NONE,
+	VEHICLE_APPEARANCE_CAR,
+	VEHICLE_APPEARANCE_BIKE,
+	VEHICLE_APPEARANCE_HELI,
+	VEHICLE_APPEARANCE_BOAT,
+	VEHICLE_APPEARANCE_PLANE,
 };
 
 // TODO: what is this even?
-enum eBikeWheelSpecial {
-	BIKE_WHEELSPEC_0, // both wheels on ground
-	BIKE_WHEELSPEC_1, // rear wheel on ground
-	BIKE_WHEELSPEC_2, // only front wheel on ground
-	BIKE_WHEELSPEC_3, // can't happen
+enum eBikeWheelSpecial
+{
+	BIKE_WHEELSPEC_0,	// both wheels on ground
+	BIKE_WHEELSPEC_1,	// rear wheel on ground
+	BIKE_WHEELSPEC_2,	// only front wheel on ground
+	BIKE_WHEELSPEC_3,	// can't happen
 };
 
+enum
+{
+	ROTOR_TOP = 3,
+	ROTOR_FRONT = 4,
+	ROTOR_RIGHT = 5,
+	ROTOR_LEFT = 7,
+	ROTOR_BACK = 8,
+	ROTOR_BOTTOM = 9,
+};
 
 class CVehicle : public CPhysical
 {
 public:
-	// 0x128
 	tHandlingData *pHandling;
+	tFlyingHandlingData *pFlyingHandling;
 	CAutoPilot AutoPilot;
 	uint8 m_currentColour1;
 	uint8 m_currentColour2;
 	int8 m_aExtras[2];
 	int16 m_nAlarmState;
-	int16 m_nMissionValue;
+	int16 m_nRouteSeed;
 	CPed *pDriver;
 	CPed *pPassengers[8];
 	uint8 m_nNumPassengers;
@@ -164,15 +230,32 @@ public:
 	uint8 bVehicleColProcessed : 1;// Has ProcessEntityCollision been processed for this car?
 	uint8 bIsCarParkVehicle : 1; // Car has been created using the special CAR_PARK script command
 	uint8 bHasAlreadyBeenRecorded : 1; // Used for replays
+	uint8 bPartOfConvoy : 1;
+	uint8 bHeliMinimumTilt : 1; // This heli should have almost no tilt really
+	uint8 bAudioChangingGear : 1; // sounds like vehicle is changing gear
+
+	uint8 bIsDrowning : 1; // is vehicle occupants taking damage in water (i.e. vehicle is dead in water)
+	uint8 bTyresDontBurst : 1; // If this is set the tyres are invincible
+	uint8 bCreatedAsPoliceVehicle : 1;// True if this guy was created as a police vehicle (enforcer, policecar, miamivice car etc)
+	uint8 bRestingOnPhysical : 1; // Dont go static cause car is sitting on a physical object that might get removed
+	uint8 bParking : 1;
+	uint8 bCanPark : 1;
+#if (!defined GTA_PS2 || defined FIX_BUGS)
+	uint8 m_bombType : 3;
+#endif
+	uint8 bDriverLastFrame : 1;
 
 	int8 m_numPedsUseItAsCover;
 	uint8 m_nAmmoInClip;    // Used to make the guns on boat do a reload (20 by default)
 	int8 m_nPacManPickupsCarried;
 	uint8 m_nRoadblockType;
-	int16 m_nRoadblockNode;
 	float m_fHealth;           // 1000.0f = full health. 250.0f = fire. 0 -> explode
 	uint8 m_nCurrentGear;
 	float m_fChangeGearTime;
+#if (!defined GTA_PS2 || defined FIX_BUGS)
+	CEntity* m_pBombRigger;
+#endif
+	uint32 m_nSetPieceExtendedRangeTime;
 	uint32 m_nGunFiringTime;    // last time when gun on vehicle was fired (used on boats)
 	uint32 m_nTimeOfDeath;
 	uint16 m_nTimeBlocked;
@@ -182,16 +265,18 @@ public:
 	float m_fMapObjectHeightBehind;	// rear Z?
 	eCarLock m_nDoorLock;
 	int8 m_nLastWeaponDamage; // see eWeaponType, -1 if no damage
+	CEntity *m_pLastDamageEntity;
 	uint8 m_nRadioStation;
 	uint8 m_bRainAudioCounter;
 	uint8 m_bRainSamplesCounter;
-	uint8 m_nCarHornTimer;
-	uint8 m_nCarHornPattern; // last horn?
+	uint32 m_nCarHornTimer;
+	uint8 m_nCarHornPattern;
 	bool m_bSirenOrAlarm;
+	uint8 m_nCarHornDelay;
 	int8 m_comedyControlState;
 	CStoredCollPoly m_aCollPolys[2];     // poly which is under front/rear part of car
 	float m_fSteerInput;
-	eVehicleType m_vehType;
+	uint8 m_vehType;
 
 	static void *operator new(size_t);
 	static void *operator new(size_t sz, int slot);
@@ -217,11 +302,15 @@ public:
 	virtual bool IsDoorFullyOpen(eDoors door) { return false; }
 	virtual bool IsDoorClosed(eDoors door) { return false; }
 	virtual bool IsDoorMissing(eDoors door) { return false; }
+	virtual bool IsDoorReady(uint32 door) { return false; }
+	virtual bool IsDoorMissing(uint32 door) { return false; }
+	virtual bool IsOpenTopCar(void) { return false; }
 	virtual void RemoveRefsToVehicle(CEntity *ent) {}
 	virtual void BlowUpCar(CEntity *ent) {}
 	virtual bool SetUpWheelColModel(CColModel *colModel) { return false; }
-	virtual void BurstTyre(uint8 tyre) {}
-	virtual bool IsRoomForPedToLeaveCar(uint32 component, CVector *forcedDoorPos) { return false;}
+	virtual void BurstTyre(uint8 tyre, bool applyForces) {}
+	virtual bool IsRoomForPedToLeaveCar(uint32 component, CVector *forcedDoorPos) { return false; }
+	virtual bool IsClearToDriveAway(void);
 	virtual float GetHeightAboveRoad(void);
 	virtual void PlayCarHorn(void) {}
 #ifdef COMPATIBLE_SAVES
@@ -229,6 +318,7 @@ public:
 	virtual void Load(uint8*& buf);
 #endif
 
+	eVehicleAppearance GetVehicleAppearance(void);
 	bool IsCar(void) { return m_vehType == VEHICLE_TYPE_CAR; }
 	bool IsBoat(void) { return m_vehType == VEHICLE_TYPE_BOAT; }
 	bool IsTrain(void) { return m_vehType == VEHICLE_TYPE_TRAIN; }
@@ -237,24 +327,31 @@ public:
 	bool IsBike(void) { return m_vehType == VEHICLE_TYPE_BIKE; }
 
 	void FlyingControl(eFlightModel flightModel);
+	bool DoBladeCollision(CVector pos, CMatrix &matrix, int16 rotorType, float radius, float damageMult);
+	bool BladeColSectorList(CPtrList &list, CColModel &rotorColModel, CMatrix &matrix, int16 rotorType, float damageMult);
+
 	void ProcessWheel(CVector &wheelFwd, CVector &wheelRight, CVector &wheelContactSpeed, CVector &wheelContactPoint,
 		int32 wheelsOnGround, float thrust, float brake, float adhesion, int8 wheelId, float *wheelSpeed, tWheelState *wheelState, uint16 wheelStatus);
-	void ProcessBikeWheel(CVector &wheelFwd, CVector &wheelRight, CVector &wheelContactSpeed, CVector &wheelContactPoint, int32 wheelsOnGround, float thrust,
-	                      float brake, float adhesion, int8 wheelId, float *wheelSpeed, tWheelState *wheelState, eBikeWheelSpecial special, uint16 wheelStatus);
+	void ProcessBikeWheel(CVector &wheelFwd, CVector &wheelRight, CVector &wheelContactSpeed, CVector &wheelContactPoint,
+		int32 wheelsOnGround, float thrust, float brake, float adhesion, float destabTraction, int8 wheelId, float *wheelSpeed, tWheelState *wheelState, eBikeWheelSpecial special, uint16 wheelStatus);
 	void ExtinguishCarFire(void);
 	void ProcessDelayedExplosion(void);
 	float ProcessWheelRotation(tWheelState state, const CVector &fwd, const CVector &speed, float radius);
+	int FindTyreNearestPoint(float x, float y);
 	bool IsLawEnforcementVehicle(void);
 	void ChangeLawEnforcerState(uint8 enable);
-	bool UsesSiren(uint32 id);
+	bool UsesSiren(void);
 	bool IsVehicleNormal(void);
 	bool CarHasRoof(void);
 	bool IsUpsideDown(void);
 	bool IsOnItsSide(void);
 	bool CanBeDeleted(void);
 	bool CanPedOpenLocks(CPed *ped);
+	bool CanDoorsBeDamaged(void);
 	bool CanPedEnterCar(void);
-	bool CanPedExitCar(void);
+	bool CanPedExitCar(bool jumpExit);
+	bool CanPedJumpOutCar(void);
+	bool CanPedJumpOffBike(void);
 	// do these two actually return something?
 	CPed *SetUpDriver(void);
 	CPed *SetupPassenger(int n);
@@ -263,32 +360,92 @@ public:
 	bool AddPassenger(CPed *passenger, uint8 n);
 	void RemovePassenger(CPed *passenger);
 	void RemoveDriver(void);
+	bool IsDriver(CPed *ped);
+	bool IsDriver(int32 model);
+	bool IsPassenger(CPed *ped);
+	bool IsPassenger(int32 model);
+	void UpdatePassengerList(void);
 	void ProcessCarAlarm(void);
 	bool IsSphereTouchingVehicle(float sx, float sy, float sz, float radius);
 	bool ShufflePassengersToMakeSpace(void);
-	void InflictDamage(CEntity *damagedBy, eWeaponType weaponType, float damage);
+	void MakeNonDraggedPedsLeaveVehicle(CPed *ped1, CPed *ped2, CPlayerPed *&player, CCopPed *&cop);
+	void InflictDamage(CEntity *damagedBy, eWeaponType weaponType, float damage, CVector pos = CVector(0.0f, 0.0f, 0.0f));
 	void DoFixedMachineGuns(void);
+	void FireFixedMachineGuns(void);
+	void ActivateBomb(void);
+	void ActivateBombWhenEntered(void);
+	void KillPedsInVehicle(void);
 
-#ifdef FIX_BUGS
+	void SetComponentAtomicAlpha(RpAtomic *atomic, int32 alpha);
+	void UpdateClumpAlpha(void);
+
+	static void HeliDustGenerate(CEntity *heli, float radius, float ground, int rnd);
+	void DoSunGlare(void);
+
 	bool IsAlarmOn(void) { return m_nAlarmState != 0 && m_nAlarmState != -1 && GetStatus() != STATUS_WRECKED; }
-#else
-	bool IsAlarmOn(void) { return m_nAlarmState != 0 && m_nAlarmState != -1; }
-#endif
 	CVehicleModelInfo* GetModelInfo() { return (CVehicleModelInfo*)CModelInfo::GetModelInfo(GetModelIndex()); }
-	bool IsTaxi(void) { return GetModelIndex() == MI_TAXI || GetModelIndex() == MI_CABBIE || GetModelIndex() == MI_BORGNINE; }
-	AnimationId GetDriverAnim(void) { return IsCar() && bLowVehicle ? ANIM_STD_CAR_SIT_LO : (IsBoat() && GetModelIndex() != MI_SPEEDER ? ANIM_STD_BOAT_DRIVE : ANIM_STD_CAR_SIT); }
+	bool IsTaxi(void) { return GetModelIndex() == MI_TAXI || GetModelIndex() == MI_CABBIE || GetModelIndex() == MI_ZEBRA || GetModelIndex() == MI_KAUFMAN; }
+	bool IsLimo(void) { return GetModelIndex() == MI_STRETCH || GetModelIndex() == MI_LOVEFIST; }
+	bool IsRealHeli(void) { return !!(pHandling->Flags & HANDLING_IS_HELI); }
+	bool IsRealPlane(void) { return !!(pHandling->Flags & HANDLING_IS_PLANE); }
 
 	static bool bWheelsOnlyCheat;
 	static bool bAllDodosCheat;
 	static bool bCheat3;
 	static bool bCheat4;
 	static bool bCheat5;
-#ifdef ALT_DODO_CHEAT
-	static bool bAltDodoCheat;
-#endif
+	static bool bCheat8;
+	static bool bCheat9;
+	static bool bCheat10;
+	static bool bHoverCheat;
+	static bool bAllTaxisHaveNitro;
 	static bool m_bDisableMouseSteering;
+	static bool bDisableRemoteDetonation;
+	static bool bDisableRemoteDetonationOnContact;
+#ifndef MASTER
+	static bool m_bDisplayHandlingInfo;
+#endif
 };
 
-VALIDATE_SIZE(CVehicle, 0x288);
-
 void DestroyVehicleAndDriverAndPassengers(CVehicle* pVehicle);
+bool IsVehiclePointerValid(CVehicle* pVehicle);
+
+// Names of functions below are made up by us.
+
+// Used in III and VC.
+inline int8 GetCarDoorFlag(int32 carnode) {
+	switch (carnode) {
+	case CAR_DOOR_LF:
+		return CAR_DOOR_FLAG_LF;
+	case CAR_DOOR_LR:
+		return CAR_DOOR_FLAG_LR;
+	case CAR_DOOR_RF:
+		return CAR_DOOR_FLAG_RF;
+	case CAR_DOOR_RR:
+		return CAR_DOOR_FLAG_RR;
+	default:
+		return CAR_DOOR_FLAG_UNKNOWN;
+	}
+}
+
+// VC. Accounts the case numMaxPassengers == 0, only for m_nGettingInFlags.
+inline int8 GetEnterCarDoorFlag(int32 carnode, uint8 numMaxPassengers) {
+	switch (carnode) {
+	case CAR_DOOR_RF:
+		return CAR_DOOR_FLAG_RF;
+	case CAR_DOOR_RR:
+		return CAR_DOOR_FLAG_RR;
+	case CAR_DOOR_LF:
+		if (numMaxPassengers != 0)
+			return CAR_DOOR_FLAG_LF;
+		else
+			return CAR_DOOR_FLAG_LF | CAR_DOOR_FLAG_LR;
+	case CAR_DOOR_LR:
+		if (numMaxPassengers != 0)
+			return CAR_DOOR_FLAG_LR;
+		else
+			return CAR_DOOR_FLAG_LF | CAR_DOOR_FLAG_LR;
+	default:
+		return CAR_DOOR_FLAG_UNKNOWN;
+	}
+}

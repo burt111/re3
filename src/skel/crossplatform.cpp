@@ -32,15 +32,15 @@ HANDLE FindFirstFile(const char* pathname, WIN32_FIND_DATA* firstfile) {
 	char *folder = strtok(pathCopy, "*");
 	char *extension = strtok(NULL, "*");
 
-	// because I remember like strtok might not return NULL for last delimiter
-	if (extension && extension - folder == strlen(pathname))
-		extension = nil;
+    // because I remember like strtok might not return NULL for last delimiter
+    if (extension && extension - folder == strlen(pathname))
+        extension = nil;
 	
 	// Case-sensitivity and backslashes...
-	// Will be freed at the bottom
-	char *realFolder = casepath(folder);
+    // Will be freed at the bottom
+    char *realFolder = casepath(folder);
 	if (realFolder) {
-		folder = realFolder;
+        folder = realFolder;
 	}
 
 	strncpy(firstfile->folder, folder, sizeof(firstfile->folder));
@@ -50,8 +50,8 @@ HANDLE FindFirstFile(const char* pathname, WIN32_FIND_DATA* firstfile) {
 	else
 		firstfile->extension[0] = '\0';
 
-	if (realFolder)
-		free(realFolder);
+    if (realFolder)
+        free(realFolder);
 
 	HANDLE d;
 	if ((d = (HANDLE)opendir(firstfile->folder)) == NULL || !FindNextFile(d, firstfile))
@@ -254,5 +254,19 @@ char* casepath(char const* path, bool checkPathFirst)
         printf("\n\ncasepath: Corrected path length is longer then original+2:\n\tOriginal: %s (%zu chars)\n\tCorrected: %s (%zu chars)\n\n", path, l, out, rl);
     }
     return out;
+}
+#endif
+
+#if !defined(_MSC_VER) && !defined(__CWCC__)
+char *strdate(char *buf) {
+	time_t timestamp;
+	time(&timestamp);
+	tm *localTm = localtime(&timestamp);
+	strftime(buf, 10, "%m/%d/%y", localTm);
+	return buf;
+}
+
+char *_strdate(char *buf) {
+	return strdate(buf);
 }
 #endif

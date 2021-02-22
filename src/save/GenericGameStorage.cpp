@@ -30,6 +30,7 @@
 #include "Radar.h"
 #include "Restart.h"
 #include "Script.h"
+#include "SetPieces.h"
 #include "Stats.h"
 #include "Streaming.h"
 #include "Timer.h"
@@ -37,9 +38,11 @@
 #include "Weather.h"
 #include "World.h"
 #include "Zones.h"
+#include "Timecycle.h"
+#include "Fluff.h"
 
-#define BLOCK_COUNT 20
-#define SIZE_OF_SIMPLEVARS 0xBC
+#define BLOCK_COUNT 22
+#define SIZE_OF_SIMPLEVARS 0xE4
 
 const uint32 SIZE_OF_ONE_GAME_IN_BYTES = 201729;
 
@@ -56,14 +59,35 @@ wchar SlotSaveDate[SLOT_COUNT][70];
 int CheckSum;
 eLevelName m_LevelToLoad;
 char SaveFileNameJustSaved[260];
-int Slots[SLOT_COUNT+1];
-CDate CompileDateAndTime;
+int Slots[SLOT_COUNT];
 
 bool b_FoundRecentSavedGameWantToLoad;
 bool JustLoadedDontFadeInYet;
 bool StillToFadeOut;
 uint32 TimeStartedCountingForFade;
 uint32 TimeToStayFadedBeforeFadeOut = 1750;
+
+int32 RadioStationPosition[NUM_RADIOS];
+
+void
+InitRadioStationPositionList()
+{
+	for (int i = 0; i < NUM_RADIOS; i++)
+		RadioStationPosition[i] = -1;
+}
+
+int32
+GetSavedRadioStationPosition(int32 station)
+{
+	return RadioStationPosition[station];
+}
+
+void
+PopulateRadioStationPositionList()
+{
+	for (int i = 0; i < NUM_RADIOS; i++)
+		RadioStationPosition[i] = DMAudio.GetRadioPosition(i);
+}
 
 #define ReadDataFromBufferPointer(buf, to) memcpy(&to, buf, sizeof(to)); buf += align4bytes(sizeof(to));
 #define WriteDataToBufferPointer(buf, from) memcpy(buf, &from, sizeof(from)); buf += align4bytes(sizeof(from));
@@ -87,12 +111,14 @@ do {\
 	buf += size;\
 } while (0)
 
-#define WriteSaveDataBlock(save_func)\
+#define WriteSaveDataBlock(save_func, msg)\
 do {\
+	size = 0;\
 	buf = work_buff;\
 	reserved = 0;\
 	MakeSpaceForSizeInBufferPointer(presize, buf, postsize);\
 	save_func(buf, &size);\
+	debug(msg"== %i \n", size);\
 	CopySizeAndPreparePointer(presize, buf, postsize, reserved, size);\
 	if (!PcSaveHelper.PcClassSaveRoutine(file, work_buff, buf - work_buff))\
 		return false;\
@@ -119,24 +145,23 @@ GenericSave(int file)
 	reserved = 0;
 
 	// Save simple vars
-	lastMissionPassed = TheText.Get(CStats::LastMissionPassedName);
-	if (lastMissionPassed[0] != '\0') {
-		AsciiToUnicode("...'", suffix);
+	lastMissionPassed = TheText.Get(CStats::LastMissionPassedName[0] ? CStats::LastMissionPassedName : "ITBEG");
+	AsciiToUnicode("...'", suffix);
+	suffix[3] = L'\0';
 #ifdef FIX_BUGS
-		// fix buffer overflow
-		int len = UnicodeStrlen(lastMissionPassed);
-		if (len > ARRAY_SIZE(saveName)-1)
-			len = ARRAY_SIZE(saveName)-1;
-		memcpy(saveName, lastMissionPassed, sizeof(wchar) * len);
+	// fix buffer overflow
+	int len = UnicodeStrlen(lastMissionPassed);
+	if (len > ARRAY_SIZE(saveName)-1)
+		len = ARRAY_SIZE(saveName)-1;
+	memcpy(saveName, lastMissionPassed, sizeof(wchar) * len);
 #else
-		TextCopy(saveName, lastMissionPassed);
-		int len = UnicodeStrlen(saveName);
+	TextCopy(saveName, lastMissionPassed);
+	int len = UnicodeStrlen(saveName);
 #endif
-		saveName[len] = '\0';
-		if (len > ARRAY_SIZE(saveName)-2)
-			TextCopy(&saveName[ARRAY_SIZE(saveName)-ARRAY_SIZE(suffix)], suffix);
-		saveName[ARRAY_SIZE(saveName)-1] = '\0';
-	}
+	saveName[len] = '\0';
+	if (len > ARRAY_SIZE(saveName)-2)
+		TextCopy(&saveName[ARRAY_SIZE(saveName)-ARRAY_SIZE(suffix)], suffix);
+	saveName[ARRAY_SIZE(saveName)-1] = '\0';
 	WriteDataToBufferPointer(buf, saveName);
 	GetLocalTime(&saveTime);
 	WriteDataToBufferPointer(buf, saveTime);
@@ -168,12 +193,6 @@ GenericSave(int file)
 	WriteDataToBufferPointer(buf, CWeather::NewWeatherType);
 	WriteDataToBufferPointer(buf, CWeather::ForcedWeatherType);
 	WriteDataToBufferPointer(buf, CWeather::InterpolationValue);
-	WriteDataToBufferPointer(buf, CompileDateAndTime.m_nSecond);
-	WriteDataToBufferPointer(buf, CompileDateAndTime.m_nMinute);
-	WriteDataToBufferPointer(buf, CompileDateAndTime.m_nHour);
-	WriteDataToBufferPointer(buf, CompileDateAndTime.m_nDay);
-	WriteDataToBufferPointer(buf, CompileDateAndTime.m_nMonth);
-	WriteDataToBufferPointer(buf, CompileDateAndTime.m_nYear);
 	WriteDataToBufferPointer(buf, CWeather::WeatherTypeInList);
 #ifdef COMPATIBLE_SAVES
 	// converted to float for compatibility with original format
@@ -186,6 +205,14 @@ GenericSave(int file)
 	WriteDataToBufferPointer(buf, TheCamera.CarZoomIndicator);
 	WriteDataToBufferPointer(buf, TheCamera.PedZoomIndicator);
 #endif
+	WriteDataToBufferPointer(buf, CGame::currArea);
+	WriteDataToBufferPointer(buf, CVehicle::bAllTaxisHaveNitro);
+	WriteDataToBufferPointer(buf, CPad::bInvertLook4Pad);
+	WriteDataToBufferPointer(buf, CTimeCycle::m_ExtraColour);
+	WriteDataToBufferPointer(buf, CTimeCycle::m_bExtraColourOn);
+	WriteDataToBufferPointer(buf, CTimeCycle::m_ExtraColourInter);
+	PopulateRadioStationPositionList();
+	WriteDataToBufferPointer(buf, RadioStationPosition);
 	assert(buf - work_buff == SIZE_OF_SIMPLEVARS);
 
 	// Save scripts, block is nested within the same block as simple vars for some reason
@@ -193,6 +220,7 @@ GenericSave(int file)
 	buf += 4;
 	postsize = buf;
 	CTheScripts::SaveAllScripts(buf, &size);
+	debug("ScriptSize== %i \n", size);
 	CopySizeAndPreparePointer(presize, buf, postsize, reserved, size);
 	if (!PcSaveHelper.PcClassSaveRoutine(file, work_buff, buf - work_buff))
 		return false;
@@ -200,25 +228,28 @@ GenericSave(int file)
 	totalSize = buf - work_buff;
 
 	// Save the rest
-	WriteSaveDataBlock(CPools::SavePedPool);
-	WriteSaveDataBlock(CGarages::Save);
-	WriteSaveDataBlock(CPools::SaveVehiclePool);
-	WriteSaveDataBlock(CPools::SaveObjectPool);
-	WriteSaveDataBlock(ThePaths.Save);
-	WriteSaveDataBlock(CCranes::Save);
-	WriteSaveDataBlock(CPickups::Save);
-	WriteSaveDataBlock(gPhoneInfo.Save);
-	WriteSaveDataBlock(CRestart::SaveAllRestartPoints);
-	WriteSaveDataBlock(CRadar::SaveAllRadarBlips);
-	WriteSaveDataBlock(CTheZones::SaveAllZones);
-	WriteSaveDataBlock(CGangs::SaveAllGangData);
-	WriteSaveDataBlock(CTheCarGenerators::SaveAllCarGenerators);
-	WriteSaveDataBlock(CParticleObject::SaveParticle);
-	WriteSaveDataBlock(cAudioScriptObject::SaveAllAudioScriptObjects);
-	WriteSaveDataBlock(CWorld::Players[CWorld::PlayerInFocus].SavePlayerInfo);
-	WriteSaveDataBlock(CStats::SaveStats);
-	WriteSaveDataBlock(CStreaming::MemoryCardSave);
-	WriteSaveDataBlock(CPedType::Save);
+	WriteSaveDataBlock(CPools::SavePedPool, "PedPoolSize");
+	WriteSaveDataBlock(CGarages::Save, "GaragesSize");
+	WriteSaveDataBlock(CGameLogic::Save, "GameLogicSize");
+	WriteSaveDataBlock(CPools::SaveVehiclePool, "VehPoolSize");
+	WriteSaveDataBlock(CPools::SaveObjectPool, "ObjectPoolSize");
+	WriteSaveDataBlock(ThePaths.Save, "ThePathsSize");
+	WriteSaveDataBlock(CCranes::Save, "CranesSize");
+	WriteSaveDataBlock(CPickups::Save, "PickUpsSize");
+	WriteSaveDataBlock(gPhoneInfo.Save, "PhoneInfoSize");
+	WriteSaveDataBlock(CRestart::SaveAllRestartPoints, "RestartPointsBufferSize");
+	WriteSaveDataBlock(CRadar::SaveAllRadarBlips, "RadarBlipsBufferSize");
+	WriteSaveDataBlock(CTheZones::SaveAllZones, "AllZonesBufferSize");
+	WriteSaveDataBlock(CGangs::SaveAllGangData, "AllGangDataSize");
+	WriteSaveDataBlock(CTheCarGenerators::SaveAllCarGenerators, "AllCarGeneratorsSize");
+	WriteSaveDataBlock(CParticleObject::SaveParticle, "ParticlesSize");
+	WriteSaveDataBlock(cAudioScriptObject::SaveAllAudioScriptObjects, "AllAudioScriptObjectsSize");
+	WriteSaveDataBlock(CScriptPaths::Save, "ScriptPathsSize");
+	WriteSaveDataBlock(CWorld::Players[CWorld::PlayerInFocus].SavePlayerInfo, "PlayerInfoSize");
+	WriteSaveDataBlock(CStats::SaveStats, "StatsSize");
+	WriteSaveDataBlock(CSetPieces::Save, "SetPiecesSize");
+	WriteSaveDataBlock(CStreaming::MemoryCardSave, "StreamingSize");
+	WriteSaveDataBlock(CPedType::Save, "PedTypeSize");
 
 	// Write padding
 	for (int i = 0; i < 4; i++) {
@@ -241,7 +272,8 @@ GenericSave(int file)
 
 		return false;
 	}
-	
+
+	CPad::FixPadsAfterSave();	
 	return true;
 }
 
@@ -292,13 +324,12 @@ GenericLoad()
 	ReadDataFromBufferPointer(buf, CWeather::OldWeatherType);
 	ReadDataFromBufferPointer(buf, CWeather::NewWeatherType);
 	ReadDataFromBufferPointer(buf, CWeather::ForcedWeatherType);
+#ifdef SECUROM
+	if (CTimer::m_FrameCounter > 72000){
+		buf += align4bytes(4);
+	}
+#endif
 	ReadDataFromBufferPointer(buf, CWeather::InterpolationValue);
-	ReadDataFromBufferPointer(buf, CompileDateAndTime.m_nSecond);
-	ReadDataFromBufferPointer(buf, CompileDateAndTime.m_nMinute);
-	ReadDataFromBufferPointer(buf, CompileDateAndTime.m_nHour);
-	ReadDataFromBufferPointer(buf, CompileDateAndTime.m_nDay);
-	ReadDataFromBufferPointer(buf, CompileDateAndTime.m_nMonth);
-	ReadDataFromBufferPointer(buf, CompileDateAndTime.m_nYear);
 	ReadDataFromBufferPointer(buf, CWeather::WeatherTypeInList);
 #ifdef COMPATIBLE_SAVES
 	// converted to float for compatibility with original format
@@ -312,6 +343,17 @@ GenericLoad()
 	ReadDataFromBufferPointer(buf, TheCamera.CarZoomIndicator);
 	ReadDataFromBufferPointer(buf, TheCamera.PedZoomIndicator);
 #endif
+	ReadDataFromBufferPointer(buf, CGame::currArea);
+	ReadDataFromBufferPointer(buf, CVehicle::bAllTaxisHaveNitro);
+#ifdef LOAD_INI_SETTINGS
+	buf += align4bytes(sizeof(CPad::bInvertLook4Pad));
+#else
+	ReadDataFromBufferPointer(buf, CPad::bInvertLook4Pad);
+#endif
+	ReadDataFromBufferPointer(buf, CTimeCycle::m_ExtraColour);
+	ReadDataFromBufferPointer(buf, CTimeCycle::m_bExtraColourOn);
+	ReadDataFromBufferPointer(buf, CTimeCycle::m_ExtraColourInter);
+	ReadDataFromBufferPointer(buf, RadioStationPosition);
 	assert(buf - work_buff == SIZE_OF_SIMPLEVARS);
 #ifdef MISSION_REPLAY
 	WaitForSave = 0;
@@ -325,6 +367,8 @@ GenericLoad()
 	ReadDataFromBlock("Loading PedPool \n", CPools::LoadPedPool);
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading Garages \n", CGarages::Load);
+	LoadSaveDataBlock();
+	ReadDataFromBlock("Loading GameLogic \n", CGameLogic::Load);
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading Vehicles \n", CPools::LoadVehiclePool);
 	LoadSaveDataBlock();
@@ -355,16 +399,20 @@ GenericLoad()
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading AudioScript Objects \n", cAudioScriptObject::LoadAllAudioScriptObjects);
 	LoadSaveDataBlock();
+	ReadDataFromBlock("Loading ScriptPaths \n", CScriptPaths::Load);
+	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading Player Info \n", CWorld::Players[CWorld::PlayerInFocus].LoadPlayerInfo);
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading Stats \n", CStats::LoadStats);
+	LoadSaveDataBlock();
+	ReadDataFromBlock("Loading Set Pieces \n", CSetPieces::Load);
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading Streaming Stuff \n", CStreaming::MemoryCardLoad);
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading PedType Stuff \n", CPedType::Load);
 
-	DMAudio.SetMusicMasterVolume(CMenuManager::m_PrefsMusicVolume);
-	DMAudio.SetEffectsMasterVolume(CMenuManager::m_PrefsSfxVolume);
+	DMAudio.SetMusicMasterVolume(FrontEndMenuManager.m_PrefsMusicVolume);
+	DMAudio.SetEffectsMasterVolume(FrontEndMenuManager.m_PrefsSfxVolume);
 	if (!CloseFile(file)) {
 		PcSaveHelper.nErrorCode = SAVESTATUS_ERR_LOAD_CLOSE;
 		return false;
@@ -419,8 +467,13 @@ CloseFile(int32 file)
 void
 DoGameSpecificStuffAfterSucessLoad()
 {
+	CCollision::SortOutCollisionAfterLoad();
+	CStreaming::LoadSceneCollision(TheCamera.GetPosition());
+	CStreaming::LoadScene(TheCamera.GetPosition());
+	CGame::TidyUpMemory(true, false);
 	StillToFadeOut = true;
 	JustLoadedDontFadeInYet = true;
+	TheCamera.Fade(0.0f, 0);
 	CTheScripts::Process();
 }
 
@@ -563,19 +616,9 @@ RestoreForStartLoad()
 		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().x);
 		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().y);
 		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().z);
-		ISLAND_LOADING_IS(LOW)
-		{
-			CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
-			CStreaming::RemoveUnusedBuildings(CGame::currLevel);
-		}
-		CCollision::SortOutCollisionAfterLoad();
-		ISLAND_LOADING_IS(LOW)
-		{
-			CStreaming::RequestBigBuildings(CGame::currLevel);
-			CStreaming::LoadAllRequestedModels(false);
-			CStreaming::HaveAllBigBuildingsLoaded(CGame::currLevel);
-			CGame::TidyUpMemory(true, false);
-		}
+		CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
+		CStreaming::RemoveUnusedBuildings(CGame::currLevel);
+
 		if (CloseFile(file)) {
 			return true;
 		} else {

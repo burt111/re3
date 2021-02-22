@@ -53,7 +53,6 @@
 
 #define MAX_SUBSYSTEMS		(16)
 
-
 static RwBool		  ForegroundApp = TRUE;
 
 static RwBool		  RwInitialised = FALSE;
@@ -191,7 +190,7 @@ const char *_psGetUserFilesFolder()
 							&KeycbData) == ERROR_SUCCESS )
 		{
 			RegCloseKey(hKey);
-			strcat(szUserFiles, "\\GTA3 User Files");
+			strcat(szUserFiles, "\\GTA Vice City User Files");
 			_psCreateFolder(szUserFiles);
 			return szUserFiles;
 		}	
@@ -231,7 +230,11 @@ psCameraBeginUpdate(RwCamera *camera)
 void
 psCameraShowRaster(RwCamera *camera)
 {
-	if (CMenuManager::m_PrefsVsync)
+#ifdef LEGACY_MENU_OPTIONS
+	if (FrontEndMenuManager.m_PrefsVsync || FrontEndMenuManager.m_bMenuActive)
+#else
+	if (FrontEndMenuManager.m_PrefsFrameLimiter || FrontEndMenuManager.m_bMenuActive)
+#endif
 		RwCameraShowRaster(camera, PSGLOBAL(window), rwRASTERFLIPWAITVSYNC);
 	else
 		RwCameraShowRaster(camera, PSGLOBAL(window), rwRASTERFLIPDONTWAIT);
@@ -574,6 +577,9 @@ _RETEX:
 	}
 }
 
+#ifdef __MWERKS__
+#pragma dont_inline on
+#endif
 void _psPrintCpuInfo()
 {
 	RwUInt32 features	= _psGetCpuFeatures();
@@ -588,6 +594,9 @@ void _psPrintCpuInfo()
 	if ( FeaturesEx & 0x80000000 )
 		debug("with 3DNow");
 }
+#ifdef __MWERKS__
+#pragma dont_inline off
+#endif
 #endif
 
 /*
@@ -656,10 +665,6 @@ psInitialize(void)
 	C_PcSave::SetSaveDirectory(_psGetUserFilesFolder());
 	
 	InitialiseLanguage();
-#if GTA_VERSION < GTA3_PC_11
-	FrontEndMenuManager.LoadSettings();
-#endif
-
 #endif
 	
 	gGameState = GS_START_UP;
@@ -707,11 +712,7 @@ psInitialize(void)
 	}
 
 #ifndef PS2_MENU
-
-#if GTA_VERSION >= GTA3_PC_11
 	FrontEndMenuManager.LoadSettings();
-#endif
-
 #endif
 
 	dwDXVersion = GetDXVersion();
@@ -951,8 +952,7 @@ void HandleGraphEvent(void)
 
 /*
  *****************************************************************************
- */
- 
+ */ 
 LRESULT CALLBACK
 MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -1298,6 +1298,16 @@ MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 			break;
 		}
 
+#ifdef FIX_BUGS // game turns on menu when focus is re-gained rather than lost
+		case WM_KILLFOCUS:
+#else
+		case WM_SETFOCUS:
+#endif
+		{
+			CGame::InitAfterFocusLoss();
+			break;
+		}
+
 	}
 
 	/*
@@ -1305,7 +1315,6 @@ MainWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 	 */
 	return DefWindowProc(window, message, wParam, lParam);
 }
-
 
 /*
  *****************************************************************************
@@ -1325,7 +1334,7 @@ InitApplication(HANDLE instance)
 	windowClass.cbClsExtra = 0;
 	windowClass.cbWndExtra = 0;
 	windowClass.hInstance = (HINSTANCE)instance;
-	windowClass.hIcon = nil;
+	windowClass.hIcon = LoadIcon((HINSTANCE)instance, (LPCSTR)IDI_MAIN_ICON);
 	windowClass.hCursor = LoadCursor(nil, IDC_ARROW);
 	windowClass.hbrBackground = nil;
 	windowClass.lpszMenuName = NULL;
@@ -1381,10 +1390,7 @@ UINT GetBestRefreshRate(UINT width, UINT height, UINT depth)
 		if ( mode.Width == width && mode.Height == height && mode.Format == format )
 		{
 			if ( mode.RefreshRate == 0 ) {
-				// From VC
-#ifdef FIX_BUGS
 				d3d->Release();
-#endif
 				return 0;
 			}
 
@@ -1393,10 +1399,7 @@ UINT GetBestRefreshRate(UINT width, UINT height, UINT depth)
 		}
 	}
 	
-	// From VC
-#ifdef FIX_BUGS
 	d3d->Release();
-#endif
 	
 	if ( refreshRate == -1 )
 		return -1;
@@ -1667,7 +1670,6 @@ RwBool _psSetVideoMode(RwInt32 subSystem, RwInt32 videoMode)
 	return TRUE;
 }
  
- 
 /*
  *****************************************************************************
  */
@@ -1778,7 +1780,7 @@ void InitialiseLanguage()
 		|| primLayout	  == LANG_GERMAN )
 	{
 		CGame::nastyGame = false;
-		CMenuManager::m_PrefsAllowNastyGame = false;
+		FrontEndMenuManager.m_PrefsAllowNastyGame = false;
 		CGame::germanGame = true;
 	}
 	
@@ -1787,7 +1789,7 @@ void InitialiseLanguage()
 		|| primLayout	  == LANG_FRENCH )
 	{
 		CGame::nastyGame = false;
-		CMenuManager::m_PrefsAllowNastyGame = false;
+		FrontEndMenuManager.m_PrefsAllowNastyGame = false;
 		CGame::frenchGame = true;
 	}
 	
@@ -1798,7 +1800,7 @@ void InitialiseLanguage()
 
 #ifdef NASTY_GAME
 	CGame::nastyGame = true;
-	CMenuManager::m_PrefsAllowNastyGame = true;
+	FrontEndMenuManager.m_PrefsAllowNastyGame = true;
 	CGame::noProstitutes = false;
 #endif
 	
@@ -1833,33 +1835,33 @@ void InitialiseLanguage()
 		}
 	}
 	
-	CMenuManager::OS_Language = primUserLCID;
+	FrontEndMenuManager.OS_Language = primUserLCID;
 
 	switch ( lang )
 	{
 		case LANG_GERMAN:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_GERMAN;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_GERMAN;
 			break;
 		}
 		case LANG_SPANISH:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_SPANISH;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_SPANISH;
 			break;
 		}
 		case LANG_FRENCH:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_FRENCH;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_FRENCH;
 			break;
 		}
 		case LANG_ITALIAN:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_ITALIAN;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_ITALIAN;
 			break;
 		}
 		default:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_AMERICAN;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_AMERICAN;
 			break;
 		}
 	}
@@ -2079,7 +2081,7 @@ WinMain(HINSTANCE instance,
 	
 	if ( _InputInitialise() == S_OK )
 	{
-		_InputInitialiseMouse();
+		_InputInitialiseMouse(false);
 		_InputInitialiseJoys();
 	}
 	
@@ -2160,7 +2162,7 @@ WinMain(HINSTANCE instance,
 		int connectedPadButtons = ControlsManager.ms_padButtonsInited;
 #endif
 
-		int32 gta3set = CFileMgr::OpenFile("gta3.set", "r");
+		int32 gta3set = CFileMgr::OpenFile("gta_vc.set", "r");
 
 		if ( gta3set )
 		{
@@ -2200,7 +2202,7 @@ WinMain(HINSTANCE instance,
 
 #ifndef MASTER
 	if (gbModelViewer) {
-		// This is TheModelViewer in LCS, but not compiled on III Mobile.
+		// This is TheModelViewer in LCS
 		LoadingScreen("Loading the ModelViewer", NULL, GetRandomSplashScreen());
 		CAnimViewer::Initialise();
 		CTimer::Update();
@@ -2289,6 +2291,8 @@ WinMain(HINSTANCE instance,
 
 						if ( startupDeactivate || ControlsManager.GetJoyButtonJustDown() != 0 )
 							++gGameState;
+						else if ( CPad::GetPad(0)->NewState.CheckForInput() )
+							++gGameState;
 						else if ( CPad::GetPad(0)->GetLeftMouseJustDown() )
 							++gGameState;
 						else if ( CPad::GetPad(0)->GetEnterJustDown() )
@@ -2310,7 +2314,7 @@ WinMain(HINSTANCE instance,
 						CoUninitialize();
 #endif
 						
-						if ( CMenuManager::OS_Language == LANG_FRENCH || CMenuManager::OS_Language == LANG_GERMAN )
+						if ( FrontEndMenuManager.OS_Language == LANG_FRENCH || FrontEndMenuManager.OS_Language == LANG_GERMAN )
 							PlayMovieInWindow(cmdShow, "movies\\GTAtitlesGER.mpg");
 						else
 							PlayMovieInWindow(cmdShow, "movies\\GTAtitles.mpg");
@@ -2325,6 +2329,8 @@ WinMain(HINSTANCE instance,
 						CPad::UpdatePads();
 
 						if ( startupDeactivate || ControlsManager.GetJoyButtonJustDown() != 0 )
+							++gGameState;
+						else if ( CPad::GetPad(0)->NewState.CheckForInput() )
 							++gGameState;
 						else if ( CPad::GetPad(0)->GetLeftMouseJustDown() )
 							++gGameState;
@@ -2362,6 +2368,7 @@ WinMain(HINSTANCE instance,
 						printf("Into TheGame!!!\n");
 #else				
 						LoadingScreen(nil, nil, "loadsc0");
+						// LoadingScreen(nil, nil, "loadsc0"); // duplicate
 #endif
 						if ( !CGame::InitialiseOnceAfterRW() )
 							RsGlobal.quit = TRUE;
@@ -2379,10 +2386,11 @@ WinMain(HINSTANCE instance,
 					case GS_INIT_FRONTEND:
 					{
 						LoadingScreen(nil, nil, "loadsc0");
+						// LoadingScreen(nil, nil, "loadsc0"); // duplicate
 						
 						FrontEndMenuManager.m_bGameNotLoaded = true;
 						
-						CMenuManager::m_bStartUpFrontEndRequested = true;
+						FrontEndMenuManager.m_bStartUpFrontEndRequested = true;
 						
 						if ( defaultFullscreenRes )
 						{
@@ -2467,7 +2475,7 @@ WinMain(HINSTANCE instance,
 						float ms = (float)CTimer::GetCurrentTimeInCycles() / (float)CTimer::GetCyclesPerMillisecond();
 						if ( RwInitialised )
 						{
-							if (!CMenuManager::m_PrefsFrameLimiter || (1000.0f / (float)RsGlobal.maxFPS) < ms)
+							if (!FrontEndMenuManager.m_PrefsFrameLimiter || (1000.0f / (float)RsGlobal.maxFPS) < ms)
 								RsEventHandler(rsIDLE, (void *)TRUE);
 						}
 						break;
@@ -2636,7 +2644,7 @@ HRESULT _InputInitialise()
 	return S_OK;
 }
 
-HRESULT _InputInitialiseMouse()
+HRESULT _InputInitialiseMouse(bool exclusive)
 {
 	HRESULT hr;
 
@@ -2654,7 +2662,7 @@ HRESULT _InputInitialiseMouse()
 	if( FAILED( hr = PSGLOBAL(mouse)->SetDataFormat( &c_dfDIMouse2 ) ) )
 		return hr;
 	
-	if( FAILED( hr = PSGLOBAL(mouse)->SetCooperativeLevel( PSGLOBAL(window), DISCL_NONEXCLUSIVE | DISCL_FOREGROUND ) ) )
+	if( FAILED( hr = PSGLOBAL(mouse)->SetCooperativeLevel( PSGLOBAL(window), (exclusive ? DISCL_EXCLUSIVE : DISCL_NONEXCLUSIVE) | DISCL_FOREGROUND ) ) )
 		return hr;
 	
 	// Acquire the newly created device
@@ -2940,6 +2948,28 @@ HRESULT _InputGetMouseState(DIMOUSESTATE2 *state)
 void _InputShutdown()
 {
 	SAFE_RELEASE(PSGLOBAL(dinterface));
+}
+
+void _InputShutdownMouse()
+{
+	if (PSGLOBAL(mouse) == nil)
+		return;
+
+	PSGLOBAL(mouse)->Unacquire();
+	SAFE_RELEASE(PSGLOBAL(mouse));
+}
+
+bool _InputMouseNeedsExclusive(void)
+{
+	// FIX: I don't know why R* needed that, but it causes infamous mouse bug on modern systems.
+	//		Probably DirectInput bug, since Acquire() and GetDeviceState() reports everything A-OK.
+#ifdef FIX_BUGS
+	return false;
+#endif
+	RwVideoMode vm;
+	RwEngineGetVideoModeInfo(&vm, GcurSelVM);
+
+	return vm.flags & rwVIDEOMODEEXCLUSIVE;
 }
 
 BOOL CALLBACK _InputEnumDevicesCallback( const DIDEVICEINSTANCE* pdidInstance, VOID* pContext )
@@ -3410,6 +3440,10 @@ BOOL _InputIsExtended(INT flag)
 int strcasecmp(const char *str1, const char *str2)
 {
 	return _strcmpi(str1, str2);
+}
+int strncasecmp(const char *str1, const char *str2, size_t len)
+{
+	return _strnicmp(str1, str2, len);
 }
 #endif
 #endif

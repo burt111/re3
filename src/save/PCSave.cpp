@@ -19,7 +19,7 @@ C_PcSave PcSaveHelper;
 void
 C_PcSave::SetSaveDirectory(const char *path)
 {
-	sprintf(DefaultPCSaveFileName, "%s\\%s", path, "GTA3sf");
+	sprintf(DefaultPCSaveFileName, "%s\\%s", path, "GTAVCsf");
 }
 
 bool
@@ -34,7 +34,7 @@ C_PcSave::DeleteSlot(int32 slot)
 	return true;
 }
 
-bool
+int8
 C_PcSave::SaveSlot(int32 slot)
 {
 	MakeValidSaveName(slot);
@@ -49,10 +49,10 @@ C_PcSave::SaveSlot(int32 slot)
 		if (GenericSave(file)) {
 			if (!!CFileMgr::CloseFile(file))
 				nErrorCode = SAVESTATUS_ERR_SAVE_CLOSE;
-			return true;
+			return 0;
 		}
 
-		return false;
+		return 2;
 	}
 	PcSaveHelper.nErrorCode = SAVESTATUS_ERR_SAVE_CREATE;
 	return false;
@@ -89,7 +89,7 @@ void
 C_PcSave::PopulateSlotInfo()
 {
 	for (int i = 0; i < SLOT_COUNT; i++) {
-		Slots[i + 1] = SLOT_EMPTY;
+		Slots[i] = SLOT_EMPTY;
 		SlotFileName[i][0] = '\0';
 		SlotSaveDate[i][0] = '\0';
 	}
@@ -109,14 +109,14 @@ C_PcSave::PopulateSlotInfo()
 		if (file != 0) {
 			CFileMgr::Read(file, (char*)&header, sizeof(header));
 			if (strncmp((char*)&header, TopLineEmptyFile, sizeof(TopLineEmptyFile)-1) != 0) {
-				Slots[i + 1] = SLOT_OK;
+				Slots[i] = SLOT_OK;
 				memcpy(SlotFileName[i], &header.FileName, sizeof(header.FileName));
 				
 				SlotFileName[i][24] = '\0';
 			}
 			CFileMgr::CloseFile(file);
 		}
-		if (Slots[i + 1] == SLOT_OK) {
+		if (Slots[i] == SLOT_OK) {
 			if (CheckDataNotCorrupt(i, savename)) {
 				SYSTEMTIME st;
 				memcpy(&st, &header.SaveDateTime, sizeof(SYSTEMTIME));
@@ -148,7 +148,7 @@ C_PcSave::PopulateSlotInfo()
 
 			} else {
 				CMessages::InsertNumberInString(TheText.Get("FEC_SLC"), i + 1, -1, -1, -1, -1, -1, SlotFileName[i]);
-				Slots[i + 1] = SLOT_CORRUPTED;
+				Slots[i] = SLOT_CORRUPTED;
 			}
 		}
 	}

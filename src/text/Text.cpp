@@ -7,6 +7,7 @@
 #include "Frontend.h"
 #include "Messages.h"
 #include "Text.h"
+#include "Timer.h"
 
 wchar WideErrorString[25];
 
@@ -15,22 +16,28 @@ CText TheText;
 CText::CText(void)
 {
 	encoding = 'e';
+	bHasMissionTextOffsets = false;
+	bIsMissionTextLoaded = false;
+	memset(szMissionTableName, 0, sizeof(szMissionTableName));
 	memset(WideErrorString, 0, sizeof(WideErrorString));
 }
 
 void
 CText::Load(void)
 {
-	uint8 *filedata;
-	char filename[32], type[4];
-	ssize_t offset, length;
-	size_t sectlen;
+	char filename[32];
+	size_t offset;
+	int file;
+	bool tkey_loaded = false, tdat_loaded = false;
+	ChunkHeader m_ChunkHeader;
+
+	bIsMissionTextLoaded = false;
+	bHasMissionTextOffsets = false;
 
 	Unload();
-	filedata = new uint8[0x40000];
 
 	CFileMgr::SetDir("TEXT");
-	switch(CMenuManager::m_PrefsLanguage){
+	switch(FrontEndMenuManager.m_PrefsLanguage){
 	case CMenuManager::LANGUAGE_AMERICAN:
 		sprintf(filename, "AMERICAN.GXT");
 		break;
@@ -59,49 +66,62 @@ CText::Load(void)
 #endif
 	}
 
-	length = CFileMgr::LoadFile(filename, filedata, 0x40000, "rb");
-	CFileMgr::SetDir("");
+	file = CFileMgr::OpenFile(filename, "rb");
 
 	offset = 0;
-	while(offset < length){
-		type[0] = filedata[offset++];
-		type[1] = filedata[offset++];
-		type[2] = filedata[offset++];
-		type[3] = filedata[offset++];
-		sectlen = (int)filedata[offset+3]<<24 | (int)filedata[offset+2]<<16 |
-			(int)filedata[offset+1]<<8 | (int)filedata[offset+0];
-		offset += 4;
-		if(sectlen != 0){
-			if(strncmp(type, "TKEY", 4) == 0)
-				keyArray.Load(sectlen, filedata, &offset);
-			else if(strncmp(type, "TDAT", 4) == 0)
-				data.Load(sectlen, filedata, &offset);
-			else
-				offset += sectlen;
+	while (!tkey_loaded || !tdat_loaded) {
+		ReadChunkHeader(&m_ChunkHeader, file, &offset);
+		if (m_ChunkHeader.size != 0) {
+			if (strncmp(m_ChunkHeader.magic, "TABL", 4) == 0) {
+				MissionTextOffsets.Load(m_ChunkHeader.size, file, &offset, 0x58000);
+				bHasMissionTextOffsets = true;
+			} else if (strncmp(m_ChunkHeader.magic, "TKEY", 4) == 0) {
+				this->keyArray.Load(m_ChunkHeader.size, file, &offset);
+				tkey_loaded = true;
+			} else if (strncmp(m_ChunkHeader.magic, "TDAT", 4) == 0) {
+				this->data.Load(m_ChunkHeader.size, file, &offset);
+				tdat_loaded = true;
+			} else {
+				CFileMgr::Seek(file, m_ChunkHeader.size, SEEK_CUR);
+				offset += m_ChunkHeader.size;
+			}
 		}
 	}
 
 	keyArray.Update(data.chars);
-
-	delete[] filedata;
+	CFileMgr::CloseFile(file);
+	CFileMgr::SetDir("");
 }
 
 void
 CText::Unload(void)
 {
 	CMessages::ClearAllMessagesDisplayedByGame();
-	data.Unload();
 	keyArray.Unload();
+	data.Unload();
+	mission_keyArray.Unload();
+	mission_data.Unload();
+	bIsMissionTextLoaded = false;
+	memset(szMissionTableName, 0, sizeof(szMissionTableName));
 }
 
 wchar*
 CText::Get(const char *key)
 {
+	uint8 result = false;
 #if defined (FIX_BUGS) || defined(FIX_BUGS_64)
-	return keyArray.Search(key, data.chars);
+	wchar *outstr = keyArray.Search(key, data.chars, &result);
 #else
-	return keyArray.Search(key);
+	wchar *outstr = keyArray.Search(key, &result);
 #endif
+
+	if (!result && bHasMissionTextOffsets && bIsMissionTextLoaded)
+#if defined (FIX_BUGS) || defined(FIX_BUGS_64)
+		outstr = mission_keyArray.Search(key, mission_data.chars, &result);
+#else
+		outstr = mission_keyArray.Search(key, &result);
+#endif
+	return outstr;
 }
 
 wchar UpperCaseTable[128] = {
@@ -174,20 +194,137 @@ CText::UpperCase(wchar *s)
 	}
 }
 
+void
+CText::GetNameOfLoadedMissionText(char *outName)
+{
+	strcpy(outName, szMissionTableName);
+}
 
 void
-CKeyArray::Load(size_t length, uint8 *data, ssize_t *offset)
+CText::ReadChunkHeader(ChunkHeader *buf, int32 file, size_t *offset)
 {
-	size_t i;
-	uint8 *rawbytes;
+#ifdef THIS_IS_STUPID
+	char *_buf = (char*)buf;
+	for (int i = 0; i < sizeof(ChunkHeader); i++) {
+		CFileMgr::Read(file, &_buf[i], 1);
+		(*offset)++;
+	}
+#else
+	// original code loops 8 times to read 1 byte with CFileMgr::Read, that's retarded
+	CFileMgr::Read(file, (char*)buf, sizeof(ChunkHeader));
+	*offset += sizeof(ChunkHeader);
+#endif
+}
+
+void
+CText::LoadMissionText(char *MissionTableName)
+{
+	char filename[32];
+	CMessages::ClearAllMessagesDisplayedByGame();
+
+	mission_keyArray.Unload();
+	mission_data.Unload();
+
+	bool search_result = false;
+	int missionTableId = 0;
+
+	for (missionTableId = 0; missionTableId < MissionTextOffsets.size; missionTableId++) {
+		if (strncmp(MissionTextOffsets.data[missionTableId].szMissionName, MissionTableName, strlen(MissionTextOffsets.data[missionTableId].szMissionName)) == 0) {
+			search_result = true;
+			break;
+		}
+	}
+
+	if (!search_result) {
+		printf("CText::LoadMissionText - couldn't find %s", MissionTableName);
+		return;
+	}
+
+	CFileMgr::SetDir("TEXT");
+	switch (FrontEndMenuManager.m_PrefsLanguage) {
+	case CMenuManager::LANGUAGE_AMERICAN:
+		sprintf(filename, "AMERICAN.GXT");
+		break;
+	case CMenuManager::LANGUAGE_FRENCH:
+		sprintf(filename, "FRENCH.GXT");
+		break;
+	case CMenuManager::LANGUAGE_GERMAN:
+		sprintf(filename, "GERMAN.GXT");
+		break;
+	case CMenuManager::LANGUAGE_ITALIAN:
+		sprintf(filename, "ITALIAN.GXT");
+		break;
+	case CMenuManager::LANGUAGE_SPANISH:
+		sprintf(filename, "SPANISH.GXT");
+		break;
+#ifdef MORE_LANGUAGES
+	case LANGUAGE_POLISH:
+		sprintf(filename, "POLISH.GXT");
+		break;
+	case LANGUAGE_RUSSIAN:
+		sprintf(filename, "RUSSIAN.GXT");
+		break;
+	case LANGUAGE_JAPANESE:
+		sprintf(filename, "JAPANESE.GXT");
+		break;
+#endif
+	}
+	CTimer::Suspend();
+	int file = CFileMgr::OpenFile(filename, "rb");
+	CFileMgr::Seek(file, MissionTextOffsets.data[missionTableId].offset, SEEK_SET);
+
+	char TableCheck[8];
+	CFileMgr::Read(file, TableCheck, 8);
+	if (strncmp(TableCheck, MissionTableName, 8) != 0)
+		printf("CText::LoadMissionText - expected to find %s in the text file", MissionTableName);
+
+	bool tkey_loaded = false, tdat_loaded = false;
+	ChunkHeader m_ChunkHeader;
+	while (!tkey_loaded || !tdat_loaded) {
+		size_t bytes_read = 0;
+		ReadChunkHeader(&m_ChunkHeader, file, &bytes_read);
+		if (m_ChunkHeader.size != 0) {
+			if (strncmp(m_ChunkHeader.magic, "TKEY", 4) == 0) {
+				size_t bytes_read = 0;
+				mission_keyArray.Load(m_ChunkHeader.size, file, &bytes_read);
+				tkey_loaded = true;
+			} else if (strncmp(m_ChunkHeader.magic, "TDAT", 4) == 0) {
+				size_t bytes_read = 0;
+				mission_data.Load(m_ChunkHeader.size, file, &bytes_read);
+				tdat_loaded = true;
+			} else
+				CFileMgr::Seek(file, m_ChunkHeader.size, SEEK_CUR);
+		}
+	}
+
+	mission_keyArray.Update(mission_data.chars);
+	CFileMgr::CloseFile(file);
+	CTimer::Resume();
+	CFileMgr::SetDir("");
+	strcpy(szMissionTableName, MissionTableName);
+	bIsMissionTextLoaded = true;
+}
+
+
+void
+CKeyArray::Load(size_t length, int file, size_t* offset)
+{
+	char *rawbytes;
 
 	// You can make numEntries size_t if you want to exceed 32-bit boundaries, everything else should be ready.
 	numEntries = (int)(length / sizeof(CKeyEntry));
 	entries = new CKeyEntry[numEntries];
-	rawbytes = (uint8*)entries;
+	rawbytes = (char*)entries;
 
-	for(i = 0; i < length; i++)
-		rawbytes[i] = data[(*offset)++];
+#ifdef THIS_IS_STUPID
+	for (uint32 i = 0; i < length; i++) {
+		CFileMgr::Read(file, &rawbytes[i], 1);
+		(*offset)++;
+	}
+#else
+	CFileMgr::Read(file, rawbytes, length);
+	*offset += length;
+#endif
 }
 
 void
@@ -230,9 +367,9 @@ CKeyArray::BinarySearch(const char *key, CKeyEntry *entries, int16 low, int16 hi
 
 wchar*
 #if defined (FIX_BUGS) || defined(FIX_BUGS_64)
-CKeyArray::Search(const char *key, wchar *data)
+CKeyArray::Search(const char *key, wchar *data, uint8 *result)
 #else
-CKeyArray::Search(const char *key)
+CKeyArray::Search(const char *key, uint8 *result)
 #endif
 {
 	CKeyEntry *found;
@@ -241,33 +378,47 @@ CKeyArray::Search(const char *key)
 
 #if defined (FIX_BUGS) || defined(FIX_BUGS_64)
 	found = BinarySearch(key, entries, 0, numEntries-1);
-	if(found)
+	if (found) {
+		*result = true;
 		return (wchar*)((uint8*)data + found->valueOffset);
+	}
 #else
 	found = BinarySearch(key, entries, 0, numEntries-1);
-	if(found)
+	if (found) {
+		*result = true;
 		return found->value;
+	}
 #endif
+	*result = false;
+#ifdef MASTER
+	sprintf(errstr, "");
+#else
 	sprintf(errstr, "%s missing", key);
+#endif // MASTER
 	for(i = 0; i < 25; i++)
 		WideErrorString[i] = errstr[i];
 	return WideErrorString;
 }
 
-
 void
-CData::Load(size_t length, uint8 *data, ssize_t *offset)
+CData::Load(size_t length, int file, size_t * offset)
 {
-	size_t i;
-	uint8 *rawbytes;
+	char *rawbytes;
 
 	// You can make numChars size_t if you want to exceed 32-bit boundaries, everything else should be ready.
 	numChars = (int)(length / sizeof(wchar));
 	chars = new wchar[numChars];
-	rawbytes = (uint8*)chars;
+	rawbytes = (char*)chars;
 
-	for(i = 0; i < length; i++)
-		rawbytes[i] = data[(*offset)++];
+#ifdef THIS_IS_STUPID
+	for(uint32 i = 0; i < length; i++){
+		CFileMgr::Read(file, &rawbytes[i], 1);
+		(*offset)++;
+	}
+#else
+	CFileMgr::Read(file, rawbytes, length);
+	*offset += length;
+#endif
 }
 
 void
@@ -276,6 +427,33 @@ CData::Unload(void)
 	delete[] chars;
 	chars = nil;
 	numChars = 0;
+}
+
+void
+CMissionTextOffsets::Load(size_t table_size, int file, size_t *offset, int)
+{
+#ifdef THIS_IS_STUPID
+	size_t num_of_entries = table_size / sizeof(CMissionTextOffsets::Entry);
+	for (size_t mi = 0; mi < num_of_entries; mi++) {
+		for (uint32 i = 0; i < sizeof(data[mi].szMissionName); i++) {
+			CFileMgr::Read(file, &data[i].szMissionName[i], 1);
+			(*offset)++;
+		}
+		char* _buf = (char*)&data[mi].offset;
+		for (uint32 i = 0; i < sizeof(data[mi].offset); i++) {
+			CFileMgr::Read(file, &_buf[i], 1);
+			(*offset)++;
+		}
+	}
+	size = (uint16)num_of_entries;
+#else
+	// not exact VC code but smaller and better :P
+
+	// You can make this size_t if you want to exceed 32-bit boundaries, everything else should be ready.
+	size = (uint16) (table_size / sizeof(CMissionTextOffsets::Entry));
+	CFileMgr::Read(file, (char*)data, sizeof(CMissionTextOffsets::Entry) * size);
+	*offset += sizeof(CMissionTextOffsets::Entry) * size;
+#endif
 }
 
 char*
@@ -290,8 +468,29 @@ UnicodeToAscii(wchar *src)
 		if(*src < 128)
 #endif
 			aStr[len] = *src;
-		else
-			aStr[len] = '#';
+		// convert to CP1252
+		else if(*src <= 131)
+			aStr[len] = *src + 64;
+		else if (*src <= 141)
+			aStr[len] = *src + 66;
+		else if (*src <= 145)
+			aStr[len] = *src + 68;
+		else if (*src <= 149)
+			aStr[len] = *src + 71;
+		else if (*src <= 154)
+			aStr[len] = *src + 73;
+		else if (*src <= 164)
+			aStr[len] = *src + 75;
+		else if (*src <= 168)
+			aStr[len] = *src + 77;
+		else if (*src <= 204)
+			aStr[len] = *src + 80;
+		else switch (*src) {
+		case 205: aStr[len] = 209; break;
+		case 206: aStr[len] = 241; break;
+		case 207: aStr[len] = 191; break;
+		default: aStr[len] = '#'; break;
+		}
 	aStr[len] = '\0';
 	return aStr;
 }

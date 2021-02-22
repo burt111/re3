@@ -52,7 +52,6 @@ long _dwOperatingSystemVersion;
 
 #define MAX_SUBSYSTEMS		(16)
 
-
 rw::EngineOpenParams openParams;
 
 static RwBool		  ForegroundApp = TRUE;
@@ -141,7 +140,7 @@ const char *_psGetUserFilesFolder()
 							&KeycbData) == ERROR_SUCCESS )
 		{
 			RegCloseKey(hKey);
-			strcat(szUserFiles, "\\GTA3 User Files");
+			strcat(szUserFiles, "\\GTA Vice City User Files");
 			_psCreateFolder(szUserFiles);
 			return szUserFiles;
 		}	
@@ -181,7 +180,11 @@ psCameraBeginUpdate(RwCamera *camera)
 void
 psCameraShowRaster(RwCamera *camera)
 {
-	if (CMenuManager::m_PrefsVsync)
+#ifdef LEGACY_MENU_OPTIONS
+	if (FrontEndMenuManager.m_PrefsVsync || FrontEndMenuManager.m_bMenuActive)
+#else
+	if (FrontEndMenuManager.m_PrefsFrameLimiter || FrontEndMenuManager.m_bMenuActive)
+#endif
 		RwCameraShowRaster(camera, PSGLOBAL(window), rwRASTERFLIPWAITVSYNC);
 	else
 		RwCameraShowRaster(camera, PSGLOBAL(window), rwRASTERFLIPDONTWAIT);
@@ -381,10 +384,6 @@ psInitialize(void)
 	
 	InitialiseLanguage();
 
-#if GTA_VERSION < GTA3_PC_11
-	FrontEndMenuManager.LoadSettings();
-#endif
-
 #endif
 	
 	gGameState = GS_START_UP;
@@ -434,11 +433,7 @@ psInitialize(void)
 
 	
 #ifndef PS2_MENU
-
-#if GTA_VERSION >= GTA3_PC_11
 	FrontEndMenuManager.LoadSettings();
-#endif
-
 #endif
 
 
@@ -464,11 +459,27 @@ psInitialize(void)
 	debug("Physical memory size %llu\n", _dwMemAvailPhys);
 	debug("Available physical memory %llu\n", size);
 #else
+#ifndef __APPLE__
  	struct sysinfo systemInfo;
 	sysinfo(&systemInfo);
 	_dwMemAvailPhys = systemInfo.freeram;
 	debug("Physical memory size %u\n", systemInfo.totalram);
 	debug("Available physical memory %u\n", systemInfo.freeram);
+#else
+	uint64_t size = 0;
+	uint64_t page_size = 0;
+	size_t uint64_len = sizeof(uint64_t);
+	size_t ull_len = sizeof(unsigned long long);
+	sysctl((int[]){CTL_HW, HW_PAGESIZE}, 2, &page_size, &ull_len, NULL, 0);
+	sysctl((int[]){CTL_HW, HW_MEMSIZE}, 2, &size, &uint64_len, NULL, 0);
+	vm_statistics_data_t vm_stat;
+	mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+	host_statistics(mach_host_self(), HOST_VM_INFO, (host_info_t)&vm_stat, &count);
+	_dwMemAvailPhys = (uint64_t)(vm_stat.free_count * page_size);
+	debug("Physical memory size %llu\n", _dwMemAvailPhys);
+	debug("Available physical memory %llu\n", size);
+#endif
+	_dwOperatingSystemVersion = OS_WINXP; // To fool other classes
 #endif
   
   TheText.Unload();
@@ -913,10 +924,31 @@ void _InputInitialiseJoys()
 	}
 }
 
-long _InputInitialiseMouse()
+int lastCursorMode = GLFW_CURSOR_HIDDEN;
+long _InputInitialiseMouse(bool exclusive)
 {
-	glfwSetInputMode(PSGLOBAL(window), GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+	// Disabled = keep cursor centered and hide
+	lastCursorMode = exclusive ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_HIDDEN;
+	glfwSetInputMode(PSGLOBAL(window), GLFW_CURSOR, lastCursorMode);
 	return 0;
+}
+
+void _InputShutdownMouse()
+{
+	// Not needed
+}
+
+// Not "needs exclusive" on GLFW, but more like "needs to change mode"
+bool _InputMouseNeedsExclusive()
+{
+	// That was the cause of infamous mouse bug on Win.
+	
+	RwVideoMode vm;
+	RwEngineGetVideoModeInfo(&vm, GcurSelVM);
+
+	// If windowed, free the cursor on menu(where this func. is called and DISABLED-HIDDEN transition is done accordingly)
+	// If it's fullscreen, be sure that it didn't stuck on HIDDEN.
+	return !(vm.flags & rwVIDEOMODEEXCLUSIVE) || lastCursorMode == GLFW_CURSOR_HIDDEN;
 }
 
 void psPostRWinit(void)
@@ -932,7 +964,7 @@ void psPostRWinit(void)
 	glfwSetJoystickCallback(joysChangeCB);
 
 	_InputInitialiseJoys();
-	_InputInitialiseMouse();
+	_InputInitialiseMouse(false);
 
 	if(!(vm.flags & rwVIDEOMODEEXCLUSIVE))
 		glfwSetWindowSize(PSGLOBAL(window), RsGlobal.maximumWidth, RsGlobal.maximumHeight);
@@ -1111,7 +1143,7 @@ void InitialiseLanguage()
 		|| primLayout	  == LANG_GERMAN )
 	{
 		CGame::nastyGame = false;
-		CMenuManager::m_PrefsAllowNastyGame = false;
+		FrontEndMenuManager.m_PrefsAllowNastyGame = false;
 		CGame::germanGame = true;
 	}
 	
@@ -1120,7 +1152,7 @@ void InitialiseLanguage()
 		|| primLayout	  == LANG_FRENCH )
 	{
 		CGame::nastyGame = false;
-		CMenuManager::m_PrefsAllowNastyGame = false;
+		FrontEndMenuManager.m_PrefsAllowNastyGame = false;
 		CGame::frenchGame = true;
 	}
 	
@@ -1131,7 +1163,7 @@ void InitialiseLanguage()
 
 #ifdef NASTY_GAME
 	CGame::nastyGame = true;
-	CMenuManager::m_PrefsAllowNastyGame = true;
+	FrontEndMenuManager.m_PrefsAllowNastyGame = true;
 	CGame::noProstitutes = false;
 #endif
 	
@@ -1166,33 +1198,33 @@ void InitialiseLanguage()
 		}
 	}
 	
-	CMenuManager::OS_Language = primUserLCID;
+	FrontEndMenuManager.OS_Language = primUserLCID;
 
 	switch ( lang )
 	{
 		case LANG_GERMAN:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_GERMAN;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_GERMAN;
 			break;
 		}
 		case LANG_SPANISH:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_SPANISH;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_SPANISH;
 			break;
 		}
 		case LANG_FRENCH:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_FRENCH;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_FRENCH;
 			break;
 		}
 		case LANG_ITALIAN:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_ITALIAN;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_ITALIAN;
 			break;
 		}
 		default:
 		{
-			CMenuManager::m_PrefsLanguage = CMenuManager::LANGUAGE_AMERICAN;
+			FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_AMERICAN;
 			break;
 		}
 	}
@@ -1614,7 +1646,7 @@ main(int argc, char *argv[])
 		int connectedPadButtons = ControlsManager.ms_padButtonsInited;
 #endif
 
-		int32 gta3set = CFileMgr::OpenFile("gta3.set", "r");
+		int32 gta3set = CFileMgr::OpenFile("gta_vc.set", "r");
 		
 		if ( gta3set )
 		{
@@ -1673,7 +1705,7 @@ main(int argc, char *argv[])
 
 #ifndef MASTER
 		if (gbModelViewer) {
-			// This is TheModelViewer in LCS, but not compiled on III Mobile.
+			// This is TheModelViewer in LCS
 			LoadingScreen("Loading the ModelViewer", NULL, GetRandomSplashScreen());
 			CAnimViewer::Initialise();
 			CTimer::Update();
@@ -1699,7 +1731,7 @@ main(int argc, char *argv[])
 			glfwPollEvents();
 #ifndef MASTER
 			if (gbModelViewer) {
-				// This is TheModelViewerCore in LCS, but TheModelViewer on other state-machine III-VCs.
+				// This is TheModelViewerCore in LCS
 				TheModelViewer();
 			} else
 #endif
@@ -1798,6 +1830,7 @@ main(int argc, char *argv[])
 						printf("Into TheGame!!!\n");
 #else				
 						LoadingScreen(nil, nil, "loadsc0");
+						// LoadingScreen(nil, nil, "loadsc0"); // duplicate
 #endif
 						if ( !CGame::InitialiseOnceAfterRW() )
 							RsGlobal.quit = TRUE;
@@ -1810,15 +1843,15 @@ main(int argc, char *argv[])
 #endif
 						break;
 					}
-					
 #ifndef PS2_MENU
 					case GS_INIT_FRONTEND:
 					{
 						LoadingScreen(nil, nil, "loadsc0");
+						// LoadingScreen(nil, nil, "loadsc0"); // duplicate
 						
 						FrontEndMenuManager.m_bGameNotLoaded = true;
 						
-						CMenuManager::m_bStartUpFrontEndRequested = true;
+						FrontEndMenuManager.m_bStartUpFrontEndRequested = true;
 						
 						if ( defaultFullscreenRes )
 						{
@@ -1901,7 +1934,7 @@ main(int argc, char *argv[])
 						float ms = (float)CTimer::GetCurrentTimeInCycles() / (float)CTimer::GetCyclesPerMillisecond();
 						if ( RwInitialised )
 						{
-							if (!CMenuManager::m_PrefsFrameLimiter || (1000.0f / (float)RsGlobal.maxFPS) < ms)
+							if (!FrontEndMenuManager.m_PrefsFrameLimiter || (1000.0f / (float)RsGlobal.maxFPS) < ms)
 								RsEventHandler(rsIDLE, (void *)TRUE);
 						}
 						break;
@@ -2004,7 +2037,6 @@ main(int argc, char *argv[])
 #endif
 	}
 	
-
 #ifndef MASTER
 	if ( gbModelViewer )
 		CAnimViewer::Shutdown();
@@ -2174,6 +2206,10 @@ void joysChangeCB(int jid, int event)
 int strcasecmp(const char* str1, const char* str2)
 {
 	return _strcmpi(str1, str2);
+}
+int strncasecmp(const char *str1, const char *str2, size_t len)
+{
+	return _strnicmp(str1, str2, len);
 }
 #endif
 #endif

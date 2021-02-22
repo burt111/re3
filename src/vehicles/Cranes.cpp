@@ -52,16 +52,22 @@ void CCranes::InitCranes(void)
 				CEntity* pEntity = (CEntity*)pNode->item;
 				if (MODELID_CRANE_1 == pEntity->GetModelIndex() ||
 					MODELID_CRANE_2 == pEntity->GetModelIndex() ||
-					MODELID_CRANE_3 == pEntity->GetModelIndex())
+					MODELID_CRANE_3 == pEntity->GetModelIndex() ||
+					MODELID_CRANE_4 == pEntity->GetModelIndex() ||
+					MODELID_CRANE_5 == pEntity->GetModelIndex() ||
+					MODELID_CRANE_6 == pEntity->GetModelIndex())
 					AddThisOneCrane(pEntity);
 			}
 		}
 	}
-	for (CPtrNode* pNode = CWorld::GetBigBuildingList(LEVEL_INDUSTRIAL).first; pNode; pNode = pNode->next) {
+	for (CPtrNode* pNode = CWorld::GetBigBuildingList(LEVEL_MAINLAND).first; pNode; pNode = pNode->next) {
 		CEntity* pEntity = (CEntity*)pNode->item;
 		if (MODELID_CRANE_1 == pEntity->GetModelIndex() ||
 			MODELID_CRANE_2 == pEntity->GetModelIndex() ||
-			MODELID_CRANE_3 == pEntity->GetModelIndex())
+			MODELID_CRANE_3 == pEntity->GetModelIndex() ||
+			MODELID_CRANE_4 == pEntity->GetModelIndex() ||
+			MODELID_CRANE_5 == pEntity->GetModelIndex() ||
+			MODELID_CRANE_6 == pEntity->GetModelIndex())
 			AddThisOneCrane(pEntity);
 	}
 }
@@ -83,23 +89,8 @@ void CCranes::AddThisOneCrane(CEntity* pEntity)
 	pCrane->m_nTimeForNextCheck = 0;
 	pCrane->m_nCraneState = CCrane::IDLE;
 	pCrane->m_bWasMilitaryCrane = false;
-	pCrane->m_nAudioEntity = DMAudio.CreateEntity(AUDIOTYPE_CRANE, &aCranes[NumCranes]);
-	if (pCrane->m_nAudioEntity >= 0)
-		DMAudio.SetEntityStatus(pCrane->m_nAudioEntity, true);
 	pCrane->m_bIsTop = (MODELID_CRANE_1 != pEntity->GetModelIndex());
-	// Is this used to avoid military crane?
-	if (pCrane->m_bIsTop || pEntity->GetPosition().y > 0.0f) {
-		CObject* pHook = new CObject(MI_MAGNET, false);
-		pHook->ObjectCreatedBy = MISSION_OBJECT;
-		pHook->bUsesCollision = false;
-		pHook->bExplosionProof = true;
-		pHook->bAffectedByGravity = false;
-		pCrane->m_pHook = pHook;
-		pCrane->CalcHookCoordinates(&pCrane->m_vecHookCurPos.x, &pCrane->m_vecHookCurPos.y, &pCrane->m_vecHookCurPos.z);
-		pCrane->SetHookMatrix();
-	}
-	else
-		pCrane->m_pHook = nil;
+	pCrane->m_pHook = nil;
 	NumCranes++;
 }
 
@@ -268,7 +259,6 @@ void CCrane::Update(void)
 							m_pVehiclePickedUp->bUsesCollision = false;
 							if (m_bIsCrusher)
 								m_pVehiclePickedUp->bCollisionProof = true;
-							DMAudio.PlayOneShot(m_nAudioEntity, SOUND_CRANE_PICKUP, 0.0f);
 						}
 					}
 				}
@@ -448,8 +438,6 @@ bool CCrane::DoesCranePickUpThisCarType(uint32 mi)
 			mi != MI_TRASH &&
 #ifdef FIX_BUGS
 			mi != MI_COACH &&
-#else
-			mi != MI_BLISTA &&
 #endif
 			mi != MI_SECURICA &&
 			mi != MI_BUS &&
@@ -460,7 +448,7 @@ bool CCrane::DoesCranePickUpThisCarType(uint32 mi)
 		return mi == MI_FIRETRUCK ||
 			mi == MI_AMBULAN ||
 			mi == MI_ENFORCER ||
-			mi == MI_FBICAR ||
+			mi == MI_FBIRANCH ||
 			mi == MI_RHINO ||
 			mi == MI_BARRACKS ||
 			mi == MI_POLICE;
@@ -474,7 +462,7 @@ bool CCranes::DoesMilitaryCraneHaveThisOneAlready(uint32 mi)
 	case MI_FIRETRUCK: return (CarsCollectedMilitaryCrane & 1);
 	case MI_AMBULAN: return (CarsCollectedMilitaryCrane & 2);
 	case MI_ENFORCER: return (CarsCollectedMilitaryCrane & 4);
-	case MI_FBICAR: return (CarsCollectedMilitaryCrane & 8);
+	case MI_FBIRANCH: return (CarsCollectedMilitaryCrane & 8);
 	case MI_RHINO: return (CarsCollectedMilitaryCrane & 0x10);
 	case MI_BARRACKS: return (CarsCollectedMilitaryCrane & 0x20);
 	case MI_POLICE: return (CarsCollectedMilitaryCrane & 0x40);
@@ -489,7 +477,7 @@ void CCranes::RegisterCarForMilitaryCrane(uint32 mi)
 	case MI_FIRETRUCK: CarsCollectedMilitaryCrane |= 1; break;
 	case MI_AMBULAN: CarsCollectedMilitaryCrane |= 2; break;
 	case MI_ENFORCER: CarsCollectedMilitaryCrane |= 4; break;
-	case MI_FBICAR: CarsCollectedMilitaryCrane |= 8; break;
+	case MI_FBIRANCH: CarsCollectedMilitaryCrane |= 8; break;
 	case MI_RHINO: CarsCollectedMilitaryCrane |= 0x10; break;
 	case MI_BARRACKS: CarsCollectedMilitaryCrane |= 0x20; break;
 	case MI_POLICE: CarsCollectedMilitaryCrane |= 0x40; break;
@@ -665,11 +653,6 @@ void CCranes::Load(uint8* buf, uint32 size)
 			pCrane->m_pHook = CPools::GetObjectPool()->GetSlot((uintptr)pCrane->m_pHook - 1);
 		if (pCrane->m_pVehiclePickedUp != nil)
 			pCrane->m_pVehiclePickedUp = CPools::GetVehiclePool()->GetSlot((uintptr)pCrane->m_pVehiclePickedUp - 1);
-	}
-	for (int i = 0; i < NUM_CRANES; i++) {
-		aCranes[i].m_nAudioEntity = DMAudio.CreateEntity(AUDIOTYPE_CRANE, &aCranes[i]);
-		if (aCranes[i].m_nAudioEntity != 0)
-			DMAudio.SetEntityStatus(aCranes[i].m_nAudioEntity, true);
 	}
 
 	VALIDATESAVEBUF(size);
