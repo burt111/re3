@@ -7,6 +7,9 @@
 #define AEHANDLE_IS_FAILED(h) ((h)<0)
 #define AEHANDLE_IS_OK(h)     ((h)>=0)
 
+#define NO_AUDIO_PROVIDER -3
+#define AUDIO_PROVIDER_NOT_DETERMINED -99
+
 class cAudioScriptObject;
 class CEntity;
 
@@ -27,6 +30,7 @@ public:
 	void DestroyAllGameCreatedEntities(void);
 	
 	void SetMonoMode(uint8 mono);
+	void SetMP3BoostVolume(uint8 volume);
 	void SetEffectsMasterVolume(uint8 volume);
 	void SetMusicMasterVolume(uint8 volume);
 	void SetEffectsFadeVol(uint8 volume);
@@ -34,6 +38,8 @@ public:
 	
 	uint8 GetNum3DProvidersAvailable(void);
 	char *Get3DProviderName(uint8 id);
+	
+	int8 AutoDetect3DProviders(void);
 	
 	int8 GetCurrent3DProviderIndex(void);
 	int8 SetCurrent3DProvider(uint8 which);
@@ -63,27 +69,35 @@ public:
 	void ReportCollision(CEntity *entityA, CEntity *entityB, uint8 surfaceTypeA, uint8 surfaceTypeB, float collisionPower, float velocity);
 	
 	void PlayFrontEndSound(uint16 frontend, uint32 volume);
-	void PlayRadioAnnouncement(uint8 announcement);
-	void PlayFrontEndTrack(uint8 track, uint8 frontendFlag);
+	void PlayRadioAnnouncement(uint32 announcement);
+	void PlayFrontEndTrack(uint32 track, uint8 frontendFlag);
 	void StopFrontEndTrack(void);
 	
 	void ResetTimers(uint32 time);
 	
 	void ChangeMusicMode(uint8 mode);
 	
-	void PreloadCutSceneMusic(uint8 track);
+	void PreloadCutSceneMusic(uint32 track);
 	void PlayPreloadedCutSceneMusic(void);
 	void StopCutSceneMusic(void);
 	
-	void PreloadMissionAudio(Const char *missionAudio);
-	uint8 GetMissionAudioLoadingStatus(void);
-	void SetMissionAudioLocation(float x, float y, float z);
-	void PlayLoadedMissionAudio(void);
-	bool IsMissionAudioSampleFinished(void);
-	void ClearMissionAudio(void);
+	void PreloadMissionAudio(uint8 slot, Const char *missionAudio);
+	uint8 GetMissionAudioLoadingStatus(uint8 slot);
+	void SetMissionAudioLocation(uint8 slot, float x, float y, float z);
+	void PlayLoadedMissionAudio(uint8 slot);
+	bool IsMissionAudioSampleFinished(uint8 slot);
+	void ClearMissionAudio(uint8 slot);
 
 	uint8 GetRadioInCar(void);
 	void SetRadioInCar(uint32 radio);
-	void SetRadioChannel(uint8 radio, int32 pos);
+	void SetRadioChannel(uint32 radio, int32 pos);
+
+	void SetStartingTrackPositions(uint8 isStartGame);
+	float *GetListenTimeArray();
+	uint32 GetFavouriteRadioStation();
+	int32 GetRadioPosition(uint32 station);
+	void SetPedTalkingStatus(class CPed *ped, uint8 status);
+	void SetPlayersMood(uint8 mood, uint32 time);
+	void ShutUpPlayerTalking(uint8 state);
 };
 extern cDMAudio DMAudio;

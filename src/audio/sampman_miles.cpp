@@ -1054,7 +1054,7 @@ cSampleManager::Initialise(void)
 			m_szCDRomRootPath[0] = '\0';
 
 			strcpy(m_WavFilesPath, m_szCDRomRootPath);
-
+			/*
 #ifdef AUDIO_CACHE
 			if ( CreateCache )
 #endif
@@ -1081,7 +1081,7 @@ cSampleManager::Initialise(void)
 					return false;
 				}
 			}
-
+			*/
 			// Find path of MP3s (originally in CD-Rom)
 			// if NO_CDCHECK is NOT defined but AUDIO_CACHE is defined, we still need to find MP3s' path, but will exit after the first file
 #ifndef NO_CDCHECK
@@ -1099,7 +1099,7 @@ cSampleManager::Initialise(void)
 			{
 #endif
 
-				for (int32 i = 0; i < STREAMED_SOUND_MISSION_MOBR1; i++)
+				for (int32 i = 0; i < TOTAL_STREAMED_SOUNDS; i++)
 				{
 					strcpy(filepath, m_MP3FilesPath);
 					strcat(filepath, StreamedNameTable[i]);
@@ -1140,7 +1140,7 @@ cSampleManager::Initialise(void)
 #endif
 
 			if ( !bFileNotFound ) {
-
+/*
 #ifdef AUDIO_CACHE
 			if ( CreateCache )
 #endif
@@ -1166,7 +1166,7 @@ cSampleManager::Initialise(void)
 						bFileNotFound = true;
 						break;
 					}
-				}
+				}*/
 			}
 			
 			m_bInitialised = !bFileNotFound;
@@ -2043,7 +2043,7 @@ cSampleManager::PreloadStreamedFile(uint32 nFile, uint8 nStream)
 			
 			char filepath[MAX_PATH];
 			
-			strcpy(filepath, nFile < STREAMED_SOUND_MISSION_COMPLETED4 ? m_MP3FilesPath : (nFile < STREAMED_SOUND_MISSION_MOBR1 ? m_MiscomPath : m_WavFilesPath));
+			strcpy(filepath, m_MP3FilesPath);
 			strcat(filepath, StreamedNameTable[nFile]);
 			
 			mp3Stream[nStream] = AIL_open_stream(DIG, filepath, 0);

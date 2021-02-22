@@ -63,6 +63,15 @@ cDMAudio::SetMonoMode(uint8 mono)
 }
 
 void
+cDMAudio::SetMP3BoostVolume(uint8 volume)
+{
+	uint8 vol = volume;
+	if (vol > MAX_VOLUME) vol = MAX_VOLUME;
+
+	AudioManager.SetMP3BoostVolume(vol);
+}
+
+void
 cDMAudio::SetEffectsMasterVolume(uint8 volume)
 {
 	uint8 vol = volume;
@@ -108,6 +117,11 @@ char *
 cDMAudio::Get3DProviderName(uint8 id)
 {
 	return AudioManager.Get3DProviderName(id);
+}
+
+int8 cDMAudio::AutoDetect3DProviders(void)
+{
+	return AudioManager.AutoDetect3DProviders();
 }
 
 int8
@@ -224,13 +238,13 @@ cDMAudio::PlayFrontEndSound(uint16 frontend, uint32 volume)
 }
 
 void
-cDMAudio::PlayRadioAnnouncement(uint8 announcement)
+cDMAudio::PlayRadioAnnouncement(uint32 announcement)
 {
 	MusicManager.PlayAnnouncement(announcement);
 }
 
 void
-cDMAudio::PlayFrontEndTrack(uint8 track, uint8 frontendFlag)
+cDMAudio::PlayFrontEndTrack(uint32 track, uint8 frontendFlag)
 {
 	MusicManager.PlayFrontEndTrack(track, frontendFlag);
 }
@@ -254,7 +268,7 @@ cDMAudio::ChangeMusicMode(uint8 mode)
 }
 
 void
-cDMAudio::PreloadCutSceneMusic(uint8 track)
+cDMAudio::PreloadCutSceneMusic(uint32 track)
 {
 	MusicManager.PreloadCutSceneMusic(track);
 }
@@ -272,39 +286,39 @@ cDMAudio::StopCutSceneMusic(void)
 }
 
 void
-cDMAudio::PreloadMissionAudio(Const char *missionAudio)
+cDMAudio::PreloadMissionAudio(uint8 slot, Const char *missionAudio)
 {
-	AudioManager.PreloadMissionAudio(missionAudio);
+	AudioManager.PreloadMissionAudio(slot, missionAudio);
 }
 
 uint8
-cDMAudio::GetMissionAudioLoadingStatus(void)
+cDMAudio::GetMissionAudioLoadingStatus(uint8 slot)
 {
-	return AudioManager.GetMissionAudioLoadingStatus();
+	return AudioManager.GetMissionAudioLoadingStatus(slot);
 }
 
 void
-cDMAudio::SetMissionAudioLocation(float x, float y, float z)
+cDMAudio::SetMissionAudioLocation(uint8 slot, float x, float y, float z)
 {
-	AudioManager.SetMissionAudioLocation(x, y, z);
+	AudioManager.SetMissionAudioLocation(slot, x, y, z);
 }
 
 void
-cDMAudio::PlayLoadedMissionAudio(void)
+cDMAudio::PlayLoadedMissionAudio(uint8 slot)
 {
-	AudioManager.PlayLoadedMissionAudio();
+	AudioManager.PlayLoadedMissionAudio(slot);
 }
 
 bool
-cDMAudio::IsMissionAudioSampleFinished(void)
+cDMAudio::IsMissionAudioSampleFinished(uint8 slot)
 {
-	return AudioManager.IsMissionAudioSampleFinished();
+	return AudioManager.IsMissionAudioSampleFinished(slot);
 }
 
 void
-cDMAudio::ClearMissionAudio(void)
+cDMAudio::ClearMissionAudio(uint8 slot)
 {
-	AudioManager.ClearMissionAudio();
+	AudioManager.ClearMissionAudio(slot);
 }
 
 uint8
@@ -320,7 +334,49 @@ cDMAudio::SetRadioInCar(uint32 radio)
 }
 
 void
-cDMAudio::SetRadioChannel(uint8 radio, int32 pos)
+cDMAudio::SetRadioChannel(uint32 radio, int32 pos)
 {
 	MusicManager.SetRadioChannelByScript(radio, pos);
+}
+
+void
+cDMAudio::SetStartingTrackPositions(uint8 isStartGame)
+{
+	MusicManager.SetStartingTrackPositions(isStartGame);
+}
+
+float *
+cDMAudio::GetListenTimeArray()
+{
+	return MusicManager.GetListenTimeArray();
+}
+
+uint32
+cDMAudio::GetFavouriteRadioStation()
+{
+	return MusicManager.GetFavouriteRadioStation();
+}
+
+int32
+cDMAudio::GetRadioPosition(uint32 station)
+{
+	return MusicManager.GetRadioPosition(station);
+}
+
+void
+cDMAudio::SetPedTalkingStatus(CPed *ped, uint8 status)
+{
+	return AudioManager.SetPedTalkingStatus(ped, status);
+}
+
+void
+cDMAudio::SetPlayersMood(uint8 mood, uint32 time)
+{
+	return AudioManager.SetPlayersMood(mood, time);
+}
+
+void
+cDMAudio::ShutUpPlayerTalking(uint8 state)
+{
+	AudioManager.m_bIsPlayerShutUp = state;
 }

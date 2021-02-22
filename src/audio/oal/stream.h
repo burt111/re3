@@ -69,7 +69,6 @@ class CStream
 	uint32   m_nVolume;
 	uint8    m_nPan;
 	uint32   m_nPosBeforeReset;
-	int32   m_nLoopCount;
 	
 	IDecoder *m_pSoundFile;
 	
@@ -104,8 +103,6 @@ public:
 	void Start();
 	void Stop();
 	void Update(void);
-	void SetLoopCount(int32);
-
 	
 	void ProviderInit();
 	void ProviderTerm();
