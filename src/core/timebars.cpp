@@ -92,7 +92,7 @@ void tbDisplay()
 	CFont::SetWrapx(SCREEN_STRETCH_X(DEFAULT_SCREEN_WIDTH));
 	CFont::SetRightJustifyOff();
 	CFont::SetPropOn();
-	CFont::SetFontStyle(FONT_BANK);
+	CFont::SetFontStyle(FONT_STANDARD);
 	sprintf(temp, "FPS: %.2f", Diag_GetFPS());
 	AsciiToUnicode(temp, wtemp);
 	CFont::SetColor(CRGBA(255, 255, 255, 255));

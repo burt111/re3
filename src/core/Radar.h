@@ -1,6 +1,34 @@
 #pragma once
 #include "Sprite2d.h"
-#include "Draw.h"
+
+#define CARBLIP_MARKER_COLOR_R 252
+#define CARBLIP_MARKER_COLOR_G 138
+#define CARBLIP_MARKER_COLOR_B 242
+#define CARBLIP_MARKER_COLOR_A 255
+
+#define CHARBLIP_MARKER_COLOR_R 252
+#define CHARBLIP_MARKER_COLOR_G 138
+#define CHARBLIP_MARKER_COLOR_B 242
+#define CHARBLIP_MARKER_COLOR_A 255
+
+#define OBJECTBLIP_MARKER_COLOR_R 252
+#define OBJECTBLIP_MARKER_COLOR_G 138
+#define OBJECTBLIP_MARKER_COLOR_B 242
+#define OBJECTBLIP_MARKER_COLOR_A 255
+
+#define COORDBLIP_MARKER_COLOR_R 252
+#define COORDBLIP_MARKER_COLOR_G 138
+#define COORDBLIP_MARKER_COLOR_B 242
+#define COORDBLIP_MARKER_COLOR_A 228
+
+#define NUM_MAP_LEGENDS 75
+
+#define MENU_MAP_LENGTH_UNIT 1190.0f // in game unit
+#define MENU_MAP_WIDTH_SCALE 1.112f // in game unit (originally 1.112494151260504f)
+#define MENU_MAP_HEIGHT_SCALE 1.119f // in game unit (originally 1.118714268907563f)
+#define MENU_MAP_TOP_OFFSET 0.28f // in length unit defined above - ~333 game unit
+#define MENU_MAP_LEFT_OFFSET 0.185f // in length unit defined above - ~220 game unit
+#define MENU_MAP_LENGTH (4000.f / MENU_MAP_LENGTH_UNIT)
 
 enum eBlipType
 {
@@ -22,31 +50,49 @@ enum eBlipDisplay
 
 enum eRadarSprite
 {
-#ifdef MENU_MAP
 	RADAR_SPRITE_ENTITY_BLIP = -2,
 	RADAR_SPRITE_COORD_BLIP = -1,
-#endif
 	RADAR_SPRITE_NONE = 0,
-	RADAR_SPRITE_ASUKA,
-	RADAR_SPRITE_BOMB,
-	RADAR_SPRITE_CAT,
 	RADAR_SPRITE_CENTRE,
-	RADAR_SPRITE_COPCAR,
-	RADAR_SPRITE_DON,
-	RADAR_SPRITE_EIGHT,
-	RADAR_SPRITE_EL,
-	RADAR_SPRITE_ICE,
-	RADAR_SPRITE_JOEY,
-	RADAR_SPRITE_KENJI,
-	RADAR_SPRITE_LIZ,
-	RADAR_SPRITE_LUIGI,
+	RADAR_SPRITE_MAP_HERE,
 	RADAR_SPRITE_NORTH,
-	RADAR_SPRITE_RAY,
-	RADAR_SPRITE_SAL,
+	RADAR_SPRITE_AVERY,
+	RADAR_SPRITE_BIKER,
+	RADAR_SPRITE_CORTEZ,
+	RADAR_SPRITE_DIAZ,
+	RADAR_SPRITE_KENT,
+	RADAR_SPRITE_LAWYER,
+	RADAR_SPRITE_PHIL,
+	RADAR_SPRITE_BIKERS,
+	RADAR_SPRITE_BOATYARD,
+	RADAR_SPRITE_MALIBU_CLUB,
+	RADAR_SPRITE_CUBANS,
+	RADAR_SPRITE_FILM,
+	RADAR_SPRITE_GUN,
+	RADAR_SPRITE_HAITIANS,
+	RADAR_SPRITE_HARDWARE,
 	RADAR_SPRITE_SAVE,
+	RADAR_SPRITE_STRIP,
+	RADAR_SPRITE_ICE,
+	RADAR_SPRITE_KCABS,
+	RADAR_SPRITE_LOVEFIST,
+	RADAR_SPRITE_PRINTWORKS,
+	RADAR_SPRITE_PROPERTY,
+	RADAR_SPRITE_SUNYARD,
 	RADAR_SPRITE_SPRAY,
-	RADAR_SPRITE_TONY,
-	RADAR_SPRITE_WEAPON,
+	RADAR_SPRITE_TSHIRT,
+	RADAR_SPRITE_TOMMY,
+	RADAR_SPRITE_PHONE,
+	RADAR_SPRITE_RADIO_WILDSTYLE,
+	RADAR_SPRITE_RADIO_FLASH,
+	RADAR_SPRITE_RADIO_KCHAT,
+	RADAR_SPRITE_RADIO_FEVER,
+	RADAR_SPRITE_RADIO_VROCK,
+	RADAR_SPRITE_RADIO_VCPR,
+	RADAR_SPRITE_RADIO_ESPANTOSO,
+	RADAR_SPRITE_RADIO_EMOTION,
+	RADAR_SPRITE_RADIO_WAVE,
+
 	RADAR_SPRITE_COUNT
 };
 
@@ -73,25 +119,43 @@ struct sRadarTrace
 	uint32 m_nColor;
 	uint32 m_eBlipType; // eBlipType
 	int32 m_nEntityHandle;
-	CVector2D m_vec2DPos;
+	CVector m_vec2DPos;
 	CVector m_vecPos;
 	uint16 m_BlipIndex;
 	bool m_bDim;
 	bool m_bInUse;
+	bool m_bShortRange;
+	bool m_unused;
 	float m_Radius;
 	int16 m_wScale;
 	uint16 m_eBlipDisplay; // eBlipDisplay
 	uint16 m_eRadarSprite; // eRadarSprite
 };
-VALIDATE_SIZE(sRadarTrace, 0x30);
+
+// Either that was a thing while saving/loading blips, or they added sizes of each field one by one. I want to do the former.
+#pragma pack(push,1)
+struct sRadarTraceSave
+{
+	uint32 m_nColor;
+	float m_Radius;
+	uint32 m_eBlipType; // eBlipType
+	int32 m_nEntityHandle;
+	CVector2D m_vec2DPos;
+	CVector m_vecPos;
+	uint16 m_BlipIndex;
+	bool m_bDim;
+	bool m_bInUse;
+	bool m_bShortRange;
+	bool m_unused;
+	int16 m_wScale;
+	uint16 m_eBlipDisplay; // eBlipDisplay
+	uint16 m_eRadarSprite; // eRadarSprite
+};
+#pragma pack(pop)
 
 // Values for screen space
 #define RADAR_LEFT (40.0f)
-#ifdef PS2_HUD
-#define RADAR_BOTTOM (44.0f)
-#else
-#define RADAR_BOTTOM (47.0f)
-#endif
+#define RADAR_BOTTOM (40.0f)
 
 #ifdef FIX_RADAR
 /*
@@ -120,35 +184,61 @@ class CRadar
 public:
 	static float m_radarRange;
 	static sRadarTrace ms_RadarTrace[NUMRADARBLIPS];
-	static CSprite2d AsukaSprite;
-	static CSprite2d BombSprite;
-	static CSprite2d CatSprite;
 	static CSprite2d CentreSprite;
-	static CSprite2d CopcarSprite;
-	static CSprite2d DonSprite;
-	static CSprite2d EightSprite;
-	static CSprite2d ElSprite;
-	static CSprite2d IceSprite;
-	static CSprite2d JoeySprite;
-	static CSprite2d KenjiSprite;
-	static CSprite2d LizSprite;
-	static CSprite2d LuigiSprite;
+	static CSprite2d MapHereSprite;
 	static CSprite2d NorthSprite;
-	static CSprite2d RaySprite;
-	static CSprite2d SalSprite;
-	static CSprite2d SaveSprite;
+	static CSprite2d AverySprite;
+	static CSprite2d BikerSprite;
+	static CSprite2d CortezSprite;
+	static CSprite2d DiazSprite;
+	static CSprite2d KentSprite;
+	static CSprite2d LawyerSprite;
+	static CSprite2d PhilSprite;
+	static CSprite2d BikersSprite;
+	static CSprite2d BoatyardSprite;
+	static CSprite2d MalibuClubSprite;
+	static CSprite2d CubansSprite;
+	static CSprite2d FilmSprite;
+	static CSprite2d GunSprite;
+	static CSprite2d HaitiansSprite;
+	static CSprite2d HardwareSprite;
+	static CSprite2d SaveHouseSprite;
+	static CSprite2d StripSprite;
+	static CSprite2d IceSprite;
+	static CSprite2d KCabsSprite;
+	static CSprite2d LovefistSprite;
+	static CSprite2d PrintworksSprite;
+	static CSprite2d PropertySprite;
+	static CSprite2d SunYardSprite;
 	static CSprite2d SpraySprite;
-	static CSprite2d TonySprite;
-	static CSprite2d WeaponSprite;
+	static CSprite2d TShirtSprite;
+	static CSprite2d TommySprite;
+	static CSprite2d PhoneSprite;
+	static CSprite2d RadioWildstyleSprite;
+	static CSprite2d RadioFlashSprite;
+	static CSprite2d RadioKChatSprite;
+	static CSprite2d RadioFeverSprite;
+	static CSprite2d RadioVRockSprite;
+	static CSprite2d RadioVCPRSprite;
+	static CSprite2d RadioEspantosoSprite;
+	static CSprite2d RadioEmotionSprite;
+	static CSprite2d RadioWaveSprite;
 	static CSprite2d *RadarSprites[RADAR_SPRITE_COUNT];
 	static float cachedCos;
 	static float cachedSin;
-#ifdef MENU_MAP
+	static CRGBA ArrowBlipColour1;
+	static CRGBA ArrowBlipColour2;
+	static int16 MapLegendList[NUM_MAP_LEGENDS];
+	static int16 MapLegendCounter;
+
+#ifdef MAP_ENHANCEMENTS
 	static int TargetMarkerId;
 	static CVector TargetMarkerPos;
+#endif
 
 	static void InitFrontEndMap();
 	static void DrawYouAreHereSprite(float, float);
+#ifdef MAP_ENHANCEMENTS
 	static void ToggleTargetMarker(float, float);
 #endif
 	static uint8 CalculateBlipAlpha(float dist);
@@ -178,8 +268,9 @@ public:
 	static void RemoveRadarSections();
 	static void SaveAllRadarBlips(uint8*, uint32*);
 	static void SetBlipSprite(int32 i, int32 icon);
-	static int32 SetCoordBlip(eBlipType type, CVector pos, int32, eBlipDisplay);
-	static int32 SetEntityBlip(eBlipType type, int32, int32, eBlipDisplay);
+	static int32 SetCoordBlip(eBlipType type, CVector pos, uint32, eBlipDisplay);
+	static int32 SetEntityBlip(eBlipType type, int32, uint32, eBlipDisplay);
+	static int32 SetShortRangeCoordBlip(eBlipType type, CVector pos, uint32, eBlipDisplay);
 	static void SetRadarMarkerState(int32 i, bool flag);
 	static void ShowRadarMarker(CVector pos, uint32 color, float radius);
 	static void ShowRadarTrace(float x, float y, uint32 size, uint8 red, uint8 green, uint8 blue, uint8 alpha);
@@ -191,7 +282,8 @@ public:
 	static void TransformRadarPointToRealWorldSpace(CVector2D &out, const CVector2D &in);
 	static void TransformRadarPointToScreenSpace(CVector2D &out, const CVector2D &in);
 	static void TransformRealWorldPointToRadarSpace(CVector2D &out, const CVector2D &in);
-
-	// no in CRadar in the game:	
 	static void CalculateCachedSinCos();
+	static void DrawEntityBlip(int32 blipId);
+	static void DrawCoordBlip(int32 blipId);
+	static void DrawLegend(int32, int32, int32);
 };

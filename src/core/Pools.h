@@ -4,7 +4,7 @@
 #include "Lists.h"
 #include "Treadable.h"
 #include "Object.h"
-#include "CutsceneHead.h"
+#include "CutsceneObject.h"
 #include "PlayerPed.h"
 #include "Automobile.h"
 #include "DummyPed.h"
@@ -16,9 +16,10 @@ typedef CPool<CPed,CPlayerPed> CPedPool;
 typedef CPool<CVehicle,CAutomobile> CVehiclePool;
 typedef CPool<CBuilding> CBuildingPool;
 typedef CPool<CTreadable> CTreadablePool;
-typedef CPool<CObject, CCutsceneHead> CObjectPool;
+typedef CPool<CObject, CCutsceneObject> CObjectPool;
 typedef CPool<CDummy, CDummyPed> CDummyPool;
 typedef CPool<cAudioScriptObject> CAudioScriptObjectPool;
+typedef CPool<CColModel> CColModelPool;
 
 class CPools
 {
@@ -31,6 +32,7 @@ class CPools
 	static CObjectPool *ms_pObjectPool;
 	static CDummyPool *ms_pDummyPool;
 	static CAudioScriptObjectPool *ms_pAudioScriptObjectPool;
+	static CColModelPool *ms_pColModelPool;
 public:
 	static CCPtrNodePool *GetPtrNodePool(void) { return ms_pPtrNodePool; }
 	static CEntryInfoNodePool *GetEntryInfoNodePool(void) { return ms_pEntryInfoNodePool; }
@@ -41,6 +43,7 @@ public:
 	static CObjectPool *GetObjectPool(void) { return ms_pObjectPool; }
 	static CDummyPool *GetDummyPool(void) { return ms_pDummyPool; }
 	static CAudioScriptObjectPool *GetAudioScriptObjectPool(void) { return ms_pAudioScriptObjectPool; }
+	static CColModelPool *GetColModelPool(void) { return ms_pColModelPool; }
 
 	static void Initialise(void);
 	static void ShutDown(void);

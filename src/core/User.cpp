@@ -1,6 +1,6 @@
 #include "common.h"
 
-
+#include "GameLogic.h"
 #include "Hud.h"
 #include "PlayerPed.h"
 #include "Replay.h"
@@ -32,8 +32,8 @@ void
 CPlaceName::Process()
 {
 	CVector pos = CWorld::Players[CWorld::PlayerInFocus].GetPos();
-	CZone *navigZone = CTheZones::FindSmallestZonePositionType(&pos, ZONE_NAVIG);
-	CZone *defaultZone = CTheZones::FindSmallestZonePositionType(&pos, ZONE_DEFAULT);
+	CZone *navigZone = CTheZones::FindSmallestNavigationZoneForPosition(&pos, false, true);
+	CZone *defaultZone = CTheZones::FindSmallestNavigationZoneForPosition(&pos, true, false);
 
 	if (navigZone == nil) m_pZone = nil;
 	if (defaultZone == nil) m_pZone2 = nil;
@@ -74,6 +74,14 @@ CPlaceName::Display()
 	CHud::SetZoneName(text);
 }
 
+void
+CPlaceName::ProcessAfterFrontEndShutDown(void)
+{
+	CHud::m_pLastZoneName = nil;
+	CHud::m_ZoneState = 0;
+	m_nAdditionalTimer = 250;
+}
+
 CCurrentVehicle::CCurrentVehicle()
 {
 	Init();
@@ -99,7 +107,7 @@ void
 CCurrentVehicle::Display()
 {
 	wchar *text = nil;
-	if (m_pCurrentVehicle != nil)
+	if (m_pCurrentVehicle != nil && m_pCurrentVehicle != CGameLogic::pShortCutTaxi)
 		text = TheText.Get(((CVehicleModelInfo*)CModelInfo::GetModelInfo(m_pCurrentVehicle->GetModelIndex()))->m_gameName);
 	CHud::SetVehicleName(text);
 }

@@ -4,7 +4,9 @@
 
 enum {
 	STREAM_OFFSET_TXD = MODELINFOSIZE,
-	NUMSTREAMINFO = STREAM_OFFSET_TXD+TXDSTORESIZE
+	STREAM_OFFSET_COL = STREAM_OFFSET_TXD+TXDSTORESIZE,
+	STREAM_OFFSET_ANIM = STREAM_OFFSET_COL+COLSTORESIZE,
+	NUMSTREAMINFO = STREAM_OFFSET_ANIM+NUMANIMBLOCKS
 };
 
 enum StreamFlags
@@ -14,6 +16,7 @@ enum StreamFlags
 	STREAMFLAGS_DEPENDENCY  = 0x04,	// Is this right?
 	STREAMFLAGS_PRIORITY    = 0x08,
 	STREAMFLAGS_NOFADE      = 0x10,
+	STREAMFLAGS_20          = 0x20,	// TODO(MIAMI): what's this
 
 	STREAMFLAGS_CANT_REMOVE = STREAMFLAGS_DONT_REMOVE|STREAMFLAGS_SCRIPTOWNED,
 	STREAMFLAGS_KEEP_IN_MEMORY = STREAMFLAGS_DONT_REMOVE|STREAMFLAGS_SCRIPTOWNED|STREAMFLAGS_DEPENDENCY,
@@ -94,11 +97,12 @@ public:
 	static CStreamingChannel ms_channel[2];
 	static int32 ms_channelError;
 	static int32 ms_numVehiclesLoaded;
+	static int32 ms_numPedsLoaded;
 	static int32 ms_vehiclesLoaded[MAXVEHICLESLOADED];
 	static int32 ms_lastVehicleDeleted;
+	static bool ms_bIsPedFromPedGroupLoaded[NUMMODELSPERPEDGROUP];
 	static CDirectory *ms_pExtraObjectsDir;
 	static int32 ms_numPriorityRequests;
-	static bool ms_hasLoadedLODs;
 	static int32 ms_currentPedGrp;
 	static int32 ms_lastCullZone;
 	static uint16 ms_loadedGangs;
@@ -111,6 +115,7 @@ public:
 
 	static void Init(void);
 	static void Init2(void);
+	static void ReInit(void);
 	static void Shutdown(void);
 	static void Update(void);
 	static void LoadCdDirectory(void);
@@ -119,14 +124,25 @@ public:
 	static bool FinishLoadingLargeFile(int8 *buf, int32 streamId);
 	static bool HasModelLoaded(int32 id) { return ms_aInfoForModel[id].m_loadState == STREAMSTATE_LOADED; }
 	static bool HasTxdLoaded(int32 id) { return HasModelLoaded(id+STREAM_OFFSET_TXD); }
+	static bool HasColLoaded(int32 id) { return HasModelLoaded(id+STREAM_OFFSET_COL); }
+	static bool HasAnimLoaded(int32 id) { return HasModelLoaded(id+STREAM_OFFSET_ANIM); }
 	static bool CanRemoveModel(int32 id) { return (ms_aInfoForModel[id].m_flags & STREAMFLAGS_CANT_REMOVE) == 0; }
 	static bool CanRemoveTxd(int32 id) { return CanRemoveModel(id+STREAM_OFFSET_TXD); }
+	static bool CanRemoveCol(int32 id) { return CanRemoveModel(id+STREAM_OFFSET_COL); }
+	static bool CanRemoveAnim(int32 id) { return CanRemoveModel(id+STREAM_OFFSET_ANIM); }
 	static void RequestModel(int32 model, int32 flags);
 	static void ReRequestModel(int32 model) { RequestModel(model, ms_aInfoForModel[model].m_flags); }
 	static void RequestTxd(int32 txd, int32 flags) { RequestModel(txd + STREAM_OFFSET_TXD, flags); }
 	static void ReRequestTxd(int32 txd) { ReRequestModel(txd + STREAM_OFFSET_TXD); }
-	static void RequestSubway(void);
+	static void RequestCol(int32 col, int32 flags) { RequestModel(col + STREAM_OFFSET_COL, flags); }
+	static void ReRequestCol(int32 col) { ReRequestModel(col + STREAM_OFFSET_COL); }
+	static void RequestAnim(int32 col, int32 flags) { RequestModel(col + STREAM_OFFSET_ANIM, flags); }
+	static void ReRequestAnim(int32 col) { ReRequestModel(col + STREAM_OFFSET_ANIM); }
 	static void RequestBigBuildings(eLevelName level);
+	static void RequestBigBuildings(eLevelName level, const CVector &pos);
+	static void InstanceBigBuildings(eLevelName level, const CVector &pos);
+	static void InstanceLoadedModelsInSectorList(CPtrList &list);
+	static void InstanceLoadedModels(const CVector &pos);
 	static void RequestIslands(eLevelName level);
 	static void RequestSpecialModel(int32 modelId, const char *modelName, int32 flags);
 	static void RequestSpecialChar(int32 charId, const char *modelName, int32 flags);
@@ -135,29 +151,34 @@ public:
 	static void DecrementRef(int32 id);
 	static void RemoveModel(int32 id);
 	static void RemoveTxd(int32 id) { RemoveModel(id + STREAM_OFFSET_TXD); }
+	static void RemoveCol(int32 id) { RemoveModel(id + STREAM_OFFSET_COL); }
+	static void RemoveAnim(int32 id) { RemoveModel(id + STREAM_OFFSET_ANIM); }
 	static void RemoveUnusedBuildings(eLevelName level);
 	static void RemoveBuildings(eLevelName level);
+	static void RemoveBuildingsNotInArea(int32 area);
 	static void RemoveUnusedBigBuildings(eLevelName level);
 	static void RemoveIslandsNotUsed(eLevelName level);
 	static void RemoveBigBuildings(eLevelName level);
 	static bool RemoveLoadedVehicle(void);
-	static bool RemoveLeastUsedModel(void);
+	static bool RemoveLeastUsedModel(uint32 excludeMask);
 	static void RemoveAllUnusedModels(void);
 	static void RemoveUnusedModelsInLoadedList(void);
-	static bool RemoveReferencedTxds(size_t mem); // originally signed
+	static bool RemoveLoadedZoneModel(void);
 	static int32 GetAvailableVehicleSlot(void);
 	static bool IsTxdUsedByRequestedModels(int32 txdId);
+	static bool AreAnimsUsedByRequestedModels(int32 animId);
 	static bool AddToLoadedVehiclesList(int32 modelId);
 	static bool IsObjectInCdImage(int32 id);
-	static void HaveAllBigBuildingsLoaded(eLevelName level);
 	static void SetModelIsDeletable(int32 id);
 	static void SetModelTxdIsDeletable(int32 id);
 	static void SetMissionDoesntRequireModel(int32 id);
 	static void LoadInitialPeds(void);
+	static void LoadInitialWeapons(void);
 	static void LoadInitialVehicles(void);
 	static void StreamVehiclesAndPeds(void);
 	static void StreamZoneModels(const CVector &pos);
 	static void RemoveCurrentZonesModels(void);
+	static void LoadBigBuildingsWhenNeeded(void);
 
 	static int32 GetCdImageOffset(int32 lastPosn);
 	static int32 GetNextFileOnCd(int32 position, bool priority);
@@ -174,9 +195,9 @@ public:
 	static void IHaveUsedStreamingMemory(void);
 	static void UpdateMemoryUsed(void);
 
-	static void AddModelsToRequestList(const CVector &pos);
-	static void ProcessEntitiesInSectorList(CPtrList &list, float x, float y, float xmin, float ymin, float xmax, float ymax);
-	static void ProcessEntitiesInSectorList(CPtrList &list);
+	static void AddModelsToRequestList(const CVector &pos, int32 flags);
+	static void ProcessEntitiesInSectorList(CPtrList &list, float x, float y, float xmin, float ymin, float xmax, float ymax, int32 flags);
+	static void ProcessEntitiesInSectorList(CPtrList &list, int32 flags);
 	static void DeleteFarAwayRwObjects(const CVector &pos);
 	static void DeleteAllRwObjects(void);
 	static void DeleteRwObjectsAfterDeath(const CVector &pos);
@@ -187,6 +208,7 @@ public:
 	static bool DeleteRwObjectsNotInFrustumInSectorList(CPtrList &list, size_t mem); // originally signed
 
 	static void LoadScene(const CVector &pos);
+	static void LoadSceneCollision(const CVector &pos);
 
 	static void MemoryCardSave(uint8 *buffer, uint32 *length);
 	static void MemoryCardLoad(uint8 *buffer, uint32 length);

@@ -5,9 +5,11 @@
 #include "DMAudio.h"
 #include "Record.h"
 #include "Timer.h"
+#include "SpecialFX.h"
 
 uint32 CTimer::m_snTimeInMilliseconds;
-uint32 CTimer::m_snTimeInMillisecondsPauseMode = 1;
+PauseModeTime CTimer::m_snTimeInMillisecondsPauseMode = 1;
+
 uint32 CTimer::m_snTimeInMillisecondsNonClipped;
 uint32 CTimer::m_snPreviousTimeInMilliseconds;
 uint32 CTimer::m_FrameCounter;
@@ -33,7 +35,7 @@ RsTimerType suspendPcTimer;
 
 uint32 suspendDepth;
 
-#ifdef FIX_BUGS
+#ifdef FIX_HIGH_FPS_BUGS_ON_FRONTEND
 double frameTime;
 #endif
 
@@ -94,10 +96,10 @@ void CTimer::Update(void)
 		
 		_oldPerfCounter = pc;
 		
-		float updInCyclesScaled = updInCycles * ms_fTimeScale;
+		float updInCyclesScaled = GetIsPaused() ? updInCycles : updInCycles * ms_fTimeScale;
 		
 		// We need that real frame time to fix transparent menu bug.
-#ifndef FIX_BUGS
+#ifndef FIX_HIGH_FPS_BUGS_ON_FRONTEND
 		double
 #endif
 		frameTime = updInCyclesScaled / (double)_nCyclesPerMS;
@@ -121,7 +123,7 @@ void CTimer::Update(void)
 		RsTimerType updInMs = timer - oldPcTimer;
 		
 		// We need that real frame time to fix transparent menu bug.
-#ifndef FIX_BUGS
+#ifndef FIX_HIGH_FPS_BUGS_ON_FRONTEND
 		double
 #endif
 		frameTime = (double)updInMs * ms_fTimeScale;
@@ -140,7 +142,7 @@ void CTimer::Update(void)
 		}
 	}
 	
-	if ( ms_fTimeStep < 0.01f && !GetIsPaused() )
+	if ( ms_fTimeStep < 0.01f && !GetIsPaused() && !CSpecialFX::bSnapShotActive)
 		ms_fTimeStep = 0.01f;
 
 	ms_fTimeStepNonClipped = ms_fTimeStep;

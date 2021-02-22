@@ -5,19 +5,19 @@
 #include "PlayerInfo.h"
 #include "Collision.h"
 
-/* Sectors span from -2000 to 2000 in x and y.
- * With 100x100 sectors, each is 40x40 units. */
+/* Sectors span from -2400 to 1600 in x and -2000 to 2000 y.
+ * With 80x80 sectors, each is 50x50 units. */
 
-#define SECTOR_SIZE_X (40.0f)
-#define SECTOR_SIZE_Y (40.0f)
+#define SECTOR_SIZE_X (50.0f)
+#define SECTOR_SIZE_Y (50.0f)
 
-#define NUMSECTORS_X (100)
-#define NUMSECTORS_Y (100)
+#define NUMSECTORS_X (80)
+#define NUMSECTORS_Y (80)
 
 #define WORLD_SIZE_X (NUMSECTORS_X * SECTOR_SIZE_X)
 #define WORLD_SIZE_Y (NUMSECTORS_Y * SECTOR_SIZE_Y)
 
-#define WORLD_MIN_X (-2000.0f)
+#define WORLD_MIN_X (-2400.0f)
 #define WORLD_MIN_Y (-2000.0f)
 
 #define WORLD_MAX_X (WORLD_MIN_X + WORLD_SIZE_X)
@@ -67,11 +67,13 @@ public:
 	static bool bProcessCutsceneOnly;
 	static bool bDoingCarCollisions;
 	static bool bIncludeCarTyres;
+	static bool bIncludeBikers;
+	static CColPoint m_aTempColPts[MAX_COLLISION_POINTS];
 
 	static void Remove(CEntity *entity);
 	static void Add(CEntity *entity);
 
-	static CSector *GetSector(int x, int y) { return &ms_aSectors[y][x]; }
+	static CSector *GetSector(int x, int y) { if (x > NUMSECTORS_X - 1 || y > NUMSECTORS_Y - 1) return &ms_aSectors[0][0]; return &ms_aSectors[y][x]; }
 	static CPtrList &GetBigBuildingList(eLevelName i) { return ms_bigBuildingsList[i]; }
 	static CPtrList &GetMovingEntityList(void) { return ms_listMovingEntityPtrs; }
 	static uint16 GetCurrentScanCode(void) { return ms_nCurrentScanCode; }
@@ -86,9 +88,9 @@ public:
 
 	static bool CameraToIgnoreThisObject(CEntity *ent);
 
-	static bool ProcessLineOfSight(const CVector &point1, const CVector &point2, CColPoint &point, CEntity *&entity, bool checkBuildings, bool checkVehicles, bool checkPeds, bool checkObjects, bool checkDummies, bool ignoreSeeThrough, bool ignoreSomeObjects = false);
-	static bool ProcessLineOfSightSector(CSector &sector, const CColLine &line, CColPoint &point, float &dist, CEntity *&entity, bool checkBuildings, bool checkVehicles, bool checkPeds, bool checkObjects, bool checkDummies, bool ignoreSeeThrough, bool ignoreSomeObjects = false);
-	static bool ProcessLineOfSightSectorList(CPtrList &list, const CColLine &line, CColPoint &point, float &dist, CEntity *&entity, bool ignoreSeeThrough, bool ignoreSomeObjects = false);
+	static bool ProcessLineOfSight(const CVector &point1, const CVector &point2, CColPoint &point, CEntity *&entity, bool checkBuildings, bool checkVehicles, bool checkPeds, bool checkObjects, bool checkDummies, bool ignoreSeeThrough, bool ignoreSomeObjects = false, bool ignoreShootThrough = false);
+	static bool ProcessLineOfSightSector(CSector &sector, const CColLine &line, CColPoint &point, float &dist, CEntity *&entity, bool checkBuildings, bool checkVehicles, bool checkPeds, bool checkObjects, bool checkDummies, bool ignoreSeeThrough, bool ignoreSomeObjects, bool ignoreShootThrough);
+	static bool ProcessLineOfSightSectorList(CPtrList &list, const CColLine &line, CColPoint &point, float &dist, CEntity *&entity, bool ignoreSeeThrough, bool ignoreSomeObjects, bool ignoreShootThrough);
 	static bool ProcessVerticalLine(const CVector &point1, float z2, CColPoint &point, CEntity *&entity, bool checkBuildings, bool checkVehicles, bool checkPeds, bool checkObjects, bool checkDummies, bool ignoreSeeThrough, CStoredCollPoly *poly);
 	static bool ProcessVerticalLineSector(CSector &sector, const CColLine &line, CColPoint &point, CEntity *&entity, bool checkBuildings, bool checkVehicles, bool checkPeds, bool checkObjects, bool checkDummies, bool ignoreSeeThrough, CStoredCollPoly *poly);
 	static bool ProcessVerticalLineSectorList(CPtrList &list, const CColLine &line, CColPoint &point, float &dist, CEntity *&entity, bool ignoreSeeThrough, CStoredCollPoly *poly);
@@ -110,8 +112,8 @@ public:
 	static void FindObjectsKindaCollidingSectorList(CPtrList& list, const CVector& position, float radius, bool bCheck2DOnly, int16* nCollidingEntities, int16 maxEntitiesToFind, CEntity** aEntities);
 	static void FindObjectsIntersectingCube(const CVector& vecStartPos, const CVector& vecEndPos, int16* nIntersecting, int16 maxEntitiesToFind, CEntity** aEntities, bool bBuildings, bool bVehicles, bool bPeds, bool bObjects, bool bDummies);
 	static void FindObjectsIntersectingCubeSectorList(CPtrList& list, const CVector& vecStartPos, const CVector& vecEndPos, int16* nIntersecting, int16 maxEntitiesToFind, CEntity** aEntities);
-	static void FindObjectsIntersectingAngledCollisionBox(const CColBox &, const CMatrix &, const CVector &, float, float, float, float, int16*, int16, CEntity **, bool, bool, bool, bool, bool);
-	static void FindObjectsIntersectingAngledCollisionBoxSectorList(CPtrList& list, const CColBox& boundingBox, const CMatrix& matrix, const CVector& position, int16* nEntitiesFound, int16 maxEntitiesToFind, CEntity** aEntities);
+	static void FindObjectsIntersectingAngledCollisionBox(const CBox &, const CMatrix &, const CVector &, float, float, float, float, int16*, int16, CEntity **, bool, bool, bool, bool, bool);
+	static void FindObjectsIntersectingAngledCollisionBoxSectorList(CPtrList& list, const CBox& boundingBox, const CMatrix& matrix, const CVector& position, int16* nEntitiesFound, int16 maxEntitiesToFind, CEntity** aEntities);
 	static void FindMissionEntitiesIntersectingCube(const CVector& vecStartPos, const CVector& vecEndPos, int16* nIntersecting, int16 maxEntitiesToFind, CEntity** aEntities, bool bVehicles, bool bPeds, bool bObjects);
 	static void FindMissionEntitiesIntersectingCubeSectorList(CPtrList& list, const CVector& vecStartPos, const CVector& vecEndPos, int16* nIntersecting, int16 maxEntitiesToFind, CEntity** aEntities, bool bIsVehicleList, bool bIsPedList);
 
@@ -120,6 +122,8 @@ public:
 	static void CallOffChaseForArea(float x1, float y1, float x2, float y2);
 	static void CallOffChaseForAreaSectorListVehicles(CPtrList& list, float x1, float y1, float x2, float y2, float fStartX, float fStartY, float fEndX, float fEndY);
 	static void CallOffChaseForAreaSectorListPeds(CPtrList& list, float x1, float y1, float x2, float y2);
+
+	static bool IsWanderPathClear(CVector const&, CVector const&, float, int);
 
 	static float GetSectorX(float f) { return ((f - WORLD_MIN_X)/SECTOR_SIZE_X); }
 	static float GetSectorY(float f) { return ((f - WORLD_MIN_Y)/SECTOR_SIZE_Y); }
@@ -136,6 +140,7 @@ public:
 	static void SetAllCarsCanBeDamaged(bool);
 	static void ExtinguishAllCarFiresInArea(CVector, float);
 	static void SetCarsOnFire(float x, float y, float z, float radius, CEntity* reason);
+	static void SetPedsChoking(float x, float y, float z, float radius, CEntity* reason);
 	static void SetPedsOnFire(float x, float y, float z, float radius, CEntity* reason);
 
 	static void Initialise();
@@ -149,7 +154,23 @@ public:
 	static void TriggerExplosion(const CVector& position, float fRadius, float fPower, CEntity* pCreator, bool bProcessVehicleBombTimer);
 	static void TriggerExplosionSectorList(CPtrList& list, const CVector& position, float fRadius, float fPower, CEntity* pCreator, bool bProcessVehicleBombTimer);
 	static void UseDetonator(CEntity *pEntity);
+
+	// NB: following functions are unused (TODO?)
+	static void CastShadow(float, float, float, float);
+	static void CastShadowSectorList(CPtrList&, float, float, float, float);
+	static void FindLowestZForCoord(float, float);
+	static void CheckBlockListIntegrity(void);
+	static void ProcessVerticalLineSectorList_FillGlobeColPoints(CPtrList&, const CColLine&, CEntity*&, bool, CStoredCollPoly*);
+	static void ProcessVerticalLineSector_FillGlobeColPoints(CSector&, const CColLine&, CEntity*&, bool, bool, bool, bool, bool, bool, CStoredCollPoly*);
+	static void ProcessVerticalLine_FillGlobeColPoints(const CVector&, float, CEntity*&, bool, bool, bool, bool, bool, bool, CStoredCollPoly*);
+	static void PrintCarChanges(void);
+	static void TestForBuildingsOnTopOfEachOther(CPtrList&);
+	static void TestForBuildingsOnTopOfEachOther(void);
+	static void TestForUnusedModels(CPtrList&, int*);
+	static void TestForUnusedModels(void);
+	static void HandleCollisionZoneChange(eLevelName, eLevelName);
+	static void DoZoneTestForChaser(class CPhysical*);
+	static void FindPlayerSlotWithPedPointer(void*);
 };
 
 extern CColPoint gaTempSphereColPoints[MAX_COLLISION_POINTS];
-

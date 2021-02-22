@@ -10,6 +10,7 @@ enum {
 	PLAYERCONTROL_PLAYERINFO = 32,
 	PLAYERCONTROL_PHONE = 64,
 	PLAYERCONTROL_CUTSCENE = 128,
+	PLAYERCONTROL_SHORTCUT_TAXI = 256,
 };
 
 class CControllerState
@@ -140,9 +141,12 @@ public:
 	enum
 	{
 		HORNHISTORY_SIZE = 5,
+		DRUNK_STEERING_BUFFER_SIZE = 10,
 	};
 	CControllerState NewState;
 	CControllerState OldState;
+	int16 SteeringLeftRightBuffer[DRUNK_STEERING_BUFFER_SIZE];
+	int32 DrunkDrivingBufferUsed;
 	CControllerState PCTempKeyState;
 	CControllerState PCTempJoyState;
 	CControllerState PCTempMouseState;
@@ -150,10 +154,11 @@ public:
 	int16 Phase;
 	int16 Mode;
 	int16 ShakeDur;
+	uint16 DisablePlayerControls;
 	uint8 ShakeFreq;
 	bool bHornHistory[HORNHISTORY_SIZE];
 	uint8 iCurrHornHistory;
-	uint8 DisablePlayerControls;
+	int8 JustOutOfFrontend;
 	int8 bApplyBrakes;
 	char CheatString[12];
 	int32 LastTimeTouched;
@@ -170,14 +175,14 @@ public:
 	static bool bObsoleteControllerMessage;
 	static bool bOldDisplayNoControllerMessage;
 	static bool m_bMapPadOneToPadTwo;
-#ifdef INVERT_LOOK_FOR_PAD
+	static bool m_bDebugCamPCOn;
+	static bool bHasPlayerCheated;
 	static bool bInvertLook4Pad;
-#endif
 	
 	static CKeyboardState OldKeyState;
 	static CKeyboardState NewKeyState;
 	static CKeyboardState TempKeyState;
-	static char KeyBoardCheatString[20];
+	static char KeyBoardCheatString[30];
 	static CMouseControllerState OldMouseControllerState;
 	static CMouseControllerState NewMouseControllerState;
 	static CMouseControllerState PCTempMouseControllerState;
@@ -188,6 +193,7 @@ public:
 #endif
 	void Clear(bool bResetPlayerControls);
 	void ClearMouseHistory();
+	void ClearKeyBoardHistory();
 	void UpdateMouse();
 	CControllerState ReconcileTwoControllersInput(CControllerState const &State1, CControllerState const &State2);
 	void StartShake(int16 nDur, uint8 nFreq);
@@ -217,6 +223,7 @@ public:
 	int16 GetPedWalkLeftRight(void);
 	int16 GetPedWalkUpDown(void);
 	int16 GetAnalogueUpDown(void);
+	int16 GetAnalogueLeftRight(void);
 	bool GetLookLeft(void);
 	bool GetLookRight(void);
 	bool GetLookBehindForCar(void);
@@ -232,6 +239,7 @@ public:
 	int32 GetWeapon(void);
 	bool WeaponJustDown(void);
 	int16 GetAccelerate(void);
+	bool CycleCameraModeJustDown(void);
 	bool CycleCameraModeUpJustDown(void);
 	bool CycleCameraModeDownJustDown(void);
 	bool ChangeStationJustDown(void);
@@ -239,6 +247,8 @@ public:
 	bool CycleWeaponRightJustDown(void);
 	bool GetTarget(void);
 	bool TargetJustDown(void);
+	bool DuckJustDown(void);
+	bool CollectPickupJustDown(void);
 	bool JumpJustDown(void);
 	bool GetSprint(void);
 	bool ShiftTargetLeftJustDown(void);
@@ -257,10 +267,13 @@ public:
 	int16 LookAroundLeftRight(void);
 	int16 LookAroundUpDown(void);
 	void ResetAverageWeapon(void);
+	static void FixPadsAfterSave(void);
 	static void PrintErrorMessage(void);
 	static void ResetCheats(void);
 	static char *EditString(char *pStr, int32 nSize);
 	static int32 *EditCodesForControls(int32 *pRsKeys, int32 nSize);
+	uint32 InputHowLongAgo(void);
+	void SetDrunkInputDelay(int32 delay) { DrunkDrivingBufferUsed = delay; }
 
 #ifdef XINPUT
 	void AffectFromXinput(uint32 pad);
@@ -423,6 +436,7 @@ public:
 	bool GetLeftShockJustDown()      { return !!(NewState.LeftShock && !OldState.LeftShock); }
 	bool GetRightShockJustDown()     { return !!(NewState.RightShock && !OldState.RightShock); }
 	bool GetStartJustDown()          { return !!(NewState.Start && !OldState.Start); }
+	bool GetSelectJustDown()          { return !!(NewState.Select && !OldState.Select); }
 	bool GetLeftStickXJustDown() { return !!(NewState.LeftStickX && !OldState.LeftStickX); }
 	bool GetLeftStickYJustDown() { return !!(NewState.LeftStickY && !OldState.LeftStickY); }
   
@@ -448,15 +462,16 @@ public:
 	bool GetRightShoulder1(void) { return !!NewState.RightShoulder1; }
 	bool GetRightShoulder2(void) { return !!NewState.RightShoulder2; }
 	bool GetStart()              { return !!NewState.Start; }
+	bool GetSelect()              { return !!NewState.Select; }
 	int16 GetLeftStickX(void)    { return NewState.LeftStickX; }
 	int16 GetLeftStickY(void)    { return NewState.LeftStickY; }
 	int16 GetRightStickX(void)    { return NewState.RightStickX; }
 	int16 GetRightStickY(void)    { return NewState.RightStickY; }
 
 	bool ArePlayerControlsDisabled(void) { return DisablePlayerControls != PLAYERCONTROL_ENABLED; }
-	void SetDisablePlayerControls(uint8 who) { DisablePlayerControls |= who; }
-	void SetEnablePlayerControls(uint8 who) { DisablePlayerControls &= ~who; }
-	bool IsPlayerControlsDisabledBy(uint8 who) { return DisablePlayerControls & who; }
+	void SetDisablePlayerControls(uint16 who) { DisablePlayerControls |= who; }
+	void SetEnablePlayerControls(uint16 who) { DisablePlayerControls &= ~who; }
+	bool IsPlayerControlsDisabledBy(uint16 who) { return DisablePlayerControls & who; }
 	
 	int16 GetMode() { return Mode; }
 	void SetMode(int16 mode) { Mode = mode; }
@@ -466,7 +481,3 @@ public:
 
 VALIDATE_SIZE(CPad, 0xFC);
 extern CPad Pads[MAX_PADS];
-
-#ifdef ALLCARSHELI_CHEAT
-extern bool bAllCarCheat;
-#endif

@@ -74,7 +74,7 @@ CSurfaceTable::GetAdhesionGroup(uint8 surfaceType)
 	case SURFACE_GIRDER:		return ADHESIVE_HARD;
 	case SURFACE_METAL_CHAIN_FENCE:	return ADHESIVE_HARD;
 	case SURFACE_PED:		return ADHESIVE_RUBBER;
-	case SURFACE_SAND:		return ADHESIVE_LOOSE;
+	case SURFACE_SAND:		return ADHESIVE_SAND;
 	case SURFACE_WATER:		return ADHESIVE_WET;
 	case SURFACE_WOOD_CRATES:	return ADHESIVE_ROAD;
 	case SURFACE_WOOD_BENCH:	return ADHESIVE_ROAD;
@@ -89,6 +89,8 @@ CSurfaceTable::GetAdhesionGroup(uint8 surfaceType)
 	case SURFACE_CARDBOARDBOX:	return ADHESIVE_LOOSE;
 	case SURFACE_TRANSPARENT_STONE:	return ADHESIVE_HARD;
 	case SURFACE_METAL_GATE:	return ADHESIVE_HARD;
+	case SURFACE_SAND_BEACH:	return ADHESIVE_SAND;
+	case SURFACE_CONCRETE_BEACH:	return ADHESIVE_ROAD;
 	default:			return ADHESIVE_ROAD;
 	}
 }
@@ -108,6 +110,7 @@ CSurfaceTable::GetWetMultiplier(uint8 surfaceType)
 	case SURFACE_HEDGE:
 	case SURFACE_CARDBOARDBOX:
 	case SURFACE_TRANSPARENT_STONE:
+	case SURFACE_CONCRETE_BEACH:
 		return 1.0f - CWeather::WetRoads*0.25f;
 
 	case SURFACE_GRASS:
@@ -131,6 +134,10 @@ CSurfaceTable::GetWetMultiplier(uint8 surfaceType)
 	case SURFACE_METAL_GATE:
 		return 1.0f - CWeather::WetRoads*0.4f;
 
+	case SURFACE_SAND:
+	case SURFACE_SAND_BEACH:
+		return 1.0f + CWeather::WetRoads*0.5f;
+
 	default:
 		return 1.0f;
 	}
@@ -140,4 +147,10 @@ float
 CSurfaceTable::GetAdhesiveLimit(CColPoint &colpoint)
 {
 	return ms_aAdhesiveLimitTable[GetAdhesionGroup(colpoint.surfaceB)][GetAdhesionGroup(colpoint.surfaceA)];
+}
+
+bool
+CSurfaceTable::IsSoftLanding(uint8 surf)
+{
+	return surf == SURFACE_GRASS || surf == SURFACE_SAND || surf == SURFACE_SAND_BEACH;
 }

@@ -41,11 +41,11 @@ class CPool
 	int32  m_allocPtr;
 
 public:
-	CPool(int32 size){
+	CPool(int32 size, const char *name){
 		m_entries = (U*)new uint8[sizeof(U)*size];
 		m_flags = new uint8[size];
 		m_size = size;
-		m_allocPtr = 0;
+		m_allocPtr = -1;
 		for(int i = 0; i < size; i++){
 			SetId(i, 0);
 			SetIsFree(i, true);
@@ -74,7 +74,6 @@ public:
 		else
 			m_flags[i] &= ~POOLFLAG_ISFREE;
 	}
-
 	~CPool() {
 		Flush();
 	}
@@ -142,21 +141,22 @@ public:
 		return m_flags[handle>>8] == (handle & 0xFF) ?
 		       (T*)&m_entries[handle >> 8] : nil;
 	}
-	int32 GetIndex(T *entry){
+	int32 GetIndex(T* entry) {
 		int i = GetJustIndex_NoFreeAssert(entry);
 		return m_flags[i] + (i<<8);
 	}
-	int32 GetJustIndex(T *entry){
+	int32 GetJustIndex(T* entry) {
 		int index = GetJustIndex_NoFreeAssert(entry);
+		assert((U*)entry == (U*)&m_entries[index]); // cast is unsafe - check required
 		assert(!GetIsFree(index));
 		return index;
 	}
-	int32 GetJustIndex_NoFreeAssert(T* entry){
+	int32 GetJustIndex_NoFreeAssert(T* entry) {
 		int index = ((U*)entry - m_entries);
-		assert((U*)entry == (U*)&m_entries[index]); // cast is unsafe - check required
+		// Please don't add unsafe assert here, because at least one func. use this to check if entity is ped or vehicle.
 		return index;
 	}
-	int32 GetNoOfUsedSpaces(void) const{
+	int32 GetNoOfUsedSpaces(void) const {
 		int i;
 		int n = 0;
 		for(i = 0; i < m_size; i++)
@@ -186,6 +186,7 @@ public:
 		memcpy(entries, m_entries, sizeof(U)*m_size);
 		debug("Stored:%d (/%d)\n", GetNoOfUsedSpaces(), m_size); /* Assumed inlining */
 	}
+	int32 GetNoOfFreeSpaces() const { return GetSize() - GetNoOfUsedSpaces(); }
 };
 
 template<typename T>
