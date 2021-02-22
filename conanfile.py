@@ -5,8 +5,8 @@ import shutil
 import textwrap
 
 
-class Re3Conan(ConanFile):
-    name = "re3"
+class ReVCConan(ConanFile):
+    name = "reVC"
     version = "master"
     license = "???"  # FIXME: https://github.com/GTAmodding/re3/issues/794
     settings = "os", "arch", "compiler", "build_type"
@@ -69,10 +69,10 @@ class Re3Conan(ConanFile):
             raise ConanInvalidConfiguration("Only `glfw` is supported as gl3_gfxlib.")
         #if not self.options.with_opus:
         #    if not self.options["libsndfile"].with_external_libs:
-        #        raise ConanInvalidConfiguration("re3 with opus support requires a libsndfile built with external libs (=ogg/flac/opus/vorbis)")
+        #        raise ConanInvalidConfiguration("reVC with opus support requires a libsndfile built with external libs (=ogg/flac/opus/vorbis)")
 
     @property
-    def _re3_audio(self):
+    def _reVC_audio(self):
         return {
             "miles": "MSS",
             "openal": "OAL",
@@ -111,16 +111,16 @@ class Re3Conan(ConanFile):
                            include("{}/conanbuildinfo.cmake")
                            conan_basic_setup(TARGETS NO_OUTPUT_DIRS)
     
-                           add_subdirectory("{}" re3)
+                           add_subdirectory("{}" reVC)
                            """).format(self.install_folder.replace("\\", "/"),
                                        self.source_folder.replace("\\", "/")))
         except FileNotFoundError:
             pass
         cmake = CMake(self)
-        cmake.definitions["RE3_AUDIO"] = self._re3_audio
-        cmake.definitions["RE3_WITH_OPUS"] = self.options.with_opus
-        cmake.definitions["RE3_INSTALL"] = True
-        cmake.definitions["RE3_VENDORED_LIBRW"] = False
+        cmake.definitions["REVC_AUDIO"] = self._reVC_audio
+        cmake.definitions["REVC_WITH_OPUS"] = self.options.with_opus
+        cmake.definitions["REVC_INSTALL"] = True
+        cmake.definitions["REVC_VENDORED_LIBRW"] = False
         env = {}
         if self._os_is_playstation2:
             cmake.definitions["CMAKE_TOOLCHAIN_FILE"] = self.deps_user_info["ps2dev-cmaketoolchain"].cmake_toolchain_file
