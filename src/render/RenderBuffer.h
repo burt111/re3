@@ -9,10 +9,17 @@ public:
 	static void RenderStuffInBuffer(void);
 };
 
-#define TEMPBUFFERVERTSIZE 256
+#define TEMPBUFFERVERTSIZE 512
 #define TEMPBUFFERINDEXSIZE 1024
+
+struct VertexBufferUnion
+{
+	RwIm2DVertex im2d[TEMPBUFFERVERTSIZE];
+	RwIm3DVertex im3d[TEMPBUFFERVERTSIZE];
+};
 
 extern int32 TempBufferVerticesStored;
 extern int32 TempBufferIndicesStored;
-extern RwIm3DVertex TempBufferRenderVertices[TEMPBUFFERVERTSIZE];
+extern VertexBufferUnion TempVertexBuffer;
+#define TempBufferRenderVertices (TempVertexBuffer.im3d)
 extern RwImVertexIndex TempBufferRenderIndexList[TEMPBUFFERINDEXSIZE];

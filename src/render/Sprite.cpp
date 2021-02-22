@@ -5,10 +5,6 @@
 #include "Camera.h"
 #include "Sprite.h"
 
-#ifdef ASPECT_RATIO_SCALE
-#include "Frontend.h"
-#endif
-
 float CSprite::m_f2DNearScreenZ;
 float CSprite::m_f2DFarScreenZ;
 float CSprite::m_fRecipNearClipPlane;
@@ -156,10 +152,10 @@ CSprite::RenderOneXLUSprite_Rotate_Aspect(float x, float y, float z, float w, fl
 
 	// Fade out when too near
 	// why not in buffered version?
-	if(z < 3.0f){
-		if(z < 1.5f)
+	if(z < 2.3f){
+		if(z < 1.3f)
 			return;
-		int f = (z - 1.5f)/1.5f * 255;
+		int f = (z - 1.3f)/(2.3f-1.3f) * 255;
 		r = f*r >> 8;
 		g = f*g >> 8;
 		b = f*b >> 8;
@@ -271,8 +267,8 @@ CSprite::RenderBufferedOneXLUSprite_Rotate_Dimension(float x, float y, float z, 
 {
 	m_bFlushSpriteBufferSwitchZTest = 0;
 	// TODO: replace with lookup
-	float c = Cos(DEGTORAD(rotation));
-	float s = Sin(DEGTORAD(rotation));
+	float c = Cos(rotation);
+	float s = Sin(rotation);
 
 	float xs[4];
 	float ys[4];
@@ -584,8 +580,8 @@ CSprite::RenderBufferedOneXLUSprite2D_Rotate_Dimension(float x, float y, float w
 {
 	m_bFlushSpriteBufferSwitchZTest = 1;
 	CRGBA col(intens * colour.red >> 8, intens * colour.green >> 8, intens * colour.blue >> 8, alpha);
-	float c = Cos(DEGTORAD(rotation));
-	float s = Sin(DEGTORAD(rotation));
+	float c = Cos(rotation);
+	float s = Sin(rotation);
 
 	Set6Vertices2D(&SpriteBufferVerts[6 * nSpriteBufferIndex],
 		x + c*w - s*h,

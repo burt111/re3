@@ -23,17 +23,19 @@ enum {
 	MEMID_POOLS = 4,	// "Pools"
 	MEMID_DEF_MODELS = 5,	// "Default Models"
 	MEMID_STREAM = 6,	// "Streaming"
-	MEMID_STREAM_MODELS = 7,	// "Streamed Models" (instance)
-	MEMID_STREAM_TEXUTRES = 8,	// "Streamed Textures"
-	MEMID_TEXTURES = 9,	// "Textures"
-	MEMID_COLLISION = 10,	// "Collision"
-	MEMID_RENDERLIST = 11,	// ?
-	MEMID_GAME_PROCESS = 12,	// "Game Process"
-	MEMID_SCRIPT = 13,	// "Script"
-	MEMID_CARS = 14,	// "Cars"
-	MEMID_RENDER = 15,	// "Render"
-	MEMID_FRONTEND = 17,	// ?
-
+	MEMID_STREAM_MODELS = 7,	// "Streamed Models"
+	MEMID_STREAM_LODS = 8,	// "Streamed LODs"
+	MEMID_STREAM_TEXUTRES = 9,	// "Streamed Textures"
+	MEMID_STREAM_COLLISION = 10,	// "Streamed Collision"
+	MEMID_STREAM_ANIMATION = 11,	// "Streamed Animation"
+	MEMID_TEXTURES = 12,	// "Textures"
+	MEMID_COLLISION = 13,	// "Collision"
+	MEMID_PRE_ALLOC = 14,	// "PreAlloc"
+	MEMID_GAME_PROCESS = 15,	// "Game Process"
+	MEMID_SCRIPT = 16,	// "Script"
+	MEMID_CARS = 17,	// "Cars"
+	MEMID_RENDER = 18,	// "Render"
+	MEMID_PED_ATTR = 19,	// "Ped Attr"
 	NUM_MEMIDS,
 
 	NUM_FIXED_MEMBLOCKS = 6

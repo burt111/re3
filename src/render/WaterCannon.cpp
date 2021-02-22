@@ -11,6 +11,7 @@
 #include "Fire.h"
 #include "WaterLevel.h"
 #include "Camera.h"
+#include "Particle.h"
 
 #define WATERCANNONVERTS 4
 #define WATERCANNONINDEXES 12
@@ -77,9 +78,13 @@ void CWaterCannon::Update_OncePerFrame(int16 index)
 		}
 	}
 	
-	int32 extinguishingPoint = CGeneral::GetRandomNumber() & (NUM_SEGMENTPOINTS - 1);
-	if ( m_abUsed[extinguishingPoint] )
-		gFireManager.ExtinguishPoint(m_avecPos[extinguishingPoint], 3.0f);
+	for ( int32 i = 0; i < NUM_SEGMENTPOINTS; i++ )
+	{
+		if ( m_abUsed[i] && gFireManager.ExtinguishPointWithWater(m_avecPos[i], 4.0f) )
+		{
+			break;
+		}
+	}
 	
 	if ( ((index + CTimer::GetFrameCounter()) & 3) == 0 )
 		PushPeds();
@@ -231,11 +236,16 @@ void CWaterCannon::PushPeds(void)
 							ped->m_vecMoveSpeed.x = (0.6f * m_avecVelocity[j].x + ped->m_vecMoveSpeed.x) * 0.5f;
 							ped->m_vecMoveSpeed.y = (0.6f * m_avecVelocity[j].y + ped->m_vecMoveSpeed.y) * 0.5f;
 							
-							ped->SetFall(2000, AnimationId(ANIM_STD_HIGHIMPACT_FRONT + localDir), 0);
-							
-							CFire *fire = ped->m_pFire;
-							if ( fire )
-								fire->Extinguish();
+							float pedSpeed2D = ped->m_vecMoveSpeed.Magnitude2D();
+
+							if ( pedSpeed2D > 0.2f ) {
+								ped->m_vecMoveSpeed.x *= (0.2f / pedSpeed2D);
+								ped->m_vecMoveSpeed.y *= (0.2f / pedSpeed2D);
+							}
+							ped->SetFall(2000, (AnimationId)(localDir + ANIM_KO_SKID_FRONT), 0);
+							CParticle::AddParticle(PARTICLE_STEAM_NY_SLOWMOTION, ped->GetPosition(), ped->m_vecMoveSpeed * 0.3f, 0, 0.5f);
+							CParticle::AddParticle(PARTICLE_CAR_SPLASH, ped->GetPosition(), ped->m_vecMoveSpeed * -0.3f + CVector(0.f, 0.f, 0.5f), 0, 0.5f,
+								CGeneral::GetRandomNumberInRange(0.f, 10.f), CGeneral::GetRandomNumberInRange(0.f, 90.f), 1);
 							
 							j = NUM_SEGMENTPOINTS;
 						}

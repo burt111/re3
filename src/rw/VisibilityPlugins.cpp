@@ -6,6 +6,7 @@
 #include "Entity.h"
 #include "ModelInfo.h"
 #include "Lights.h"
+#include "RwHelper.h"
 #include "Renderer.h"
 #include "Camera.h"
 #include "VisibilityPlugins.h"
@@ -14,7 +15,9 @@
 #include "MemoryHeap.h"
 
 CLinkList<CVisibilityPlugins::AlphaObjectInfo> CVisibilityPlugins::m_alphaList;
+CLinkList<CVisibilityPlugins::AlphaObjectInfo> CVisibilityPlugins::m_alphaBoatAtomicList;
 CLinkList<CVisibilityPlugins::AlphaObjectInfo> CVisibilityPlugins::m_alphaEntityList;
+CLinkList<CVisibilityPlugins::AlphaObjectInfo> CVisibilityPlugins::m_alphaUnderwaterEntityList;
 #ifdef NEW_RENDERER
 CLinkList<CVisibilityPlugins::AlphaObjectInfo> CVisibilityPlugins::m_alphaBuildingList;
 #endif
@@ -31,122 +34,10 @@ float CVisibilityPlugins::ms_vehicleLod1Dist;
 float CVisibilityPlugins::ms_vehicleFadeDist;
 float CVisibilityPlugins::ms_bigVehicleLod0Dist;
 float CVisibilityPlugins::ms_bigVehicleLod1Dist;
-float CVisibilityPlugins::ms_pedLod0Dist;
 float CVisibilityPlugins::ms_pedLod1Dist;
 float CVisibilityPlugins::ms_pedFadeDist;
 
-#ifdef GTA_PS2	// maybe something else?
-// if wanted, delete the original geometry data after rendering
-// and only keep the instanced data
-bool
-rpDefaultGeometryInstance(RpGeometry *geo, void *atomic, int del)
-{
-#if THIS_IS_COMPATIBLE_WITH_GTA3_RW31
-	if(RpGeometryGetNumMorphTargets(geo) != 1)
-		return false;
-
-	// this needs R*'s modification that geometry data is
-	// allocated separately from the geometry itself
-	geo->instanceFlags = rpGEOMETRYINSTANCE;
-	AtomicDefaultRenderCallBack((RpAtomic*)atomic);
-
-	if(!del)
-		return true;
-
-	// New mesh without indices
-	RpMeshHeader *newheader = _rpMeshHeaderCreate(sizeof(RpMesh)*geo->mesh->numMeshes + sizeof(RpMeshHeader));
-	newheader->numMeshes = geo->mesh->numMeshes;
-	newheader->serialNum = 1;
-	newheader->totalIndicesInMesh = 0;
-	newheader->firstMeshOffset = 0;
-	RpMesh *oldmesh = (RpMesh*)(geo->mesh+1);
-	RpMesh *newmesh = (RpMesh*)(newheader+1);
-	for(int i = 0; i < geo->mesh->numMeshes; i++){
-		newmesh[i].indices = nil;
-		newmesh[i].numIndices = 0;
-		newmesh[i].material = oldmesh[i].material;
-	}
-
-	geo->refCount++;
-	RpGeometryLock(geo, rpGEOMETRYLOCKPOLYGONS | rpGEOMETRYLOCKVERTICES |
-		rpGEOMETRYLOCKNORMALS | rpGEOMETRYLOCKPRELIGHT |
-		rpGEOMETRYLOCKTEXCOORDS1 | rpGEOMETRYLOCKTEXCOORDS2);
-
-	// vertices and normals
-	RpMorphTarget *mt = RpGeometryGetMorphTarget(geo, 0);
-	if(mt->verts){
-		RwFree(mt->verts);
-		mt->verts = nil;
-		mt->normals = nil;
-	}
-	geo->numVertices = 0;
-
-	// triangles
-	for(int i = 0; i < RpGeometryGetNumTriangles(geo); i++){
-		if(RpGeometryGetTriangles(geo)->matIndex == -1)
-			continue;
-		RpMaterialDestroy(_rpMaterialListGetMaterial(&geo->matList, RpGeometryGetTriangles(geo)->matIndex));
-	}
-	if(RpGeometryGetTriangles(geo)){
-		RwFree(RpGeometryGetTriangles(geo));
-		geo->triangles = nil;
-		geo->numTriangles = 0;
-	}
-
-	// tex coords
-	if(RpGeometryGetVertexTexCoords(geo, 1)){
-		RwFree(RpGeometryGetVertexTexCoords(geo, 1));
-		geo->texCoords[1] = nil;
-	}
-	if(RpGeometryGetVertexTexCoords(geo, 0)){
-		RwFree(RpGeometryGetVertexTexCoords(geo, 0));
-		geo->texCoords[0] = nil;
-	}
-
-	// vertex colors
-	if(RpGeometryGetPreLightColors(geo)){
-		RwFree(RpGeometryGetPreLightColors(geo));
-		geo->preLitLum = nil;
-	}
-
-	RpGeometryUnlock(geo);
-
-	geo->instanceFlags = rpGEOMETRYPERSISTENT;
-	// BUG? don't we have to free the old mesh?
-	geo->mesh = newheader;
-	geo->refCount--;
-#else
-	// We can do something for librw here actually, maybe later
-	AtomicDefaultRenderCallBack((RpAtomic*)atomic);
-#endif
-
-	return true;
-}
-
-RpAtomic*
-PreInstanceRenderCB(RpAtomic *atomic)
-{
-	RpGeometry *geo = RpAtomicGetGeometry(atomic);
-	if(RpGeometryGetTriangles(geo)){
-		PUSH_MEMID(MEMID_STREAM_MODELS);
-		rpDefaultGeometryInstance(geo, atomic, 1);
-		POP_MEMID();
-	}else
-		AtomicDefaultRenderCallBack(atomic);
-	return atomic;
-}
-#define RENDERCALLBACK PreInstanceRenderCB
-#else
-RpAtomic*
-DefaultRenderCB_pushid(RpAtomic *atomic)
-{
-	PUSH_MEMID(MEMID_STREAM_MODELS);
-	AtomicDefaultRenderCallBack(atomic);
-	POP_MEMID();
-	return atomic;
-}
-#define RENDERCALLBACK DefaultRenderCB_pushid
-#endif
+#define RENDERCALLBACK AtomicDefaultRenderCallBack
 
 void
 CVisibilityPlugins::Initialise(void)
@@ -154,6 +45,11 @@ CVisibilityPlugins::Initialise(void)
 	m_alphaList.Init(NUMALPHALIST);
 	m_alphaList.head.item.sort = 0.0f;
 	m_alphaList.tail.item.sort = 100000000.0f;
+
+	m_alphaBoatAtomicList.Init(NUMBOATALPHALIST);
+	m_alphaBoatAtomicList.head.item.sort = 0.0f;
+	m_alphaBoatAtomicList.tail.item.sort = 100000000.0f;
+
 #ifdef ASPECT_RATIO_SCALE
 	// default 150 if not enough for bigger FOVs
 	m_alphaEntityList.Init(NUMALPHAENTITYLIST * 3);
@@ -162,6 +58,10 @@ CVisibilityPlugins::Initialise(void)
 #endif // ASPECT_RATIO_SCALE
 	m_alphaEntityList.head.item.sort = 0.0f;
 	m_alphaEntityList.tail.item.sort = 100000000.0f;
+
+	m_alphaUnderwaterEntityList.Init(NUMALPHAUNTERWATERENTITYLIST);
+	m_alphaUnderwaterEntityList.head.item.sort = 0.0f;
+	m_alphaUnderwaterEntityList.tail.item.sort = 100000000.0f;
 
 #ifdef NEW_RENDERER
 	m_alphaBuildingList.Init(NUMALPHAENTITYLIST);
@@ -174,7 +74,9 @@ void
 CVisibilityPlugins::Shutdown(void)
 {
 	m_alphaList.Shutdown();
+	m_alphaBoatAtomicList.Shutdown();
 	m_alphaEntityList.Shutdown();
+	m_alphaUnderwaterEntityList.Shutdown();
 #ifdef NEW_RENDERER
 	m_alphaBuildingList.Shutdown();
 #endif
@@ -184,6 +86,8 @@ void
 CVisibilityPlugins::InitAlphaEntityList(void)
 {
 	m_alphaEntityList.Clear();
+	m_alphaBoatAtomicList.Clear();
+	m_alphaUnderwaterEntityList.Clear();
 #ifdef NEW_RENDERER
 	m_alphaBuildingList.Clear();
 #endif
@@ -203,10 +107,9 @@ CVisibilityPlugins::InsertEntityIntoSortedList(CEntity *e, float dist)
 	if(gbNewRenderer && e->IsBuilding())
 		return !!m_alphaBuildingList.InsertSorted(item);
 #endif
-	bool ret = !!m_alphaEntityList.InsertSorted(item);
-//	if(!ret)
-//		printf("list full %d\n", m_alphaEntityList.Count());
-	return ret;
+	if(e->bUnderwater && m_alphaUnderwaterEntityList.InsertSorted(item))
+		return true;
+	return !!m_alphaEntityList.InsertSorted(item);
 }
 
 void
@@ -221,10 +124,16 @@ CVisibilityPlugins::InsertAtomicIntoSortedList(RpAtomic *a, float dist)
 	AlphaObjectInfo item;
 	item.atomic = a;
 	item.sort = dist;
-	bool ret = !!m_alphaList.InsertSorted(item);
-//	if(!ret)
-//		printf("list full %d\n", m_alphaList.Count());
-	return ret;
+	return !!m_alphaList.InsertSorted(item);
+}
+
+bool
+CVisibilityPlugins::InsertAtomicIntoBoatSortedList(RpAtomic *a, float dist)
+{
+	AlphaObjectInfo item;
+	item.atomic = a;
+	item.sort = dist;
+	return !!m_alphaBoatAtomicList.InsertSorted(item);
 }
 
 // can't increase this yet unfortunately...
@@ -243,14 +152,28 @@ CVisibilityPlugins::SetRenderWareCamera(RwCamera *camera)
 	else
 		ms_cullCompsDist = sq(TheCamera.LODDistMultiplier * 20.0f);
 
-        ms_vehicleLod0Dist = sq(70.0f * VEHICLE_LODDIST_MULTIPLIER);
-        ms_vehicleLod1Dist = sq(90.0f * VEHICLE_LODDIST_MULTIPLIER);
-        ms_vehicleFadeDist = sq(100.0f * VEHICLE_LODDIST_MULTIPLIER);
-        ms_bigVehicleLod0Dist = sq(60.0f * VEHICLE_LODDIST_MULTIPLIER);
-        ms_bigVehicleLod1Dist = sq(150.0f * VEHICLE_LODDIST_MULTIPLIER);
-        ms_pedLod0Dist = sq(25.0f * TheCamera.LODDistMultiplier);
-        ms_pedLod1Dist = sq(60.0f * TheCamera.LODDistMultiplier);
-        ms_pedFadeDist = sq(70.0f * TheCamera.LODDistMultiplier);
+	ms_vehicleLod0Dist = sq(70.0f * VEHICLE_LODDIST_MULTIPLIER);
+	ms_vehicleLod1Dist = sq(90.0f * VEHICLE_LODDIST_MULTIPLIER);
+	ms_vehicleFadeDist = sq(100.0f * VEHICLE_LODDIST_MULTIPLIER);
+	ms_bigVehicleLod0Dist = sq(60.0f * VEHICLE_LODDIST_MULTIPLIER);
+	ms_bigVehicleLod1Dist = sq(150.0f * VEHICLE_LODDIST_MULTIPLIER);
+	ms_pedLod1Dist = sq(60.0f * TheCamera.LODDistMultiplier);
+	ms_pedFadeDist = sq(70.0f * TheCamera.LODDistMultiplier);
+}
+
+static float DistToCameraSq;
+static float PitchToCamera;
+
+void
+CVisibilityPlugins::SetupVehicleVariables(RpClump *vehicle)
+{
+	if (RwObjectGetType((RwObject*)vehicle) != rpCLUMP)
+		return;
+	DistToCameraSq = GetDistanceSquaredFromCamera(RpClumpGetFrame(vehicle));
+	RwV3d distToCam;
+	RwV3dSub(&distToCam, ms_pCameraPosn, &RwFrameGetMatrix(RpClumpGetFrame(vehicle))->pos);
+	float dist2d = Sqrt(SQR(distToCam.x) + SQR(distToCam.y));
+	PitchToCamera = Atan2(distToCam.z, dist2d);
 }
 
 RpMaterial*
@@ -268,23 +191,33 @@ SetTextureCB(RpMaterial *material, void *data)
 }
 
 void
-CVisibilityPlugins::RenderAlphaAtomics(void)
+CVisibilityPlugins::RenderAtomicList(CLinkList<AlphaObjectInfo> &list)
 {
 	CLink<AlphaObjectInfo> *node;
-	for(node = m_alphaList.tail.prev;
-	    node != &m_alphaList.head;
-	    node = node->prev)
+	for(node = list.tail.prev; node != &list.head; node = node->prev)
 		RENDERCALLBACK(node->item.atomic);
 }
 
 void
-CVisibilityPlugins::RenderFadingEntities(void)
+CVisibilityPlugins::RenderAlphaAtomics(void)
+{
+	RenderAtomicList(m_alphaList);
+}
+
+void
+CVisibilityPlugins::RenderBoatAlphaAtomics(void)
+{
+	SetCullMode(rwCULLMODECULLNONE);
+	RenderAtomicList(m_alphaBoatAtomicList);
+	SetCullMode(rwCULLMODECULLBACK);
+}
+
+void
+CVisibilityPlugins::RenderFadingEntities(CLinkList<AlphaObjectInfo> &list)
 {
 	CLink<AlphaObjectInfo> *node;
 	CSimpleModelInfo *mi;
-	for(node = m_alphaEntityList.tail.prev;
-	    node != &m_alphaEntityList.head;
-	    node = node->prev){
+	for(node = list.tail.prev; node != &list.head; node = node->prev){
 		CEntity *e = node->item.entity;
 		if(e->m_rwObject == nil)
 			continue;
@@ -293,16 +226,8 @@ CVisibilityPlugins::RenderFadingEntities(void)
 			continue;
 #endif
 		mi = (CSimpleModelInfo *)CModelInfo::GetModelInfo(e->GetModelIndex());
-#ifdef FIX_BUGS
 		if(mi->GetModelType() == MITYPE_SIMPLE && mi->m_noZwrite)
-#else
-		if(mi->m_noZwrite)
-#endif
 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, FALSE);
-#ifdef EXTRA_MODEL_FLAGS
-		else if(mi->m_bIsTree)
-			SetAlphaRef(128);
-#endif
 
 		if(e->bDistanceFade){
 			DeActivateDirectional();
@@ -313,38 +238,34 @@ CVisibilityPlugins::RenderFadingEntities(void)
 		}else
 			CRenderer::RenderOneNonRoad(e);
 
-#ifdef EXTRA_MODEL_FLAGS
-		if(mi->m_bIsTree)
-			SetAlphaRef(2);
-#endif
-#ifdef FIX_BUGS
 		if(mi->GetModelType() == MITYPE_SIMPLE && mi->m_noZwrite)
-#else
-		if(mi->m_noZwrite)
-#endif
 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
 	}
+}
+
+void
+CVisibilityPlugins::RenderFadingEntities(void)
+{
+	RenderFadingEntities(m_alphaEntityList);
+	RenderBoatAlphaAtomics();
+}
+
+void
+CVisibilityPlugins::RenderFadingUnderwaterEntities(void)
+{
+	RenderFadingEntities(m_alphaUnderwaterEntityList);
 }
 
 RpAtomic*
 CVisibilityPlugins::RenderWheelAtomicCB(RpAtomic *atomic)
 {
 	RpAtomic *lodatm;
-	RwMatrix *m;
-	RwV3d view;
 	float len;
 	CSimpleModelInfo *mi;
 
 	mi = GetAtomicModelInfo(atomic);
-	m = RwFrameGetLTM(RpAtomicGetFrame(atomic));
-	RwV3dSub(&view, RwMatrixGetPos(m), ms_pCameraPosn);
-	len = RwV3dLength(&view);
-#ifdef FIX_BUGS
-	// from VC
+	len = Sqrt(DistToCameraSq);
 	lodatm = mi->GetAtomicFromDistance(len * TheCamera.LODDistMultiplier / VEHICLE_LODDIST_MULTIPLIER);
-#else
-	lodatm = mi->GetAtomicFromDistance(len);
-#endif
 	if(lodatm){
 		if(RpAtomicGetGeometry(lodatm) != RpAtomicGetGeometry(atomic))
 			RpAtomicSetGeometry(atomic, RpAtomicGetGeometry(lodatm), rpATOMICSAMEBOUNDINGSPHERE);
@@ -386,6 +307,24 @@ CVisibilityPlugins::RenderAlphaAtomic(RpAtomic *atomic, int alpha)
 }
 
 RpAtomic*
+CVisibilityPlugins::RenderWeaponCB(RpAtomic *atomic)
+{
+	RwMatrix *m;
+	RwV3d view;
+	float maxdist, distsq;
+	CSimpleModelInfo *mi;
+
+	mi = GetAtomicModelInfo(atomic);
+	m = RwFrameGetLTM(RpAtomicGetFrame(atomic));
+	RwV3dSub(&view, RwMatrixGetPos(m), ms_pCameraPosn);
+	maxdist = mi->GetLodDistance(0);
+	distsq = RwV3dDotProduct(&view, &view);
+	if(distsq < maxdist*maxdist)
+		RENDERCALLBACK(atomic);
+	return atomic;
+}
+
+RpAtomic*
 CVisibilityPlugins::RenderFadingAtomic(RpAtomic *atomic, float camdist)
 {
 	RpAtomic *lodatm;
@@ -395,29 +334,30 @@ CVisibilityPlugins::RenderFadingAtomic(RpAtomic *atomic, float camdist)
 
 	mi = GetAtomicModelInfo(atomic);
 	lodatm = mi->GetAtomicFromDistance(camdist - FADE_DISTANCE);
-	if(mi->m_additive){
+	if(mi->m_additive)
 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+
+	fadefactor = (mi->GetLargestLodDistance() - (camdist - FADE_DISTANCE))/FADE_DISTANCE;
+	if(fadefactor > 1.0f)
+		fadefactor = 1.0f;
+	alpha = mi->m_alpha * fadefactor;
+	if(alpha == 255)
 		RENDERCALLBACK(atomic);
-		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
-	}else{
-		fadefactor = (mi->GetLargestLodDistance() - (camdist - FADE_DISTANCE))/FADE_DISTANCE;
-		if(fadefactor > 1.0f)
-			fadefactor = 1.0f;
-		alpha = mi->m_alpha * fadefactor;
-		if(alpha == 255)
-			RENDERCALLBACK(atomic);
-		else{
-			RpGeometry *geo = RpAtomicGetGeometry(lodatm);
-			uint32 flags = RpGeometryGetFlags(geo);
-			RpGeometrySetFlags(geo, flags | rpGEOMETRYMODULATEMATERIALCOLOR);
-			RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)alpha);
-			if(geo != RpAtomicGetGeometry(atomic))
-				RpAtomicSetGeometry(atomic, geo, rpATOMICSAMEBOUNDINGSPHERE); // originally 5 (mistake?)
-			RENDERCALLBACK(atomic);
-			RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)255);
-			RpGeometrySetFlags(geo, flags);
-		}
+	else{
+		RpGeometry *geo = RpAtomicGetGeometry(lodatm);
+		uint32 flags = RpGeometryGetFlags(geo);
+		RpGeometrySetFlags(geo, flags | rpGEOMETRYMODULATEMATERIALCOLOR);
+		RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)alpha);
+		if(geo != RpAtomicGetGeometry(atomic))
+			RpAtomicSetGeometry(atomic, geo, rpATOMICSAMEBOUNDINGSPHERE); // originally 5 (mistake?)
+		RENDERCALLBACK(atomic);
+		RpGeometryForAllMaterials(geo, SetAlphaCB, (void*)255);
+		RpGeometrySetFlags(geo, flags);
 	}
+
+	if(mi->m_additive)
+		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+
 	return atomic;
 }
 
@@ -427,17 +367,16 @@ RpAtomic*
 CVisibilityPlugins::RenderVehicleHiDetailCB(RpAtomic *atomic)
 {
 	RwFrame *clumpframe;
-	float distsq, dot;
+	float dot;
 	uint32 flags;
 
 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq < ms_vehicleLod0Dist){
+	if(DistToCameraSq < ms_vehicleLod0Dist){
 		flags = GetAtomicId(atomic);
-		if(distsq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0){
+		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f){
 			dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
 				RwFrameGetLTM(clumpframe), flags);
-			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*distsq < dot*dot))
+			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*DistToCameraSq < dot*dot))
 				return atomic;
 		}
 		RENDERCALLBACK(atomic);
@@ -449,25 +388,24 @@ RpAtomic*
 CVisibilityPlugins::RenderVehicleHiDetailAlphaCB(RpAtomic *atomic)
 {
 	RwFrame *clumpframe;
-	float distsq, dot;
+	float dot;
 	uint32 flags;
 
 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq < ms_vehicleLod0Dist){
+	if(DistToCameraSq < ms_vehicleLod0Dist){
 		flags = GetAtomicId(atomic);
 		dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
 			RwFrameGetLTM(clumpframe), flags);
-		if(distsq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0)
-			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*distsq < dot*dot))
+		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f)
+			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*DistToCameraSq < dot*dot))
 				return atomic;
 
 		if(flags & ATOMIC_FLAG_DRAWLAST){
 			// sort before clump
-			if(!InsertAtomicIntoSortedList(atomic, distsq - 0.0001f))
+			if(!InsertAtomicIntoSortedList(atomic, DistToCameraSq - 0.0001f))
 				RENDERCALLBACK(atomic);
 		}else{
-			if(!InsertAtomicIntoSortedList(atomic, distsq + dot))
+			if(!InsertAtomicIntoSortedList(atomic, DistToCameraSq + dot))
 				RENDERCALLBACK(atomic);
 		}
 	}
@@ -478,14 +416,13 @@ RpAtomic*
 CVisibilityPlugins::RenderVehicleHiDetailCB_BigVehicle(RpAtomic *atomic)
 {
 	RwFrame *clumpframe;
-	float distsq, dot;
+	float dot;
 	uint32 flags;
 
 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq < ms_bigVehicleLod0Dist){
+	if(DistToCameraSq < ms_bigVehicleLod0Dist){
 		flags = GetAtomicId(atomic);
-		if(distsq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0){
+		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f){
 			dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
 				RwFrameGetLTM(clumpframe), flags);
 			if(dot > 0.0f)
@@ -500,20 +437,19 @@ RpAtomic*
 CVisibilityPlugins::RenderVehicleHiDetailAlphaCB_BigVehicle(RpAtomic *atomic)
 {
 	RwFrame *clumpframe;
-	float distsq, dot;
+	float dot;
 	uint32 flags;
 
 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq < ms_bigVehicleLod0Dist){
+	if(DistToCameraSq < ms_bigVehicleLod0Dist){
 		flags = GetAtomicId(atomic);
 		dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
 			RwFrameGetLTM(clumpframe), flags);
-		if(dot > 0.0f)
-			if(distsq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0)
+		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f)
+			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*DistToCameraSq < dot*dot))
 				return atomic;
 
-		if(!InsertAtomicIntoSortedList(atomic, distsq + dot))
+		if(!InsertAtomicIntoSortedList(atomic, DistToCameraSq + dot))
 			RENDERCALLBACK(atomic);
 	}
 	return atomic;
@@ -522,13 +458,38 @@ CVisibilityPlugins::RenderVehicleHiDetailAlphaCB_BigVehicle(RpAtomic *atomic)
 RpAtomic*
 CVisibilityPlugins::RenderVehicleHiDetailCB_Boat(RpAtomic *atomic)
 {
-	RwFrame *clumpframe;
-	float distsq;
-
-	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq < ms_bigVehicleLod1Dist)
+	if(DistToCameraSq < ms_vehicleLod0Dist)
 		RENDERCALLBACK(atomic);
+	return atomic;
+}
+
+RpAtomic*
+CVisibilityPlugins::RenderVehicleHiDetailAlphaCB_Boat(RpAtomic *atomic)
+{
+	if(DistToCameraSq < ms_vehicleLod0Dist){
+		if(GetAtomicId(atomic) & ATOMIC_FLAG_DRAWLAST){
+			if(!InsertAtomicIntoBoatSortedList(atomic, DistToCameraSq))
+				RENDERCALLBACK(atomic);
+		}else
+			RENDERCALLBACK(atomic);
+	}
+	return atomic;
+}
+
+RpAtomic*
+CVisibilityPlugins::RenderVehicleLoDetailCB_Boat(RpAtomic *atomic)
+{
+	RpClump *clump;
+	int32 alpha;
+
+	clump = RpAtomicGetClump(atomic);
+	if(DistToCameraSq >= ms_vehicleLod0Dist){
+		alpha = GetClumpAlpha(clump);
+		if(alpha == 255)
+			RENDERCALLBACK(atomic);
+		else
+			RenderAlphaAtomic(atomic, alpha);
+	}
 	return atomic;
 }
 
@@ -536,15 +497,14 @@ RpAtomic*
 CVisibilityPlugins::RenderVehicleLowDetailCB_BigVehicle(RpAtomic *atomic)
 {
 	RwFrame *clumpframe;
-	float distsq, dot;
+	float dot;
 	uint32 flags;
 
 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq >= ms_bigVehicleLod0Dist &&
-	   distsq < ms_bigVehicleLod1Dist){
+	if(DistToCameraSq >= ms_bigVehicleLod0Dist &&
+	   DistToCameraSq < ms_bigVehicleLod1Dist){
 		flags = GetAtomicId(atomic);
-		if(distsq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0){
+		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f){
 			dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
 				RwFrameGetLTM(clumpframe), flags);
 			if(dot > 0.0f)
@@ -559,21 +519,20 @@ RpAtomic*
 CVisibilityPlugins::RenderVehicleLowDetailAlphaCB_BigVehicle(RpAtomic *atomic)
 {
 	RwFrame *clumpframe;
-	float distsq, dot;
+	float dot;
 	uint32 flags;
 
 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq >= ms_bigVehicleLod0Dist &&
-	   distsq < ms_bigVehicleLod1Dist){
+	if(DistToCameraSq >= ms_bigVehicleLod0Dist &&
+	   DistToCameraSq < ms_bigVehicleLod1Dist){
 		flags = GetAtomicId(atomic);
 		dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
 			RwFrameGetLTM(clumpframe), flags);
 		if(dot > 0.0f)
-			if(distsq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0)
+			if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f)
 				return atomic;
 
-		if(!InsertAtomicIntoSortedList(atomic, distsq + dot))
+		if(!InsertAtomicIntoSortedList(atomic, DistToCameraSq + dot))
 			RENDERCALLBACK(atomic);
 	}
 	return atomic;
@@ -583,12 +542,10 @@ RpAtomic*
 CVisibilityPlugins::RenderVehicleReallyLowDetailCB(RpAtomic *atomic)
 {
 	RpClump *clump;
-	float dist;
 	int32 alpha;
 
 	clump = RpAtomicGetClump(atomic);
-	dist = GetDistanceSquaredFromCamera(RpClumpGetFrame(clump));
-	if(dist >= ms_vehicleLod0Dist){
+	if(DistToCameraSq >= ms_vehicleLod0Dist){
 		alpha = GetClumpAlpha(clump);
 		if(alpha == 255)
 			RENDERCALLBACK(atomic);
@@ -602,12 +559,7 @@ CVisibilityPlugins::RenderVehicleReallyLowDetailCB(RpAtomic *atomic)
 RpAtomic*
 CVisibilityPlugins::RenderVehicleReallyLowDetailCB_BigVehicle(RpAtomic *atomic)
 {
-	RwFrame *clumpframe;
-	float distsq;
-
-	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq >= ms_bigVehicleLod1Dist)
+	if(DistToCameraSq >= ms_bigVehicleLod1Dist)
 		RENDERCALLBACK(atomic);
 	return atomic;
 }
@@ -616,17 +568,16 @@ RpAtomic*
 CVisibilityPlugins::RenderTrainHiDetailCB(RpAtomic *atomic)
 {
 	RwFrame *clumpframe;
-	float distsq, dot;
+	float dot;
 	uint32 flags;
 
 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq < ms_bigVehicleLod1Dist){
+	if(DistToCameraSq < ms_bigVehicleLod1Dist){
 		flags = GetAtomicId(atomic);
-		if(distsq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0){
+		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f){
 			dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
 				RwFrameGetLTM(clumpframe), flags);
-			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*distsq < dot*dot))
+			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*DistToCameraSq < dot*dot))
 				return atomic;
 		}
 		RENDERCALLBACK(atomic);
@@ -638,27 +589,61 @@ RpAtomic*
 CVisibilityPlugins::RenderTrainHiDetailAlphaCB(RpAtomic *atomic)
 {
 	RwFrame *clumpframe;
-	float distsq, dot;
+	float dot;
 	uint32 flags;
 
 	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
-	distsq = GetDistanceSquaredFromCamera(clumpframe);
-	if(distsq < ms_bigVehicleLod1Dist){
+	if(DistToCameraSq < ms_bigVehicleLod1Dist){
 		flags = GetAtomicId(atomic);
 		dot = GetDotProductWithCameraVector(RwFrameGetLTM(RpAtomicGetFrame(atomic)),
 			RwFrameGetLTM(clumpframe), flags);
-		if(distsq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0)
-			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*distsq < dot*dot))
+		if(DistToCameraSq > ms_cullCompsDist && (flags & ATOMIC_FLAG_NOCULL) == 0 && PitchToCamera < 0.2f)
+			if(dot > 0.0f && ((flags & ATOMIC_FLAG_ANGLECULL) || 0.1f*DistToCameraSq < dot*dot))
 				return atomic;
 
 		if(flags & ATOMIC_FLAG_DRAWLAST){
 			// sort before clump
-			if(!InsertAtomicIntoSortedList(atomic, distsq - 0.0001f))
+			if(!InsertAtomicIntoSortedList(atomic, DistToCameraSq - 0.0001f))
 				RENDERCALLBACK(atomic);
 		}else{
-			if(!InsertAtomicIntoSortedList(atomic, distsq + dot))
+			if(!InsertAtomicIntoSortedList(atomic, DistToCameraSq + dot))
 				RENDERCALLBACK(atomic);
 		}
+	}
+	return atomic;
+}
+
+RpAtomic*
+CVisibilityPlugins::RenderVehicleRotorAlphaCB(RpAtomic *atomic)
+{
+	RwFrame *clumpframe;
+	float dot;
+	RwV3d cam2atm;
+
+	clumpframe = RpClumpGetFrame(RpAtomicGetClump(atomic));
+	if(DistToCameraSq < ms_bigVehicleLod1Dist){
+		RwV3dSub(&cam2atm, &RwFrameGetLTM(RpAtomicGetFrame(atomic))->pos, ms_pCameraPosn);
+		dot = RwV3dDotProduct(&cam2atm, &RwFrameGetLTM(clumpframe)->at);
+		if(!InsertAtomicIntoSortedList(atomic, DistToCameraSq + dot*20.0f))
+			RENDERCALLBACK(atomic);
+	}
+	return atomic;
+}
+
+RpAtomic*
+CVisibilityPlugins::RenderVehicleTailRotorAlphaCB(RpAtomic *atomic)
+{
+	RwMatrix *clumpMat, *atmMat;
+	float dot;
+	RwV3d cam2atm;
+
+	if(DistToCameraSq < ms_bigVehicleLod0Dist){
+		atmMat = RwFrameGetLTM(RpAtomicGetFrame(atomic));
+		clumpMat = RwFrameGetLTM(RpClumpGetFrame(RpAtomicGetClump(atomic)));
+		RwV3dSub(&cam2atm, &atmMat->pos, ms_pCameraPosn);
+		dot = RwV3dDotProduct(&cam2atm, &clumpMat->up) + RwV3dDotProduct(&cam2atm, &clumpMat->right);
+		if(!InsertAtomicIntoSortedList(atomic, DistToCameraSq - dot))
+			RENDERCALLBACK(atomic);
 	}
 	return atomic;
 }
@@ -672,46 +657,6 @@ CVisibilityPlugins::RenderPlayerCB(RpAtomic *atomic)
 	return atomic;
 }
 
-RpAtomic*
-CVisibilityPlugins::RenderPedLowDetailCB(RpAtomic *atomic)
-{
-	RpClump *clump;
-	float dist;
-	int32 alpha;
-
-	clump = RpAtomicGetClump(atomic);
-	dist = GetDistanceSquaredFromCamera(RpClumpGetFrame(clump));
-	if(dist >= ms_pedLod0Dist){
-		alpha = GetClumpAlpha(clump);
-		if(alpha == 255)
-			RENDERCALLBACK(atomic);
-		else
-			RenderAlphaAtomic(atomic, alpha);
-	}
-	return atomic;
-}
-
-RpAtomic*
-CVisibilityPlugins::RenderPedHiDetailCB(RpAtomic *atomic)
-{
-	RpClump *clump;
-	float dist;
-	int32 alpha;
-
-	clump = RpAtomicGetClump(atomic);
-	dist = GetDistanceSquaredFromCamera(RpClumpGetFrame(clump));
-	if(dist < ms_pedLod0Dist){
-		alpha = GetClumpAlpha(clump);
-		if(alpha == 255)
-			RENDERCALLBACK(atomic);
-		else
-			RenderAlphaAtomic(atomic, alpha);
-	}
-	return atomic;
-}
-
-// This is needed for peds with only one clump, i.e. skinned models
-// strangely even the xbox version has no such thing
 RpAtomic*
 CVisibilityPlugins::RenderPedCB(RpAtomic *atomic)
 {
@@ -727,6 +672,14 @@ CVisibilityPlugins::RenderPedCB(RpAtomic *atomic)
 			RenderAlphaAtomic(atomic, alpha);
 	}
 	return atomic;
+}
+
+float
+CVisibilityPlugins::GetDistanceSquaredFromCamera(RwV3d *pos)
+{
+	RwV3d dist;
+	RwV3dSub(&dist, pos, ms_pCameraPosn);
+	return RwV3dDotProduct(&dist, &dist);
 }
 
 float
@@ -786,16 +739,6 @@ CVisibilityPlugins::DefaultVisibilityCB(RpClump *clump)
 }
 
 bool
-CVisibilityPlugins::MloVisibilityCB(RpClump *clump)
-{
-	RwFrame *frame = RpClumpGetFrame(clump);
-	CMloModelInfo *modelInfo = (CMloModelInfo*)GetFrameHierarchyId(frame);
-	if (sq(modelInfo->field_34) < GetDistanceSquaredFromCamera(frame))
-		return false;
-	return CVisibilityPlugins::FrustumSphereCB(clump);
-}
-
-bool
 CVisibilityPlugins::FrustumSphereCB(RpClump *clump)
 {
 	RwSphere sphere;
@@ -852,11 +795,6 @@ CVisibilityPlugins::PluginAttach(void)
 	ms_clumpPluginOffset = RpClumpRegisterPlugin(sizeof(ClumpExt),
 		ID_VISIBILITYCLUMP,
 		ClumpConstructor, ClumpDestructor, ClumpCopyConstructor);
-
-#if GTA_VERSION <= GTA3_PS2_160
-	Initialise();
-#endif
-
 	return ms_atomicPluginOffset != -1 && ms_clumpPluginOffset != -1;
 }
 
@@ -894,13 +832,6 @@ CVisibilityPlugins::SetAtomicModelInfo(RpAtomic *atomic,
 {
 	AtomicExt *ext = ATOMICEXT(atomic);
 	ext->modelInfo = modelInfo;
-	switch (modelInfo->GetModelType()) {
-		case MITYPE_SIMPLE:
-		case MITYPE_TIME:
-			if(modelInfo->m_normalCull)
-				SetAtomicRenderCallback(atomic, RenderObjNormalAtomic);
-		default: break;
-	}
 }
 
 CSimpleModelInfo*
@@ -931,7 +862,7 @@ void
 CVisibilityPlugins::SetAtomicRenderCallback(RpAtomic *atomic, RpAtomicCallBackRender cb)
 {
 	if(cb == nil)
-		cb = RENDERCALLBACK;
+		cb = RENDERCALLBACK;	// not necessary
 	RpAtomicSetRenderCallBack(atomic, cb);
 }
 

@@ -24,3 +24,4 @@ void SetAmbientColours(void);
 void SetAmbientColoursForPedsCarsAndObjects(void);
 void SetAmbientColoursToIndicateRoadGroup(int i);
 void SetAmbientColours(RwRGBAReal *color);
+void SetFullAmbient(void);

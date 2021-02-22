@@ -2,50 +2,71 @@
 
 class CTimeCycle
 {
-	static int32 m_nAmbientRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nAmbientGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nAmbientBlue[NUMHOURS][NUMWEATHERS];
-	static int32 m_nDirectionalRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nDirectionalGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nDirectionalBlue[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSkyTopRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSkyTopGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSkyTopBlue[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSkyBottomRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSkyBottomGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSkyBottomBlue[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSunCoreRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSunCoreGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSunCoreBlue[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSunCoronaRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSunCoronaGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nSunCoronaBlue[NUMHOURS][NUMWEATHERS];
-	static float m_fSunSize[NUMHOURS][NUMWEATHERS];
-	static float m_fSpriteSize[NUMHOURS][NUMWEATHERS];
-	static float m_fSpriteBrightness[NUMHOURS][NUMWEATHERS];
-	static int16 m_nShadowStrength[NUMHOURS][NUMWEATHERS];
-	static int16 m_nLightShadowStrength[NUMHOURS][NUMWEATHERS];
-	static int16 m_nTreeShadowStrength[NUMHOURS][NUMWEATHERS];
-	static float m_fFogStart[NUMHOURS][NUMWEATHERS];
-	static float m_fFarClip[NUMHOURS][NUMWEATHERS];
-	static float m_fLightsOnGroundBrightness[NUMHOURS][NUMWEATHERS];
-	static int32 m_nLowCloudsRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nLowCloudsGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nLowCloudsBlue[NUMHOURS][NUMWEATHERS];
-	static int32 m_nFluffyCloudsTopRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nFluffyCloudsTopGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nFluffyCloudsTopBlue[NUMHOURS][NUMWEATHERS];
-	static int32 m_nFluffyCloudsBottomRed[NUMHOURS][NUMWEATHERS];
-	static int32 m_nFluffyCloudsBottomGreen[NUMHOURS][NUMWEATHERS];
-	static int32 m_nFluffyCloudsBottomBlue[NUMHOURS][NUMWEATHERS];
-	static float m_fBlurRed[NUMHOURS][NUMWEATHERS];
-	static float m_fBlurGreen[NUMHOURS][NUMWEATHERS];
-	static float m_fBlurBlue[NUMHOURS][NUMWEATHERS];
-	static float m_fBlurAlpha[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientRed_Obj[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientGreen_Obj[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientBlue_Obj[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientRed_Bl[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientGreen_Bl[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientBlue_Bl[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientRed_Obj_Bl[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientGreen_Obj_Bl[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nAmbientBlue_Obj_Bl[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nDirectionalRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nDirectionalGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nDirectionalBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSkyTopRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSkyTopGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSkyTopBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSkyBottomRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSkyBottomGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSkyBottomBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSunCoreRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSunCoreGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSunCoreBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSunCoronaRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSunCoronaGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nSunCoronaBlue[NUMHOURS][NUMWEATHERS];
+	static int8 m_fSunSize[NUMHOURS][NUMWEATHERS];
+	static int8 m_fSpriteSize[NUMHOURS][NUMWEATHERS];
+	static int8 m_fSpriteBrightness[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nShadowStrength[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nLightShadowStrength[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nPoleShadowStrength[NUMHOURS][NUMWEATHERS];
+	static int16 m_fFogStart[NUMHOURS][NUMWEATHERS];
+	static int16 m_fFarClip[NUMHOURS][NUMWEATHERS];
+	static uint8 m_fLightsOnGroundBrightness[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nLowCloudsRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nLowCloudsGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nLowCloudsBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nFluffyCloudsTopRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nFluffyCloudsTopGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nFluffyCloudsTopBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nFluffyCloudsBottomRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nFluffyCloudsBottomGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_nFluffyCloudsBottomBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_fBlurRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_fBlurGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_fBlurBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_fWaterRed[NUMHOURS][NUMWEATHERS];
+	static uint8 m_fWaterGreen[NUMHOURS][NUMWEATHERS];
+	static uint8 m_fWaterBlue[NUMHOURS][NUMWEATHERS];
+	static uint8 m_fWaterAlpha[NUMHOURS][NUMWEATHERS];
 
 	static float m_fCurrentAmbientRed;
 	static float m_fCurrentAmbientGreen;
 	static float m_fCurrentAmbientBlue;
+	static float m_fCurrentAmbientRed_Obj;
+	static float m_fCurrentAmbientGreen_Obj;
+	static float m_fCurrentAmbientBlue_Obj;
+	static float m_fCurrentAmbientRed_Bl;
+	static float m_fCurrentAmbientGreen_Bl;
+	static float m_fCurrentAmbientBlue_Bl;
+	static float m_fCurrentAmbientRed_Obj_Bl;
+	static float m_fCurrentAmbientGreen_Obj_Bl;
+	static float m_fCurrentAmbientBlue_Obj_Bl;
 	static float m_fCurrentDirectionalRed;
 	static float m_fCurrentDirectionalGreen;
 	static float m_fCurrentDirectionalBlue;
@@ -66,7 +87,7 @@ class CTimeCycle
 	static float m_fCurrentSpriteBrightness;
 	static int32 m_nCurrentShadowStrength;
 	static int32 m_nCurrentLightShadowStrength;
-	static int32 m_nCurrentTreeShadowStrength;
+	static int32 m_nCurrentPoleShadowStrength;
 	static float m_fCurrentFogStart;
 	static float m_fCurrentFarClip;
 	static float m_fCurrentLightsOnGroundBrightness;
@@ -82,7 +103,10 @@ class CTimeCycle
 	static float m_fCurrentBlurRed;
 	static float m_fCurrentBlurGreen;
 	static float m_fCurrentBlurBlue;
-	static float m_fCurrentBlurAlpha;
+	static float m_fCurrentWaterRed;
+	static float m_fCurrentWaterGreen;
+	static float m_fCurrentWaterBlue;
+	static float m_fCurrentWaterAlpha;
 	static int32 m_nCurrentFogColourRed;
 	static int32 m_nCurrentFogColourGreen;
 	static int32 m_nCurrentFogColourBlue;
@@ -90,6 +114,9 @@ class CTimeCycle
 	static int32 m_FogReduction;
 
 public:
+	static int32 m_bExtraColourOn;
+	static int32 m_ExtraColour;
+	static float m_ExtraColourInter;
 	static int32 m_CurrentStoredValue;
 	static CVector m_VectorToSun[16];
 	static float m_fShadowFrontX[16];
@@ -102,6 +129,15 @@ public:
 	static float GetAmbientRed(void) { return m_fCurrentAmbientRed; }
 	static float GetAmbientGreen(void) { return m_fCurrentAmbientGreen; }
 	static float GetAmbientBlue(void) { return m_fCurrentAmbientBlue; }
+	static float GetAmbientRed_Obj(void) { return m_fCurrentAmbientRed_Obj; }
+	static float GetAmbientGreen_Obj(void) { return m_fCurrentAmbientGreen_Obj; }
+	static float GetAmbientBlue_Obj(void) { return m_fCurrentAmbientBlue_Obj; }
+	static float GetAmbientRed_Bl(void) { return m_fCurrentAmbientRed_Bl; }
+	static float GetAmbientGreen_Bl(void) { return m_fCurrentAmbientGreen_Bl; }
+	static float GetAmbientBlue_Bl(void) { return m_fCurrentAmbientBlue_Bl; }
+	static float GetAmbientRed_Obj_Bl(void) { return m_fCurrentAmbientRed_Obj_Bl; }
+	static float GetAmbientGreen_Obj_Bl(void) { return m_fCurrentAmbientGreen_Obj_Bl; }
+	static float GetAmbientBlue_Obj_Bl(void) { return m_fCurrentAmbientBlue_Obj_Bl; }
 	static float GetDirectionalRed(void) { return m_fCurrentDirectionalRed; }
 	static float GetDirectionalGreen(void) { return m_fCurrentDirectionalGreen; }
 	static float GetDirectionalBlue(void) { return m_fCurrentDirectionalBlue; }
@@ -140,8 +176,21 @@ public:
 	static int32 GetFogBlue(void) { return m_nCurrentFogColourBlue; }
 	static int32 GetFogReduction(void) { return m_FogReduction; }
 
+	static int32 GetBlurRed(void) { return m_fCurrentBlurRed; }
+	static int32 GetBlurGreen(void) { return m_fCurrentBlurGreen; }
+	static int32 GetBlurBlue(void) { return m_fCurrentBlurBlue; }
+	static int32 GetWaterRed(void) { return m_fCurrentWaterRed; }
+	static int32 GetWaterGreen(void) { return m_fCurrentWaterGreen; }
+	static int32 GetWaterBlue(void) { return m_fCurrentWaterBlue; }
+	static int32 GetWaterAlpha(void) { return m_fCurrentWaterAlpha; }
+
 	static void Initialise(void);
 	static void Update(void);
+	static float Interpolate(int8 *a, int8 *b);
+	static float Interpolate(uint8 *a, uint8 *b);
+	static float Interpolate(int16 *a, int16 *b);
+	static void StartExtraColour(int32 c, bool fade);
+	static void StopExtraColour(bool fade);
 	static CVector &GetSunDirection(void) { return m_VectorToSun[m_CurrentStoredValue]; }
 	static float GetShadowFrontX(void) { return m_fShadowFrontX[m_CurrentStoredValue]; }
 	static float GetShadowFrontY(void) { return m_fShadowFrontY[m_CurrentStoredValue]; }

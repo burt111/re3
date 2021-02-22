@@ -3,6 +3,7 @@
 #include "main.h"
 #include "General.h"
 #include "Entity.h"
+#include "RenderBuffer.h"
 #include "TxdStore.h"
 #include "Camera.h"
 #include "Sprite.h"
@@ -58,7 +59,7 @@ RwTexture *gpCoronaTexture[9] = { nil, nil, nil, nil, nil, nil, nil, nil, nil };
 float CCoronas::LightsMult = 1.0f;
 float CCoronas::SunScreenX;
 float CCoronas::SunScreenY;
-bool CCoronas::bSmallMoon;
+int CCoronas::MoonSize;
 bool CCoronas::SunBlockedByClouds;
 int CCoronas::bChangeBrightnessImmediately;
 
@@ -134,12 +135,21 @@ CCoronas::Update(void)
 void
 CCoronas::RegisterCorona(uint32 id, uint8 red, uint8 green, uint8 blue, uint8 alpha,
 	const CVector &coors, float size, float drawDist, RwTexture *tex,
-	int8 flareType, uint8 reflection, uint8 LOScheck, uint8 drawStreak, float someAngle)
+	int8 flareType, uint8 reflection, uint8 LOScheck, uint8 drawStreak, float someAngle,
+	bool useNearDist, float nearDist)
 {
 	int i;
 
 	if(sq(drawDist) < (TheCamera.GetPosition() - coors).MagnitudeSqr2D())
 		return;
+
+	if(useNearDist){
+		float dist = (TheCamera.GetPosition() - coors).Magnitude();
+		if(dist < 35.0f)
+			return;
+		if(dist < 50.0f)
+			alpha *= (dist - 35.0f)/(50.0f - 35.0f);
+	}
 
 	for(i = 0; i < NUMCORONAS; i++)
 		if(aCoronas[i].id == id)
@@ -193,15 +203,19 @@ CCoronas::RegisterCorona(uint32 id, uint8 red, uint8 green, uint8 blue, uint8 al
 	aCoronas[i].reflection = reflection;
 	aCoronas[i].LOScheck = LOScheck;
 	aCoronas[i].drawStreak = drawStreak;
+	aCoronas[i].useNearDist = useNearDist;
+	aCoronas[i].nearDist = nearDist;
 }
 
 void
 CCoronas::RegisterCorona(uint32 id, uint8 red, uint8 green, uint8 blue, uint8 alpha,
-		const CVector &coors, float size, float drawDist, uint8 type,
-		int8 flareType, uint8 reflection, uint8 LOScheck, uint8 drawStreak, float someAngle)
+	const CVector &coors, float size, float drawDist, uint8 type,
+	int8 flareType, uint8 reflection, uint8 LOScheck, uint8 drawStreak, float someAngle,
+	bool useNearDist, float nearDist)
 {
 	RegisterCorona(id, red, green, blue, alpha, coors, size, drawDist,
-		gpCoronaTexture[type], flareType, reflection, LOScheck, drawStreak, someAngle);
+		gpCoronaTexture[type], flareType, reflection, LOScheck, drawStreak, someAngle,
+		useNearDist, nearDist);
 }
 
 void
@@ -314,7 +328,7 @@ CCoronas::Render(void)
 					if(CCoronas::aCoronas[i].id == SUN_CORE)
 						spriteCoors.z = 0.95f * RwCameraGetFarClipPlane(Scene.camera);
 					RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(aCoronas[i].texture));
-					spriteCoors.z -= 1.5f;
+					spriteCoors.z -= aCoronas[i].nearDist;
 
 					if(aCoronas[i].texture == gpCoronaTexture[8]){
 						// what's this?
@@ -376,7 +390,7 @@ CCoronas::Render(void)
 		}
 	}
 
-	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
@@ -428,9 +442,7 @@ CCoronas::RenderReflections(void)
 	CEntity *entity;
 
 	if(CWeather::WetRoads > 0.0f){
-#ifdef FIX_BUGS
 		CSprite::InitSpriteBuffer();
-#endif
 
 		RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
@@ -469,7 +481,7 @@ CCoronas::RenderReflections(void)
 
 				CVector spriteCoors;
 				float spritew, spriteh;
-				if(CSprite::CalcScreenCoors(coors, &spriteCoors, &spritew, &spriteh, true)){
+				if(CSprite::CalcScreenCoors(coors, &spriteCoors, &spritew, &spriteh, true)) {
 					float drawDist = 0.75f * aCoronas[i].drawDist;
 					drawDist = Min(drawDist, 55.0f);
 					if(spriteCoors.z < drawDist){
@@ -511,6 +523,130 @@ CCoronas::RenderReflections(void)
 	}
 }
 
+void
+CCoronas::RenderSunReflection(void)
+{
+	float sunZDir = CTimeCycle::GetSunDirection().z;
+	if(sunZDir > -0.05f){
+		float intensity = (0.3f - Abs(sunZDir - 0.25f))/0.3f *
+			(1.0f - CWeather::CloudCoverage) *
+			(1.0f - CWeather::Foggyness) *
+			(1.0f - CWeather::Wind);
+		if(intensity > 0.0f){
+			int r = (CTimeCycle::GetSunCoreRed() + CTimeCycle::GetSunCoronaRed())*intensity*0.25f;
+			int g = (CTimeCycle::GetSunCoreGreen() + CTimeCycle::GetSunCoronaGreen())*intensity*0.25f;
+			int b = (CTimeCycle::GetSunCoreBlue() + CTimeCycle::GetSunCoronaBlue())*intensity*0.25f;
+
+			CVector sunPos = 40.0f*CTimeCycle::GetSunDirection() + TheCamera.GetPosition();
+			sunPos.z = 0.5f*CWeather::Wind + 6.1f;
+			CVector sunDir = CTimeCycle::GetSunDirection();
+			sunDir.z = 0.0;
+			sunDir.Normalise();
+
+			TempBufferIndicesStored = 6;
+			TempBufferRenderIndexList[0] = 2;
+			TempBufferRenderIndexList[1] = 1;
+			TempBufferRenderIndexList[2] = 0;
+			TempBufferRenderIndexList[3] = 2;
+			TempBufferRenderIndexList[4] = 3;
+			TempBufferRenderIndexList[5] = 1;
+
+			// 60 unit square in sun direction
+			TempBufferVerticesStored = 4;
+			RwIm3DVertexSetRGBA(&TempBufferRenderVertices[0], r, g, b, 255);
+			RwIm3DVertexSetPos(&TempBufferRenderVertices[0],
+				sunPos.x + 30.0f*sunDir.y,
+				sunPos.y - 30.0f*sunDir.x,
+				sunPos.z);
+			RwIm3DVertexSetRGBA(&TempBufferRenderVertices[1], r, g, b, 255);
+			RwIm3DVertexSetPos(&TempBufferRenderVertices[1],
+				sunPos.x - 30.0f*sunDir.y,
+				sunPos.y + 30.0f*sunDir.x,
+				sunPos.z);
+			RwIm3DVertexSetRGBA(&TempBufferRenderVertices[2], r, g, b, 255);
+			RwIm3DVertexSetPos(&TempBufferRenderVertices[2],
+				sunPos.x + 60.0f*sunDir.x + 30.0f*sunDir.y,
+				sunPos.y + 60.0f*sunDir.y - 30.0f*sunDir.x,
+				sunPos.z);
+			RwIm3DVertexSetRGBA(&TempBufferRenderVertices[3], r, g, b, 255);
+			RwIm3DVertexSetPos(&TempBufferRenderVertices[3],
+				sunPos.x + 60.0f*sunDir.x - 30.0f*sunDir.y,
+				sunPos.y + 60.0f*sunDir.y + 30.0f*sunDir.x,
+				sunPos.z);
+
+			RwIm3DVertexSetU(&TempBufferRenderVertices[0], 0.0f);
+			RwIm3DVertexSetV(&TempBufferRenderVertices[0], 1.0f);
+			RwIm3DVertexSetU(&TempBufferRenderVertices[1], 1.0f);
+			RwIm3DVertexSetV(&TempBufferRenderVertices[1], 1.0f);
+			RwIm3DVertexSetU(&TempBufferRenderVertices[2], 0.0f);
+			RwIm3DVertexSetV(&TempBufferRenderVertices[2], 0.5f);
+			RwIm3DVertexSetU(&TempBufferRenderVertices[3], 1.0f);
+			RwIm3DVertexSetV(&TempBufferRenderVertices[3], 0.5f);
+
+			int timeInc = 0;
+			int sideInc = 0;
+			int fwdInc = 0;
+			for(int i = 0; i < 20; i++){
+				TempBufferRenderIndexList[TempBufferIndicesStored + 0] = TempBufferVerticesStored;
+				TempBufferRenderIndexList[TempBufferIndicesStored + 1] = TempBufferVerticesStored-1;
+				TempBufferRenderIndexList[TempBufferIndicesStored + 2] = TempBufferVerticesStored-2;
+				TempBufferRenderIndexList[TempBufferIndicesStored + 3] = TempBufferVerticesStored;
+				TempBufferRenderIndexList[TempBufferIndicesStored + 4] = TempBufferVerticesStored+1;
+				TempBufferRenderIndexList[TempBufferIndicesStored + 5] = TempBufferVerticesStored-1;
+				TempBufferIndicesStored += 6;
+
+				// What a weird way to do it...
+				float fwdLen = fwdInc/20 + 60;
+				float sideLen = sideInc/20 + 30;
+				sideLen += 10.0f*Sin((float)(CTimer::GetTimeInMilliseconds()+timeInc & 0x7FF)/0x800*TWOPI);
+				timeInc += 900;
+				sideInc += 970;
+				fwdInc += 1440;
+
+				RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored+0], r, g, b, 255);
+				RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored+0],
+					sunPos.x + fwdLen*sunDir.x + sideLen*sunDir.y,
+					sunPos.y + fwdLen*sunDir.y - sideLen*sunDir.x,
+					sunPos.z);
+
+				RwIm3DVertexSetRGBA(&TempBufferRenderVertices[TempBufferVerticesStored+1], r, g, b, 255);
+				RwIm3DVertexSetPos(&TempBufferRenderVertices[TempBufferVerticesStored+1],
+					sunPos.x + fwdLen*sunDir.x - sideLen*sunDir.y,
+					sunPos.y + fwdLen*sunDir.y + sideLen*sunDir.x,
+					sunPos.z);
+
+				RwIm3DVertexSetU(&TempBufferRenderVertices[TempBufferVerticesStored+0], 0.0f);
+				RwIm3DVertexSetV(&TempBufferRenderVertices[TempBufferVerticesStored+0], 0.5f);
+				RwIm3DVertexSetU(&TempBufferRenderVertices[TempBufferVerticesStored+1], 1.0f);
+				RwIm3DVertexSetV(&TempBufferRenderVertices[TempBufferVerticesStored+1], 0.5f);
+				TempBufferVerticesStored += 2;
+			}
+
+
+			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+			RwRenderStateSet(rwRENDERSTATEFOGTYPE, (void*)rwFOGTYPELINEAR);
+			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(gpCoronaTexture[4]));
+			if(RwIm3DTransform(TempBufferRenderVertices, TempBufferVerticesStored, nil, rwIM3D_VERTEXUV)){
+				RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
+				RwIm3DEnd();
+			}
+			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+			RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+			RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+			RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+			RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+			TempBufferVerticesStored = 0;
+			TempBufferIndicesStored = 0;
+		}
+	}
+}
+
 void 
 CCoronas::DoSunAndMoon(void)
 {
@@ -527,7 +663,7 @@ CCoronas::DoSunAndMoon(void)
 			255, sunCoors, size,
 			999999.88f, TYPE_STAR, FLARE_NONE, REFLECTION_OFF, LOSCHECK_OFF, STREAK_OFF, 0.0f);
 
-		if(CTimeCycle::GetSunDirection().z > 0.0f)
+		if(CTimeCycle::GetSunDirection().z > 0.0f && !CGame::IsInInterior())
 			RegisterCorona(SUN_CORONA,
 				CTimeCycle::GetSunCoronaRed(), CTimeCycle::GetSunCoronaGreen(), CTimeCycle::GetSunCoronaBlue(),
 				255, sunCoors, 25.0f * CTimeCycle::GetSunSize(),
@@ -536,7 +672,7 @@ CCoronas::DoSunAndMoon(void)
 
 	CVector spriteCoors;
 	float spritew, spriteh;
-	if(CSprite::CalcScreenCoors(sunCoors, &spriteCoors, &spritew, &spriteh, true)){
+	if(CSprite::CalcScreenCoors(sunCoors, &spriteCoors, &spritew, &spriteh, true)) {
 		SunScreenX = spriteCoors.x;
 		SunScreenY = spriteCoors.y;
 	}else{
@@ -603,80 +739,66 @@ CEntity::ProcessLightsForEntity(void)
 	for(i = 0; i < n; i++, flashTimer1 += 0x80, flashTimer2 += 0x100, flashTimer3 += 0x200){
 		effect = CModelInfo::GetModelInfo(GetModelIndex())->Get2dEffect(i);
 
-		if(effect->type != EFFECT_LIGHT)
-			continue;
+		switch(effect->type){
+		case EFFECT_LIGHT:
+			pos = GetMatrix() * effect->pos;
 
-		pos = GetMatrix() * effect->pos;
-
-		lightOn = false;
-		lightFlickering = false;
-		switch(effect->light.lightType){
-		case LIGHT_ON:
-			lightOn = true;
-			break;
-		case LIGHT_ON_NIGHT:
-			if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+			lightOn = false;
+			lightFlickering = false;
+			switch(effect->light.lightType){
+			case LIGHT_ON:
 				lightOn = true;
-			break;
-		case LIGHT_FLICKER:
-			if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed) & 0x60)
-				lightOn = true;
-			else
-				lightFlickering = true;
-			if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed) & 3)
-				lightOn = true;
-			break;
-		case LIGHT_FLICKER_NIGHT:
-			if(CClock::GetHours() > 18 || CClock::GetHours() < 7 || CWeather::WetRoads > 0.5f){
+				break;
+			case LIGHT_ON_NIGHT:
+				if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+					lightOn = true;
+				break;
+			case LIGHT_FLICKER:
 				if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed) & 0x60)
 					lightOn = true;
 				else
 					lightFlickering = true;
 				if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed) & 3)
 					lightOn = true;
-			}
-			break;
-		case LIGHT_FLASH1:
-			if((CTimer::GetTimeInMilliseconds() + flashTimer1) & 0x200)
-				lightOn = true;
-			break;
-		case LIGHT_FLASH1_NIGHT:
-			if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+				break;
+			case LIGHT_FLICKER_NIGHT:
+				if(CClock::GetHours() > 18 || CClock::GetHours() < 7 || CWeather::WetRoads > 0.5f){
+					if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed) & 0x60)
+						lightOn = true;
+					else
+						lightFlickering = true;
+					if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed) & 3)
+						lightOn = true;
+				}
+				break;
+			case LIGHT_FLASH1:
 				if((CTimer::GetTimeInMilliseconds() + flashTimer1) & 0x200)
 					lightOn = true;
-			break;
-		case LIGHT_FLASH2:
-			if((CTimer::GetTimeInMilliseconds() + flashTimer2) & 0x400)
-				lightOn = true;
-			break;
-		case LIGHT_FLASH2_NIGHT:
-			if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+				break;
+			case LIGHT_FLASH1_NIGHT:
+				if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+					if((CTimer::GetTimeInMilliseconds() + flashTimer1) & 0x200)
+						lightOn = true;
+				break;
+			case LIGHT_FLASH2:
 				if((CTimer::GetTimeInMilliseconds() + flashTimer2) & 0x400)
 					lightOn = true;
-			break;
-		case LIGHT_FLASH3:
-			if((CTimer::GetTimeInMilliseconds() + flashTimer3) & 0x800)
-				lightOn = true;
-			break;
-		case LIGHT_FLASH3_NIGHT:
-			if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+				break;
+			case LIGHT_FLASH2_NIGHT:
+				if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+					if((CTimer::GetTimeInMilliseconds() + flashTimer2) & 0x400)
+						lightOn = true;
+				break;
+			case LIGHT_FLASH3:
 				if((CTimer::GetTimeInMilliseconds() + flashTimer3) & 0x800)
 					lightOn = true;
-			break;
-		case LIGHT_RANDOM_FLICKER:
-			if(m_randomSeed > 16)
-				lightOn = true;
-			else{
-				if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed*8) & 0x60)
-					lightOn = true;
-				else
-					lightFlickering = true;
-				if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed*8) & 3)
-					lightOn = true;
-			}
-			break;
-		case LIGHT_RANDOM_FLICKER_NIGHT:
-			if(CClock::GetHours() > 18 || CClock::GetHours() < 7){
+				break;
+			case LIGHT_FLASH3_NIGHT:
+				if(CClock::GetHours() > 18 || CClock::GetHours() < 7)
+					if((CTimer::GetTimeInMilliseconds() + flashTimer3) & 0x800)
+						lightOn = true;
+				break;
+			case LIGHT_RANDOM_FLICKER:
 				if(m_randomSeed > 16)
 					lightOn = true;
 				else{
@@ -687,85 +809,143 @@ CEntity::ProcessLightsForEntity(void)
 					if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed*8) & 3)
 						lightOn = true;
 				}
+				break;
+			case LIGHT_RANDOM_FLICKER_NIGHT:
+				if(CClock::GetHours() > 18 || CClock::GetHours() < 7){
+					if(m_randomSeed > 16)
+						lightOn = true;
+					else{
+						if((CTimer::GetTimeInMilliseconds() ^ m_randomSeed*8) & 0x60)
+							lightOn = true;
+						else
+							lightFlickering = true;
+						if((CTimer::GetTimeInMilliseconds()>>11 ^ m_randomSeed*8) & 3)
+							lightOn = true;
+					}
+				}
+				break;
+			case LIGHT_BRIDGE_FLASH1:
+				if(CBridge::ShouldLightsBeFlashing() && CTimer::GetTimeInMilliseconds() & 0x200)
+					lightOn = true;
+				break;
+			case LIGHT_BRIDGE_FLASH2:
+				if(CBridge::ShouldLightsBeFlashing() && (CTimer::GetTimeInMilliseconds() & 0x1FF) < 60)
+					lightOn = true;
+				break;
+			}
+
+			if(effect->light.flags & LIGHTFLAG_HIDE_OBJECT){
+				if(lightOn)
+					bDoNotRender = false;
+				else
+					bDoNotRender = true;
+				return;
+			}
+
+			// Corona
+			if(lightOn)
+				CCoronas::RegisterCorona((uintptr)this + i,
+					effect->col.r, effect->col.g, effect->col.b, 255,
+					pos, effect->light.size, effect->light.dist,
+					effect->light.corona, effect->light.flareType, effect->light.roadReflection,
+					effect->light.flags&LIGHTFLAG_LOSCHECK, CCoronas::STREAK_OFF, 0.0f,
+					!!(effect->light.flags&LIGHTFLAG_LONG_DIST));
+			else if(lightFlickering)
+				CCoronas::RegisterCorona((uintptr)this + i,
+					0, 0, 0, 255,
+					pos, effect->light.size, effect->light.dist,
+					effect->light.corona, effect->light.flareType, effect->light.roadReflection,
+					effect->light.flags&LIGHTFLAG_LOSCHECK, CCoronas::STREAK_OFF, 0.0f,
+					!!(effect->light.flags&LIGHTFLAG_LONG_DIST));
+
+			// Pointlight
+			bool alreadyProcessedFog;
+			alreadyProcessedFog = false;
+			if(effect->light.range != 0.0f && lightOn){
+				if(effect->col.r == 0 && effect->col.g == 0 && effect->col.b == 0){
+					CPointLights::AddLight(CPointLights::LIGHT_POINT,
+						pos, CVector(0.0f, 0.0f, 0.0f),
+						effect->light.range,
+						0.0f, 0.0f, 0.0f,
+						CPointLights::FOG_NONE, true);
+				}else{
+					CPointLights::AddLight(CPointLights::LIGHT_POINT,
+						pos, CVector(0.0f, 0.0f, 0.0f),
+						effect->light.range,
+						effect->col.r*CTimeCycle::GetSpriteBrightness()/255.0f,
+						effect->col.g*CTimeCycle::GetSpriteBrightness()/255.0f,
+						effect->col.b*CTimeCycle::GetSpriteBrightness()/255.0f,
+						(effect->light.flags & LIGHTFLAG_FOG) >> 1,
+						true);
+					alreadyProcessedFog = true; 
+				}
+			}
+
+			if(!alreadyProcessedFog){
+				if(effect->light.flags & LIGHTFLAG_FOG_ALWAYS){
+					CPointLights::AddLight(CPointLights::LIGHT_FOGONLY_ALWAYS,
+						pos, CVector(0.0f, 0.0f, 0.0f),
+						0.0f,
+						effect->col.r/255.0f, effect->col.g/255.0f, effect->col.b/255.0f,
+						CPointLights::FOG_ALWAYS, true);
+				}else if(effect->light.flags & LIGHTFLAG_FOG_NORMAL && lightOn && effect->light.range == 0.0f){
+					CPointLights::AddLight(CPointLights::LIGHT_FOGONLY,
+						pos, CVector(0.0f, 0.0f, 0.0f),
+						0.0f,
+						effect->col.r/255.0f, effect->col.g/255.0f, effect->col.b/255.0f,
+						CPointLights::FOG_NORMAL, true);
+				}
+			}
+
+			// Light shadow
+			if(effect->light.shadowSize != 0.0f){
+				if(lightOn){
+					CShadows::StoreStaticShadow((uintptr)this + i, SHADOWTYPE_ADDITIVE,
+						effect->light.shadow, &pos,
+						effect->light.shadowSize, 0.0f,
+						0.0f, -effect->light.shadowSize,
+						128,
+						effect->col.r*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
+						effect->col.g*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
+						effect->col.b*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
+						15.0f, 1.0f, 40.0f, false, 0.0f);
+				}else if(lightFlickering){
+					CShadows::StoreStaticShadow((uintptr)this + i, SHADOWTYPE_ADDITIVE,
+						effect->light.shadow, &pos,
+						effect->light.shadowSize, 0.0f,
+						0.0f, -effect->light.shadowSize,
+						0, 0.0f, 0.0f, 0.0f,
+						15.0f, 1.0f, 40.0f, false, 0.0f);
+				}
 			}
 			break;
-		case LIGHT_BRIDGE_FLASH1:
-			if(CBridge::ShouldLightsBeFlashing() && CTimer::GetTimeInMilliseconds() & 0x200)
-				lightOn = true;
-			break;
-		case LIGHT_BRIDGE_FLASH2:
-			if(CBridge::ShouldLightsBeFlashing() && (CTimer::GetTimeInMilliseconds() & 0x1FF) < 60)
-				lightOn = true;
-			break;
-		}
 
-		// Corona
-		if(lightOn)
-			CCoronas::RegisterCorona((uintptr)this + i,
-				effect->col.r, effect->col.g, effect->col.b, 255,
-				pos, effect->light.size, effect->light.dist,
-				effect->light.corona, effect->light.flareType, effect->light.roadReflection,
-				effect->light.flags&LIGHTFLAG_LOSCHECK, CCoronas::STREAK_OFF, 0.0f);
-		else if(lightFlickering)
-			CCoronas::RegisterCorona((uintptr)this + i,
-				0, 0, 0, 255,
-				pos, effect->light.size, effect->light.dist,
-				effect->light.corona, effect->light.flareType, effect->light.roadReflection,
-				effect->light.flags&LIGHTFLAG_LOSCHECK, CCoronas::STREAK_OFF, 0.0f);
-
-		// Pointlight
-		if(effect->light.flags & LIGHTFLAG_FOG_ALWAYS){
-			CPointLights::AddLight(CPointLights::LIGHT_FOGONLY_ALWAYS,
-				pos, CVector(0.0f, 0.0f, 0.0f),
-				effect->light.range,
-				effect->col.r/255.0f, effect->col.g/255.0f, effect->col.b/255.0f,
-				CPointLights::FOG_ALWAYS, true);
-		}else if(effect->light.flags & LIGHTFLAG_FOG_NORMAL && lightOn && effect->light.range == 0.0f){
-			CPointLights::AddLight(CPointLights::LIGHT_FOGONLY,
-				pos, CVector(0.0f, 0.0f, 0.0f),
-				effect->light.range,
-				effect->col.r/255.0f, effect->col.g/255.0f, effect->col.b/255.0f,
-				CPointLights::FOG_NORMAL, true);
-		}else if(lightOn && effect->light.range != 0.0f){
-			if(effect->col.r == 0 && effect->col.g == 0 && effect->col.b == 0){
-				CPointLights::AddLight(CPointLights::LIGHT_POINT,
-					pos, CVector(0.0f, 0.0f, 0.0f),
-					effect->light.range,
-					0.0f, 0.0f, 0.0f,
-					CPointLights::FOG_NONE, true);
-			}else{
-				CPointLights::AddLight(CPointLights::LIGHT_POINT,
-					pos, CVector(0.0f, 0.0f, 0.0f),
-					effect->light.range,
-					effect->col.r*CTimeCycle::GetSpriteBrightness()/255.0f,
-					effect->col.g*CTimeCycle::GetSpriteBrightness()/255.0f,
-					effect->col.b*CTimeCycle::GetSpriteBrightness()/255.0f,
-					// half-useless because LIGHTFLAG_FOG_ALWAYS can't be on
-					(effect->light.flags & LIGHTFLAG_FOG) >> 1,
-					true);
+		case EFFECT_SUNGLARE:
+			if(CWeather::SunGlare >= 0.0f){
+				CVector pos = GetMatrix() * effect->pos;
+				CVector glareDir = pos - GetPosition();
+				glareDir.Normalise();
+				CVector camDir = TheCamera.GetPosition() - pos;
+				float dist = camDir.Magnitude();
+				camDir *= 2.0f/dist;
+				glareDir += camDir;
+				glareDir.Normalise();
+				float camAngle = -DotProduct(glareDir, CTimeCycle::GetSunDirection());
+				if(camAngle > 0.0f){
+					float intens = Sqrt(camAngle) * CWeather::SunGlare;
+					pos += camDir;
+					CCoronas::RegisterCorona((uintptr)this + 33 + i,
+						intens * (CTimeCycle::GetSunCoreRed() + 2*255)/3.0f,
+						intens * (CTimeCycle::GetSunCoreGreen() + 2*255)/3.0f,
+						intens * (CTimeCycle::GetSunCoreBlue() + 2*255)/3.0f,
+						255,
+						pos, 0.5f*CWeather::SunGlare*Sqrt(dist), 120.0f,
+						CCoronas::TYPE_STAR, CCoronas::FLARE_NONE,
+						CCoronas::REFLECTION_OFF, CCoronas::LOSCHECK_OFF,
+						CCoronas::STREAK_OFF, 0.0f);
+				}
 			}
-		}
-
-		// Light shadow
-		if(effect->light.shadowSize != 0.0f){
-			if(lightOn){
-				CShadows::StoreStaticShadow((uintptr)this + i, SHADOWTYPE_ADDITIVE,
-					effect->light.shadow, &pos,
-					effect->light.shadowSize, 0.0f,
-					0.0f, -effect->light.shadowSize,
-					128,
-					effect->col.r*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
-					effect->col.g*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
-					effect->col.b*CTimeCycle::GetSpriteBrightness()*effect->light.shadowIntensity/255.0f,
-					15.0f, 1.0f, 40.0f, false, 0.0f);
-			}else if(lightFlickering){
-				CShadows::StoreStaticShadow((uintptr)this + i, SHADOWTYPE_ADDITIVE,
-					effect->light.shadow, &pos,
-					effect->light.shadowSize, 0.0f,
-					0.0f, -effect->light.shadowSize,
-					0, 0.0f, 0.0f, 0.0f,
-					15.0f, 1.0f, 40.0f, false, 0.0f);
-			}
+			break;
 		}
 	}
 }

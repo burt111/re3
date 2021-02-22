@@ -13,7 +13,7 @@ void
 CTxdStore::Initialise(void)
 {
 	if(ms_pTxdPool == nil)
-		ms_pTxdPool = new CPool<TxdDef,TxdDef>(TXDSTORESIZE);
+		ms_pTxdPool = new CPool<TxdDef,TxdDef>(TXDSTORESIZE, "TexDictionary");
 }
 
 void

@@ -1,21 +1,19 @@
 enum {
-	WEATHER_SUNNY,
+	WEATHER_RANDOM = -1,
+	WEATHER_SUNNY = 0,
 	WEATHER_CLOUDY,
 	WEATHER_RAINY,
-	WEATHER_FOGGY
+	WEATHER_FOGGY,
+	WEATHER_EXTRA_SUNNY,
+	WEATHER_HURRICANE,
+	WEATHER_TOTAL,
+
+	WEATHER_EXTRACOLOURS = 6
 };
 
 class CWeather
 {
 public:
-	enum {
-		WEATHER_RANDOM = -1,
-		WEATHER_SUNNY = 0,
-		WEATHER_CLOUDY = 1,
-		WEATHER_RAINY = 2,
-		WEATHER_FOGGY = 3,
-		WEATHER_TOTAL = 4
-	};
 	static int32 SoundHandle;
 
 	static int32 WeatherTypeInList;
@@ -29,7 +27,9 @@ public:
 	static uint32 LightningFlashLastChange;
 	static uint32 WhenToPlayLightningSound;
 	static uint32 LightningDuration;
+	static int32 StreamAfterRainTimer;
 
+	static float ExtraSunnyness;
 	static float Foggyness;
 	static float CloudCoverage;
 	static float Wind;
@@ -37,13 +37,11 @@ public:
 	static float InterpolationValue;
 	static float WetRoads;
 	static float Rainbow;
+	static float SunGlare;
+	static float WindClipped;
+	static float TrafficLightBrightness;
 
 	static bool bScriptsForceRain;
-	static bool Stored_StateStored;
-	static float Stored_InterpolationValue;
-	static int16 Stored_OldWeatherType;
-	static int16 Stored_NewWeatherType;
-	static float Stored_Rain;
 
 	static void RenderRainStreaks(void);
 	static void Update(void);
@@ -52,9 +50,13 @@ public:
 	static void ReleaseWeather();
 	static void ForceWeather(int16);
 	static void ForceWeatherNow(int16);
-	static void StoreWeatherState();
-	static void RestoreWeatherState();
+	static void AddSplashesDuringHurricane();
+	static void AddStreamAfterRain();
 	static void AddRain();
+	static void AddHeatHaze();
+	static void AddBeastie();
+
+	static void ForceHurricaneWeather();
 };
 
 enum {
@@ -68,4 +70,4 @@ struct tRainStreak
 	uint32 timer;
 };
 
-extern RwTexture* gpRainDropTex[4];
+extern RwTexture* gpRainDropTex;

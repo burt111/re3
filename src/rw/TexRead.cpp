@@ -2,6 +2,9 @@
 #pragma warning( disable : 4005)
 #pragma warning( pop )
 #define FORCE_PC_SCALING
+#ifndef LIBRW
+#define WITHD3D
+#endif
 #include "common.h"
 #ifdef ANISOTROPIC_FILTERING
 #include "rpanisot.h"
@@ -233,8 +236,10 @@ WriteVideoCardCapsFile(void)
 	}
 }
 
+
 #else
 extern "C" RwInt32 _rwD3D8FindCorrectRasterFormat(RwRasterType type, RwInt32 flags);
+extern "C" RwBool   _rwD3D8CheckValidTextureFormat(RwInt32 format);
 void
 ReadVideoCardCapsFile(uint32 &cap32, uint32 &cap24, uint32 &cap16, uint32 &cap8)
 {
@@ -283,6 +288,21 @@ WriteVideoCardCapsFile(void)
 }
 #endif
 
+bool
+CanVideoCardDoDXT(void)
+{
+#ifdef LIBRW
+	// TODO
+#ifdef RW_OPENGL
+	return false;
+#else
+	return true;
+#endif
+#else
+	return _rwD3D8CheckValidTextureFormat(D3DFMT_DXT1) && _rwD3D8CheckValidTextureFormat(D3DFMT_DXT3);
+#endif
+}
+
 void
 ConvertingTexturesScreen(uint32 num, uint32 count, const char *text)
 {
@@ -301,7 +321,11 @@ ConvertingTexturesScreen(uint32 num, uint32 count, const char *text)
 	splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(255, 255, 255, 255));
 
 	CSprite2d::DrawRect(CRect(SCREEN_SCALE_X(200.0f), SCREEN_SCALE_Y(240.0f), SCREEN_SCALE_FROM_RIGHT(200.0f), SCREEN_SCALE_Y(248.0f)), CRGBA(64, 64, 64, 255));
+#ifdef FIX_BUGS
+	CSprite2d::DrawRect(CRect(SCREEN_SCALE_X(200.0f), SCREEN_SCALE_Y(240.0f), (SCREEN_SCALE_FROM_RIGHT(200.0f) - SCREEN_SCALE_X(200.0f)) * ((float)num / (float)count) + SCREEN_SCALE_X(200.0f), SCREEN_SCALE_Y(248.0f)), CRGBA(255, 150, 225, 255));
+#else
 	CSprite2d::DrawRect(CRect(SCREEN_SCALE_X(200.0f), SCREEN_SCALE_Y(240.0f), (SCREEN_SCALE_FROM_RIGHT(200.0f) - SCREEN_SCALE_X(200.0f)) * ((float)num / (float)count) + SCREEN_SCALE_X(200.0f), SCREEN_SCALE_Y(248.0f)), CRGBA(255, 217, 106, 255));
+#endif
 	CSprite2d::DrawRect(CRect(SCREEN_SCALE_X(120.0f), SCREEN_SCALE_Y(150.0f), SCREEN_SCALE_FROM_RIGHT(120.0f), SCREEN_HEIGHT - SCREEN_SCALE_Y(220.0f)), CRGBA(50, 50, 50, 210));
 
 	CFont::SetBackgroundOff();
@@ -310,9 +334,13 @@ ConvertingTexturesScreen(uint32 num, uint32 count, const char *text)
 	CFont::SetCentreOff();
 	CFont::SetWrapx(SCREEN_SCALE_FROM_RIGHT(170.0f));
 	CFont::SetJustifyOff();
+#ifdef FIX_BUGS
+	CFont::SetColor(CRGBA(255, 150, 225, 255));
+#else
 	CFont::SetColor(CRGBA(255, 217, 106, 255));
+#endif
 	CFont::SetBackGroundOnlyTextOff();
-	CFont::SetFontStyle(FONT_BANK);
+	CFont::SetFontStyle(FONT_STANDARD);
 	CFont::PrintString(SCREEN_SCALE_X(170.0f), SCREEN_SCALE_Y(160.0f), TheText.Get(text));
 	CFont::DrawFonts();
 	DoRWStuffEndOfFrame();
@@ -373,10 +401,10 @@ CreateTxdImageForVideoCard()
 #ifdef DISABLE_VSYNC_ON_TEXTURE_CONVERSION
 	// let's disable vsync and frame limiter to speed up texture conversion
 	// (actually we probably don't need to disable frame limiter in here, but let's do it just in case =P)
-	int8 vsyncState = CMenuManager::m_PrefsVsync;
-	int8 frameLimiterState = CMenuManager::m_PrefsFrameLimiter;
-	CMenuManager::m_PrefsVsync = 0;
-	CMenuManager::m_PrefsFrameLimiter = 0;
+	int8 vsyncState = FrontEndMenuManager.m_PrefsVsync;
+	int8 frameLimiterState = FrontEndMenuManager.m_PrefsFrameLimiter;
+	FrontEndMenuManager.m_PrefsVsync = 0;
+	FrontEndMenuManager.m_PrefsFrameLimiter = 0;
 #endif
 
 	int32 i;
@@ -434,8 +462,8 @@ CreateTxdImageForVideoCard()
 
 #ifdef DISABLE_VSYNC_ON_TEXTURE_CONVERSION
 	// restore vsync and frame limiter states
-	CMenuManager::m_PrefsVsync = vsyncState;
-	CMenuManager::m_PrefsFrameLimiter = frameLimiterState;
+	FrontEndMenuManager.m_PrefsVsync = vsyncState;
+	FrontEndMenuManager.m_PrefsFrameLimiter = frameLimiterState;
 #endif
 
 	RwStreamClose(img, nil);
