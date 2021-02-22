@@ -76,11 +76,18 @@
 
 GlobalScene Scene;
 
-uint8 work_buff[55000];
+uint8 work_buff[102400];
 char gString[256];
 char gString2[512];
 wchar gUString[256];
 wchar gUString2[256];
+
+// leeds
+bool gMakeResources = true;
+bool gUseChunkFiles = false;
+bool gSecondExportPass;
+bool gUseModelResources;
+bool gUseResources;
 
 float FramesPerSecond = 30.0f;
 
@@ -97,7 +104,7 @@ RwRGBA gColourTop;
 bool gameAlreadyInitialised;
 
 float NumberOfChunksLoaded;
-#define TOTALNUMCHUNKS 95.0f
+#define TOTALNUMCHUNKS 52.0f
 
 bool g_SlowMode = false;
 char version_name[64];
@@ -124,7 +131,7 @@ bool gbPrintMemoryUsage;
 #endif
 
 #ifdef NEW_RENDERER
-bool gbNewRenderer;
+bool gbNewRenderer = true;
 #endif
 #ifdef FIX_BUGS
 // need to clear stencil for mblur fx. no idea why it works in the original game
@@ -584,11 +591,11 @@ GetRandomSplashScreen(void)
 	static char splashName[128];
 	static int splashIndex[12] = {
 		1, 2,
-		3, 4,
-		5, 11,
-		6, 8,
-		9, 10,
-		7, 12
+		3, 0,
+		1, 2,
+		3, 0,
+		1, 2,
+		3, 0
 	};
 
 	index = splashIndex[2*index2 + CGeneral::GetRandomNumberInRange(0, 2)];
@@ -602,11 +609,12 @@ GetRandomSplashScreen(void)
 Const char*
 GetLevelSplashScreen(int level)
 {
-	static Const char *splashScreens[4] = {
+	static Const char *splashScreens[5] = {
 		nil,
 		"splash1",
 		"splash2",
 		"splash3",
+		"loadsc0",
 	};
 
 	return splashScreens[level];
@@ -618,6 +626,7 @@ ResetLoadingScreenBar()
 	NumberOfChunksLoaded = 0.0f;
 }
 
+//--LCS: not the real thing
 void
 LoadingScreen(const char *str1, const char *str2, const char *splashscreen)
 {
@@ -629,7 +638,7 @@ LoadingScreen(const char *str1, const char *str2, const char *splashscreen)
 #endif
 
 #ifndef RANDOMSPLASH
-	splashscreen = "LOADSC0";
+	splashscreen = "SCEELEE";
 #endif
 
 	splash = LoadSplash(splashscreen);
@@ -651,24 +660,27 @@ LoadingScreen(const char *str1, const char *str2, const char *splashscreen)
 			NumberOfChunksLoaded += 1;
 
 #ifndef RANDOMSPLASH
+			// this looks nice
 			float hpos = SCREEN_SCALE_X(40);
 			float length = SCREEN_WIDTH - SCREEN_SCALE_X(80);
-			float top = SCREEN_HEIGHT - SCREEN_SCALE_Y(14);
-			float bottom = top + SCREEN_SCALE_Y(5);
+			float top = SCREEN_HEIGHT - SCREEN_SCALE_Y(30);
+			float bottom = top + SCREEN_SCALE_Y(8);
 #else
-			float hpos = SCREEN_STRETCH_X(40);
-			float length = SCREEN_STRETCH_X(440);
-			// this is rather weird
-			float top = SCREEN_STRETCH_Y(407.4f - 7.0f/3.0f);
-			float bottom = SCREEN_STRETCH_Y(407.4f + 7.0f/3.0f);
+			// should correspond to PS2 position
+			float hpos = SCREEN_STRETCH_X(44);
+			float length = SCREEN_STRETCH_X(176);
+			float top = SCREEN_STRETCH_Y(420);
+			float bottom = top + SCREEN_STRETCH_Y(8);
 #endif
 
-			CSprite2d::DrawRect(CRect(hpos-1.0f, top-1.0f, hpos+length+1.0f, bottom+1.0f), CRGBA(40, 53, 68, 255));
+			CSprite2d::DrawRect(CRect(hpos+4.0f, top+6.0f, hpos+length+4.0f, bottom+6.0f), CRGBA(0, 0, 0, 200));
 
-			CSprite2d::DrawRect(CRect(hpos, top, hpos+length, bottom), CRGBA(155, 50, 125, 255));
+			CSprite2d::DrawRect(CRect(hpos, top, hpos+length, bottom), CRGBA(0, 0, 0, 255));
+
+			CSprite2d::DrawRect(CRect(hpos+1.0f, top+1.0f, hpos+length-1.0f, bottom-1.0f), CRGBA(99, 99, 99, 255));
 
 			length *= NumberOfChunksLoaded/TOTALNUMCHUNKS;
-			CSprite2d::DrawRect(CRect(hpos, top, hpos+length, bottom), CRGBA(255, 150, 225, 255));
+			CSprite2d::DrawRect(CRect(hpos+1.0f, top+1.0f, hpos+length-1.0f, bottom-1.0f), CRGBA(126, 15, 0, 255));
 
 			// this is done by the game but is unused
 			CFont::SetBackgroundOff();
@@ -683,7 +695,7 @@ LoadingScreen(const char *str1, const char *str2, const char *splashscreen)
 			// my attempt
 			static wchar tmpstr[80];
 			float yscale = SCREEN_SCALE_Y(0.9f);
-			top -= 45*yscale;
+			top = bottom+5*yscale;
 			CFont::SetScale(SCREEN_SCALE_X(0.75f), yscale);
 			CFont::SetPropOn();
 			CFont::SetRightJustifyOff();
@@ -704,12 +716,13 @@ LoadingScreen(const char *str1, const char *str2, const char *splashscreen)
 	}
 }
 
+//--LCS: slightly fixed
 void
 LoadingIslandScreen(const char *levelName)
 {
 	CSprite2d *splash;
 
-	splash = LoadSplash(nil);
+	splash = LoadSplash(GetLevelSplashScreen(CGame::currLevel));
 	if(!DoRWStuffStartOfFrame(0, 0, 0, 0, 0, 0, 255))
 		return;
 
@@ -1065,13 +1078,8 @@ DisplayGameDebugText()
 #endif
 
 	FrameSamples++;
-#ifdef FIX_HIGH_FPS_BUGS_ON_FRONTEND
-	FramesPerSecondCounter += frameTime / 1000.f; // convert to seconds
-	FramesPerSecond = FrameSamples / FramesPerSecondCounter;
-#else
 	FramesPerSecondCounter += 1000.0f / (CTimer::GetTimeStepNonClippedInSeconds() * 1000.0f);	
 	FramesPerSecond = FramesPerSecondCounter / FrameSamples;
-#endif
 	
 	if ( FrameSamples > 30 )
 	{
@@ -1161,10 +1169,10 @@ MattRenderScene(void)
 	/// CWorld::AdvanceCurrentScanCode();
 	// CMattRenderer::ResetRenderStates
 	/// CRenderer::ClearForFrame();		// before ConstructRenderList
-	// CClock::CalcEnvMapTimeMultiplicator
+	CClock::CalcEnvMapTimeMultiplicator();
 	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
 	CWaterLevel::RenderWater();	// actually CMattRenderer::RenderWater
-	// CClock::ms_EnvMapTimeMultiplicator = 1.0f;
+	CClock::ms_EnvMapTimeMultiplicator = 1.0f;
 	// cWorldStream::ClearDynamics
 	/// CRenderer::ConstructRenderList();	// before PreRender
 if(gbRenderWorld0)
@@ -1176,6 +1184,8 @@ if(gbRenderWorld1)
 	CRenderer::RenderWorld(1);	// opaque
 if(gbRenderRoads)
 	CRenderer::RenderRoads();
+
+	CRenderer::GenerateEnvironmentMap();	// should be after static shadows, but that's weird
 
 	CRenderer::RenderPeds();
 
@@ -1213,7 +1223,6 @@ void
 RenderEffects_new(void)
 {
 	CShadows::RenderStaticShadows();
-	// CRenderer::GenerateEnvironmentMap
 	CShadows::RenderStoredShadows();
 	CSkidmarks::Render();
 	CRubbish::Render();
@@ -1288,7 +1297,7 @@ RenderScene(void)
 void
 RenderDebugShit(void)
 {
-	CTheScripts::RenderTheScriptDebugLines();
+	//CTheScripts::RenderTheScriptDebugLines();
 #ifndef FINAL
 	if(gbShowCollisionLines)
 		CRenderer::RenderCollisionLines();

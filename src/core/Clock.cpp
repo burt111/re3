@@ -18,6 +18,7 @@ uint16 CClock::ms_Stored_nGameClockSeconds;
 uint32 CClock::ms_nMillisecondsPerGameMinute;
 uint32  CClock::ms_nLastClockTick;
 bool   CClock::ms_bClockHasBeenStored;
+float  CClock::ms_EnvMapTimeMultiplicator;
 
 #ifndef MASTER
 bool gbFreezeTime;
@@ -33,6 +34,7 @@ CClock::Initialise(uint32 scale)
 	ms_nMillisecondsPerGameMinute = scale;
 	ms_nLastClockTick = CTimer::GetTimeInMilliseconds();
 	ms_bClockHasBeenStored = false;
+	ms_EnvMapTimeMultiplicator = 1.0f;
 	debug("CClock ready\n");
 #ifndef MASTER
 	VarConsole.Add("Time (hour of day)", &ms_nGameClockHours, 1, 0, 23, true);
@@ -133,4 +135,11 @@ CClock::RestoreClock(void)
 	ms_nGameClockHours = ms_Stored_nGameClockHours;
 	ms_nGameClockMinutes = ms_Stored_nGameClockMinutes;
 	ms_nGameClockSeconds = ms_Stored_nGameClockSeconds;
+}
+
+void
+CClock::CalcEnvMapTimeMultiplicator(void)
+{
+	float nightness = Abs(ms_nGameClockHours/24.0f - 0.5f);
+	ms_EnvMapTimeMultiplicator = SQR(1.0f - nightness);;
 }

@@ -89,20 +89,20 @@ CustomFrontendOptionsPopulate(void)
 
 	// These work only if we have neo folder, so they're dynamically added
 #ifdef EXTENDED_PIPELINES
-	const char *vehPipelineNames[] = { "FED_MFX", "FED_NEO" };
+	const char *pipelineNames[] = { "FED_PSP", "FED_PS2","FED_MOB" };
 	const char *off_on[] = { "FEM_OFF", "FEM_ON" };
 	int fd = CFileMgr::OpenFile("neo/neo.txd","r");
 	if (fd) {
 #ifdef GRAPHICS_MENU_OPTIONS
 		FrontendOptionSetCursor(MENUPAGE_GRAPHICS_SETTINGS, -3, false);
-		FrontendOptionAddSelect("FED_VPL", 0, 0, MENUALIGN_LEFT, vehPipelineNames, ARRAY_SIZE(vehPipelineNames), (int8*)&CustomPipes::VehiclePipeSwitch, false, nil, "Graphics", "VehiclePipeline");
-		FrontendOptionAddSelect("FED_PRM", 0, 0, MENUALIGN_LEFT, off_on, 2, (int8*)&CustomPipes::RimlightEnable, false, nil, "Graphics", "NeoRimLight");
+		FrontendOptionAddSelect("FED_VPL", 0, 0, MENUALIGN_LEFT, pipelineNames, ARRAY_SIZE(pipelineNames), (int8*)&CustomPipes::VehiclePipeSwitch, false, nil, "Graphics", "VehiclePipeline");
+		FrontendOptionAddSelect("FED_WPL", 0, 0, MENUALIGN_LEFT, pipelineNames, ARRAY_SIZE(pipelineNames), (int8*)&CustomPipes::WorldPipeSwitch, false, nil, "Graphics", "WorldPipeline");
 		FrontendOptionAddSelect("FED_WLM", 0, 0, MENUALIGN_LEFT, off_on, 2, (int8*)&CustomPipes::LightmapEnable, false, nil, "Graphics", "NeoLightMaps");
 		FrontendOptionAddSelect("FED_RGL", 0, 0, MENUALIGN_LEFT, off_on, 2, (int8*)&CustomPipes::GlossEnable, false, nil, "Graphics", "NeoRoadGloss");
 #else
 		FrontendOptionSetCursor(MENUPAGE_DISPLAY_SETTINGS, -3, false);
-		FrontendOptionAddSelect("FED_VPL", 0, 0, MENUALIGN_LEFT, vehPipelineNames, ARRAY_SIZE(vehPipelineNames), (int8*)&CustomPipes::VehiclePipeSwitch, false, nil, "Graphics", "VehiclePipeline");
-		FrontendOptionAddSelect("FED_PRM", 0, 0, MENUALIGN_LEFT, off_on, 2, (int8*)&CustomPipes::RimlightEnable, false, nil, "Graphics", "NeoRimLight");
+		FrontendOptionAddSelect("FED_VPL", 0, 0, MENUALIGN_LEFT, pipelineNames, ARRAY_SIZE(pipelineNames), (int8*)&CustomPipes::VehiclePipeSwitch, false, nil, "Graphics", "VehiclePipeline");
+		FrontendOptionAddSelect("FED_WPL", 0, 0, MENUALIGN_LEFT, pipelineNames, ARRAY_SIZE(pipelineNames), (int8*)&CustomPipes::WorldPipeSwitch, false, nil, "Graphics", "WorldPipeline");
 		FrontendOptionAddSelect("FED_WLM", 0, 0, MENUALIGN_LEFT, off_on, 2, (int8*)&CustomPipes::LightmapEnable, false, nil, "Graphics", "NeoLightMaps");
 		FrontendOptionAddSelect("FED_RGL", 0, 0, MENUALIGN_LEFT, off_on, 2, (int8*)&CustomPipes::GlossEnable, false, nil, "Graphics", "NeoRoadGloss");
 #endif
@@ -352,12 +352,12 @@ void SaveINIControllerSettings()
 	StoreIni("Controller", "JoystickName", gSelectedJoystickName, 128);
 #endif
 	StoreIni("Controller", "PadButtonsInited", ControlsManager.ms_padButtonsInited);
-	cfg.write_file("reVC.ini");
+	cfg.write_file("reLCS.ini");
 }
 
 bool LoadINISettings()
 {
-	if (!cfg.load_file("reVC.ini"))
+	if (!cfg.load_file("reLCS.ini"))
 		return false;
 
 #ifdef IMPROVED_VIDEOMODE
@@ -405,10 +405,6 @@ bool LoadINISettings()
 	ReadIniIfExists("CustomPipesValues", "RimlightMult", &CustomPipes::RimlightMult);
 	ReadIniIfExists("CustomPipesValues", "LightmapMult", &CustomPipes::LightmapMult);
 	ReadIniIfExists("CustomPipesValues", "GlossMult", &CustomPipes::GlossMult);
-#endif
-	ReadIniIfExists("Rendering", "BackfaceCulling", &gBackfaceCulling);
-#ifdef NEW_RENDERER
-	ReadIniIfExists("Rendering", "NewRenderer", &gbNewRenderer);
 #endif
 
 #ifdef PROPER_SCALING
@@ -499,9 +495,6 @@ void SaveINISettings()
 	StoreIni("CustomPipesValues", "GlossMult", CustomPipes::GlossMult);
 #endif
 	StoreIni("Rendering", "BackfaceCulling", gBackfaceCulling);
-#ifdef NEW_RENDERER
-	StoreIni("Rendering", "NewRenderer", gbNewRenderer);
-#endif
 
 #ifdef PROPER_SCALING	
 	StoreIni("Draw", "ProperScaling", CDraw::ms_bProperScaling);	
@@ -527,7 +520,7 @@ void SaveINISettings()
 	}
 #endif
 
-	cfg.write_file("reVC.ini");
+	cfg.write_file("reLCS.ini");
 }
 
 #endif
@@ -557,7 +550,6 @@ void FastWeatherCheat();
 void OnlyRenderWheelsCheat();
 void ChittyChittyBangBangCheat();
 void StrongGripCheat();
-void SpecialCarCheats();
 void PickUpChicksCheat();
 
 DebugMenuEntry *carCol1;
@@ -688,17 +680,15 @@ SwitchToMission(void)
 #endif
 
 static const char *carnames[] = {
-	"landstal", "idaho", "stinger", "linerun", "peren", "sentinel", "rio", "firetruk", "trash", "stretch", "manana",
-	"infernus", "voodoo", "pony", "mule", "cheetah", "ambulan", "fbicar", "moonbeam", "esperant", "taxi", "washing",
-	"bobcat", "mrwhoop", "bfinject", "hunter", "police", "enforcer", "securica", "banshee", "predator", "bus",
-	"rhino", "barracks", "cuban", "chopper", "angel", "coach", "cabbie", "stallion", "rumpo", "rcbandit", "romero",
-	"packer", "sentxs", "admiral", "squalo", "seaspar", "pizzaboy", "gangbur", "airtrain", "deaddodo", "speeder",
-	"reefer", "tropic", "flatbed", "yankee", "caddy", "zebra", "topfun", "skimmer", "pcj600", "faggio", "freeway",
-	"rcbaron", "rcraider", "glendale", "oceanic", "sanchez", "sparrow", "patriot", "lovefist", "coastg", "dinghy",
-	"hermes", "sabre", "sabretur", "pheonix", "walton", "regina", "comet", "deluxo", "burrito", "spand", "marquis",
-	"baggage", "kaufman", "maverick", "vcnmav", "rancher", "fbiranch", "virgo", "greenwoo", "jetmax", "hotring",
-	"sandking", "blistac", "polmav", "boxville", "benson", "mesa", "rcgoblin", "hotrina", "hotrinb",
-	"bloodra", "bloodrb", "vicechee"
+	"spider", "landstal", "idaho", "stinger", "linerun", "peren", "sentinel", "patriot", "firetruk", "trash", "stretch",
+	"manana", "infernus", "blista", "pony", "mule", "cheetah", "ambulan", "fbicar", "moonbeam", "esperant", "taxi",
+	"kuruma", "bobcat", "mrwhoop", "bfinject", "hearse", "police", "enforcer", "securica", "banshee", "bus", "rhino",
+	"barracks", "dodo", "coach", "cabbie", "stallion", "rumpo", "rcbandit", "bellyup", "mrwongs", "mafia", "yardie",
+	"yakuza", "diablos", "columb", "hoods", "panlant", "flatbed", "yankee", "borgnine", "toyz", "campvan", "ballot",
+	"shelby", "pontiac", "esprit", "ammotruk", "hotrod", "Sindacco_Car", "Forelli_Car", "ferry", "ghost", "speeder",
+	"reefer", "predator", "train", "escape", "chopper", "airtrain", "deaddodo", "angel", "pizzaboy", "noodleboy",
+	"pcj600", "faggio", "freeway", "angel2", "sanchez2", "sanchez", "rcgoblin", "rcraider", "hunter", "maverick",
+	"polmav", "vcnmav"
 };
 
 static CTweakVar** TweakVarsList;
@@ -828,11 +818,10 @@ DebugMenuPopulate(void)
 		DebugMenuAddCmd("Cheats", "Only render wheels", OnlyRenderWheelsCheat);
 		DebugMenuAddCmd("Cheats", "Chitty chitty bang bang", ChittyChittyBangBangCheat);
 		DebugMenuAddCmd("Cheats", "Strong grip", StrongGripCheat);
-		DebugMenuAddCmd("Cheats", "Special car", SpecialCarCheats);
 		DebugMenuAddCmd("Cheats", "Pickup chicks", PickUpChicksCheat);
 
 		static int spawnCarId = MI_LANDSTAL;
-		e = DebugMenuAddVar("Spawn", "Spawn Car ID", &spawnCarId, nil, 1, MI_LANDSTAL, MI_VICECHEE, carnames);
+		e = DebugMenuAddVar("Spawn", "Spawn Car ID", &spawnCarId, nil, 1, MI_SPIDER, MI_VCNMAV, carnames);
 		DebugMenuEntrySetWrap(e, true);
 		DebugMenuAddCmd("Spawn", "Spawn Car", [](){
 			if(spawnCarId == MI_CHOPPER ||
@@ -847,22 +836,19 @@ DebugMenuPopulate(void)
 		DebugMenuAddCmd("Spawn", "Spawn Stinger", [](){ SpawnCar(MI_STINGER); });
 		DebugMenuAddCmd("Spawn", "Spawn Infernus", [](){ SpawnCar(MI_INFERNUS); });
 		DebugMenuAddCmd("Spawn", "Spawn Cheetah", [](){ SpawnCar(MI_CHEETAH); });
-		DebugMenuAddCmd("Spawn", "Spawn Phoenix", [](){ SpawnCar(MI_PHEONIX); });
+		DebugMenuAddCmd("Spawn", "Spawn Esprit", [](){ SpawnCar(MI_ESPRIT); });
 		DebugMenuAddCmd("Spawn", "Spawn Banshee", [](){ SpawnCar(MI_BANSHEE); });
 		DebugMenuAddCmd("Spawn", "Spawn Esperanto", [](){ SpawnCar(MI_ESPERANT); });
 		DebugMenuAddCmd("Spawn", "Spawn Stallion", [](){ SpawnCar(MI_STALLION); });
-		DebugMenuAddCmd("Spawn", "Spawn Admiral", [](){ SpawnCar(MI_ADMIRAL); });
-		DebugMenuAddCmd("Spawn", "Spawn Washington", [](){ SpawnCar(MI_WASHING); });
+		DebugMenuAddCmd("Spawn", "Spawn Mafia", [](){ SpawnCar(MI_MAFIA); });
+		DebugMenuAddCmd("Spawn", "Spawn Kuruma", [](){ SpawnCar(MI_KURUMA); });
 		DebugMenuAddCmd("Spawn", "Spawn Taxi", [](){ SpawnCar(MI_TAXI); });
 		DebugMenuAddCmd("Spawn", "Spawn Police", [](){ SpawnCar(MI_POLICE); });
 		DebugMenuAddCmd("Spawn", "Spawn Enforcer", [](){ SpawnCar(MI_ENFORCER); });
-		DebugMenuAddCmd("Spawn", "Spawn Cuban", [](){ SpawnCar(MI_CUBAN); });
-		DebugMenuAddCmd("Spawn", "Spawn Voodoo", [](){ SpawnCar(MI_VOODOO); });
+		DebugMenuAddCmd("Spawn", "Spawn Diablo", [](){ SpawnCar(MI_DIABLOS); });
+		DebugMenuAddCmd("Spawn", "Spawn Yardie", [](){ SpawnCar(MI_YARDIE); });
 		DebugMenuAddCmd("Spawn", "Spawn BF injection", [](){ SpawnCar(MI_BFINJECT); });
 		DebugMenuAddCmd("Spawn", "Spawn Maverick", [](){ SpawnCar(MI_MAVERICK); });
-		DebugMenuAddCmd("Spawn", "Spawn VCN Maverick", [](){ SpawnCar(MI_VCNMAV); });
-		DebugMenuAddCmd("Spawn", "Spawn Sparrow", [](){ SpawnCar(MI_SPARROW); });
-		DebugMenuAddCmd("Spawn", "Spawn Sea Sparrow", [](){ SpawnCar(MI_SEASPAR); });
 		DebugMenuAddCmd("Spawn", "Spawn Hunter", [](){ SpawnCar(MI_HUNTER); });
 		DebugMenuAddCmd("Spawn", "Spawn Rhino", [](){ SpawnCar(MI_RHINO); });
 		DebugMenuAddCmd("Spawn", "Spawn Firetruck", [](){ SpawnCar(MI_FIRETRUCK); });
@@ -870,10 +856,9 @@ DebugMenuPopulate(void)
 		DebugMenuAddCmd("Spawn", "Spawn PCJ 600", [](){ SpawnCar(MI_PCJ600); });
 		DebugMenuAddCmd("Spawn", "Spawn Faggio", [](){ SpawnCar(MI_FAGGIO); });
 		DebugMenuAddCmd("Spawn", "Spawn Freeway", [](){ SpawnCar(MI_FREEWAY); });
-		DebugMenuAddCmd("Spawn", "Spawn Squalo", [](){ SpawnCar(MI_SQUALO); });
-		DebugMenuAddCmd("Spawn", "Spawn Skimmer", [](){ SpawnCar(MI_SKIMMER); });
 
 		DebugMenuAddVarBool8("Render", "Draw hud", &CHud::m_Wants_To_Draw_Hud, nil);
+		DebugMenuAddVar("Render", "Brightness", &FrontEndMenuManager.m_PrefsBrightness, nil, 16, 0, 700, nil);
 		DebugMenuAddVarBool8("Render", "Backface Culling", &gBackfaceCulling, nil);
 		DebugMenuAddVarBool8("Render", "PS2 Alpha test Emu", &gPS2alphaTest, nil);
 		DebugMenuAddVarBool8("Render", "Frame limiter", &FrontEndMenuManager.m_PrefsFrameLimiter, nil);
@@ -904,8 +889,8 @@ extern bool gbRenderWorld2;
 #endif
 
 #ifdef EXTENDED_COLOURFILTER
-		static const char *filternames[] = { "None", "Simple", "Normal", "Mobile" };
-		e = DebugMenuAddVar("Render", "Colourfilter", &CPostFX::EffectSwitch, nil, 1, CPostFX::POSTFX_OFF, CPostFX::POSTFX_MOBILE, filternames);
+		static const char *filternames[] = { "None", "PSP", "PS2" };
+		e = DebugMenuAddVar("Render", "Colourfilter", &CPostFX::EffectSwitch, nil, 1, CPostFX::POSTFX_OFF, CPostFX::POSTFX_PS2, filternames);
 		DebugMenuEntrySetWrap(e, true);
 		DebugMenuAddVar("Render", "Intensity", &CPostFX::Intensity, nil, 0.05f, 0, 10.0f);
 		DebugMenuAddVarBool8("Render", "Blur", &CPostFX::BlurOn, nil);
@@ -916,18 +901,25 @@ extern bool gbRenderWorld2;
 		DebugMenuAddVarBool8("Render", "Occlusion debug", &bDispayOccDebugStuff, nil);
 #endif
 #ifdef EXTENDED_PIPELINES
-		static const char *vehpipenames[] = { "MatFX", "Neo" };
-		e = DebugMenuAddVar("Render", "Vehicle Pipeline", &CustomPipes::VehiclePipeSwitch, nil,
-			1, CustomPipes::VEHICLEPIPE_MATFX, CustomPipes::VEHICLEPIPE_NEO, vehpipenames);
+		static const char *worldpipenames[] = { "PSP", "PS2", "Mobile" };
+		e = DebugMenuAddVar("Render", "World Rendering", &CustomPipes::WorldPipeSwitch, nil,
+			1, CustomPipes::WORLDPIPE_PSP, CustomPipes::WORLDPIPE_MOBILE, worldpipenames);
 		DebugMenuEntrySetWrap(e, true);
-		DebugMenuAddVar("Render", "Neo Vehicle Shininess", &CustomPipes::VehicleShininess, nil, 0.1f, 0, 1.0f);
-		DebugMenuAddVar("Render", "Neo Vehicle Specularity", &CustomPipes::VehicleSpecularity, nil, 0.1f, 0, 1.0f);
+		static const char *vehpipenames[] = { "PSP", "PS2", "Mobile" };
+		e = DebugMenuAddVar("Render", "Vehicle Pipeline", &CustomPipes::VehiclePipeSwitch, nil,
+			1, CustomPipes::VEHICLEPIPE_PSP, CustomPipes::VEHICLEPIPE_MOBILE, vehpipenames);
+		DebugMenuEntrySetWrap(e, true);
+		DebugMenuAddVarBool8("Render", "Glass Cars cheat", &CustomPipes::gGlassCarsCheat, nil);
+extern bool gbRenderDebugEnvMap;
+		DebugMenuAddVarBool8("Render", "Show Env map", &gbRenderDebugEnvMap, nil);
+//		DebugMenuAddVar("Render", "Neo Vehicle Shininess", &CustomPipes::VehicleShininess, nil, 0.1f, 0, 1.0f);
+//		DebugMenuAddVar("Render", "Neo Vehicle Specularity", &CustomPipes::VehicleSpecularity, nil, 0.1f, 0, 1.0f);
 		DebugMenuAddVarBool8("Render", "Neo Ped Rim light enable", &CustomPipes::RimlightEnable, nil);
 		DebugMenuAddVar("Render", "Mult", &CustomPipes::RimlightMult, nil, 0.1f, 0, 1.0f);
-		DebugMenuAddVarBool8("Render", "Neo World Lightmaps enable", &CustomPipes::LightmapEnable, nil);
-		DebugMenuAddVar("Render", "Mult", &CustomPipes::LightmapMult, nil, 0.1f, 0, 1.0f);
-		DebugMenuAddVarBool8("Render", "Neo Road Gloss enable", &CustomPipes::GlossEnable, nil);
-		DebugMenuAddVar("Render", "Mult", &CustomPipes::GlossMult, nil, 0.1f, 0, 1.0f);
+//		DebugMenuAddVarBool8("Render", "Neo World Lightmaps enable", &CustomPipes::LightmapEnable, nil);
+//		DebugMenuAddVar("Render", "Mult", &CustomPipes::LightmapMult, nil, 0.1f, 0, 1.0f);
+//		DebugMenuAddVarBool8("Render", "Neo Road Gloss enable", &CustomPipes::GlossEnable, nil);
+//		DebugMenuAddVar("Render", "Mult", &CustomPipes::GlossMult, nil, 0.1f, 0, 1.0f);
 #endif
 		DebugMenuAddVarBool8("Render", "Show Ped Paths", &gbShowPedPaths, nil);
 		DebugMenuAddVarBool8("Render", "Show Car Paths", &gbShowCarPaths, nil);
@@ -987,24 +979,30 @@ extern bool gbRenderWorld2;
 #ifdef MISSION_SWITCHER
 		DebugMenuEntry *missionEntry;
 		static const char* missions[] = {
-			"Initial", "Intro", "An Old Friend", "The Party", "Back Alley Brawl", "Jury Fury", "Riot",
-			"Treacherous Swine", "Mall Shootout", "Guardian Angels", "Sir, Yes Sir!", "All Hands On Deck!",
-			"The Chase", "Phnom Penh '86", "The Fastest Boat", "Supply & Demand", "Rub Out", "Death Row",
-			"Four Iron", "Demolition Man", "Two Bit Hit", "No Escape?", "The Shootist", "The Driver",
-			"The Job", "Gun Runner", "Boomshine Saigon", "Recruitment Drive", "Dildo Dodo", "Martha's Mug Shot",
-			"G-spotlight", "Shakedown", "Bar Brawl", "Cop Land", "Spilling the Beans", "Hit the Courier",
-			"Printworks Buy", "Sunshine Autos", "Interglobal Films Buy", "Cherry Popper Icecreams Buy",
-			"Kaufman Cabs Buy", "Malibu Club Buy", "The Boatyard Buy", "Pole Position Club Buy", "El Swanko Casa Buy",
-			"Links View Apartment Buy", "Hyman Condo Buy", "Ocean Heighs Aprt. Buy", "1102 Washington Street Buy",
-			"Vice Point Buy", "Skumole Shack Buy", "Cap the Collector", "Keep your Friends Close...",
-			"Alloy Wheels of Steel", "Messing with the Man", "Hog Tied", "Stunt Boat Challenge", "Cannon Fodder",
-			"Naval Engagement", "Trojan Voodoo", "Juju Scramble", "Bombs Away!", "Dirty Lickin's", "Love Juice",
-			"Psycho Killer", "Publicity Tour", "Weapon Range", "Road Kill", "Waste the Wife", "Autocide",
-			"Check Out at the Check In", "Loose Ends", "V.I.P.", "Friendly Rivalry", "Cabmaggedon", "TAXI DRIVER",
-			"PARAMEDIC", "FIREFIGHTER", "VIGILANTE", "HOTRING", "BLOODRING", "DIRTRING", "Sunshine Autos Races",
-			"Distribution", "Downtown Chopper Checkpoint", "Ocean Beach Chopper Checkpoint", "Vice Point Chopper Checkpoint",
-			"Little Haiti Chopper Checkpoint", "Trial by Dirt", "Test Track", "PCJ Playground", "Cone Crazy",
-			"PIZZA BOY", "RC Raider Pickup", "RC Bandit Race", "RC Baron Race", "Checkpoint Charlie"
+			"initial: objects", "initial: hidden packages", "initial: car generators", "initial: pickups", "initial: unique stunt jumps",
+			"initial: player", "initial: general info", "initial: lods", "initial: weapons", "Home Sweet Home", "Taxi-Driver Sub-Mission",
+			"Paramedic Sub-Mission", "Vigilante Sub-Mission", "Karmageddon", "Firefighter Sub-Mission", "Trash Dash", "RC Triad Take-Down",
+			"Thrashin' RC", "Ragin' RC", "Chasin' RC", "GO GO Faggio", "Noodleboy", "Pizzaboy", "Wong Side Of The Tracks", "Bumps and Grinds: Course 1",
+			"Bumps and Grinds: Course 2", "Bumps and Grinds: Course 3", "Bumps and Grinds: Course 4", "Bumps and Grinds: Course 5", "Bumps and Grinds: Course 6",
+			"Bumps and Grinds: Course 7", "Bumps and Grinds: Course 8", "Bumps and Grinds: Course 9", "Bumps and Grinds: Course 10", "Car Salesman", "Bike Salesman",
+			"RACE: Low-Rider Rumble", "RACE: Deimos Dash", "RACE: Wi-Cheetah Run", "RACE: Red Light Racing", "RACE: Torrington TT", "RACE: Gangsta GP",
+			"Scooter Shooter", "AWOL Angel", "9mm Mayhem", "Scrapyard Challenge", "See the Sight Before your Flight", "SlashTV", "Slacker (Vincenzo)",
+			"Dealing Revenge (Vincenzo)", "Snuff (Vincenzo)", "Smash and Grab (Vincenzo)", "Hot Wheels (Vincenzo)", "The Portland Chainsaw Masquerade (Vincenzo)",
+			"The Offer (Salvatore)", "Ho Selecta! (Salvatore)", "Frighteners (Salvatore)", "Rollercoaster Ride (Salvatore)", "Contra-Banned (Salvatore)",
+			"Sindacco Sabotage (Salvatore)", "The Trouble with Triads (Salvatore)", "Driving Mr Leone (Salvatore)", "conversation (JD)", "Bone Voyeur! (JD)",
+			"Don in 60 Seconds (JD)", "A Volatile Situation (JD)", "Blow up 'Dolls' (JD)", "Salvatore's Salvation (JD)", "The Guns of Leone (JD)",
+			"Calm before the Storm (JD)", "The Made Man (JD)", "Snappy Dresser (Ma Cipriani)", "Big Rumble in Little China (Ma Cipriani)", "Grease Sucho (Ma Cipriani)",
+			"Dead Meat (Ma Cipriani)", "No Son of Mine (Ma Cipriani)", "Shop 'til you Strop (Maria)", "Taken for a Ride (Maria)", "Booby Prize (Maria)",
+			"Biker Heat (Maria)", "Overdose of Trouble (Maria)", "Making Toni (Salvatore)", "A Walk In The Park (Salvatore)", "Caught In The Act (Salvatore)",
+			"Search And Rescue (Salvatore)", "Taking The Peace (Salvatore)", "Shoot The Messenger (Salvatore)", "Sayonara Sindaccos (Leon McAffrey)",
+			"The Whole 9 Yardies (Leon McAffrey)", "Crazy '69' (Leon McAffrey)", "Night Of The Livid Dreads (Leon McAffrey)", "Munitions Dump (Leon McAffrey)",
+			"The Morgue Party Candidate (Donald Love)", "Steering The Vote (Donald Love)", "Cam-Pain (Donald Love)", "Friggin' The Riggin' (Donald Love)",
+			"Love & Bullets (Donald Love)", "Counterfeit Count (Donald Love)", "Love On The Rocks (Donald Love)", "L.C. Confidential (Church Confessional)",
+			"The Passion Of The Heist (Church Confessional)", "Karmageddon (Church Confessional)", "False Idols (Church Confessional)", "Rough Justice (Salvatore)",
+			"Dead Reckoning (Salvatore)", "Shogun Showdown (Salvatore)", "The Shoreside Redemption (Salvatore)", "The Sicilian Gambit (Salvatore)",
+			"Panlantic Land Grab (Donald Love)", "Stop the Press (Donald Love)", "Morgue Party Resurrection (Donald Love)", "No Money, Mo' Problems (Donald Love)",
+			"Bringing the House Down (Donald Love)", "Love on the Run (Donald Love)", "More Deadly than the Male (Toshiko Kasen)", "Cash Clash (Toshiko Kasen)",
+			"A Date with Death (Toshiko Kasen)", "Cash in Kazuki's Chips (Toshiko Kasen)"
 		};
 
 		missionEntry = DebugMenuAddVar("Debug", "Select mission", &nextMissionToSwitch, nil, 1, 0, ARRAY_SIZE(missions) - 1, missions);

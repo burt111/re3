@@ -21,9 +21,9 @@
 #define CDDEBUG(f, ...)   debug ("%s: " f "\n", "cdvd_stream", ## __VA_ARGS__)
 #define CDTRACE(f, ...)   printf("%s: " f "\n", "cdvd_stream", ## __VA_ARGS__)
 
-#ifdef FLUSHABLE_STREAMING
+// #define ONE_THREAD_PER_CHANNEL // Don't use if you're not on SSD/Flash. (Also you may want to benefit from this via using all channels in Streaming.cpp)
+
 bool flushStream[MAX_CDCHANNELS];
-#endif
 
 struct CdReadInfo
 {
@@ -76,7 +76,7 @@ CdStreamInitThread(void)
 	gChannelRequestQ.tail = 0;
 	gChannelRequestQ.size = gNumChannels + 1;
 	ASSERT(gChannelRequestQ.items != nil );
-	gCdStreamSema = sem_open("/semaphore_cd_stream", O_CREAT, 0644, 0);
+	gCdStreamSema = sem_open("/semaphore_cd_stream", O_CREAT, 0644, 1);
 
 
 	if (gCdStreamSema == SEM_FAILED) {
@@ -91,7 +91,7 @@ CdStreamInitThread(void)
 		for ( int32 i = 0; i < gNumChannels; i++ )
 		{
 			sprintf(semName,"/semaphore_done%d",i);
-			gpReadInfo[i].pDoneSemaphore = sem_open(semName, O_CREAT, 0644, 0);
+			gpReadInfo[i].pDoneSemaphore = sem_open(semName, O_CREAT, 0644, 1);
 
 			if (gpReadInfo[i].pDoneSemaphore == SEM_FAILED)
 			{
@@ -99,10 +99,9 @@ CdStreamInitThread(void)
 				ASSERT(0);
 				return;
 			}
-
 #ifdef ONE_THREAD_PER_CHANNEL
 			sprintf(semName,"/semaphore_start%d",i);
-			gpReadInfo[i].pStartSemaphore = sem_open(semName, O_CREAT, 0644, 0);
+			gpReadInfo[i].pStartSemaphore = sem_open(semName, O_CREAT, 0644, 1);
 
 			if (gpReadInfo[i].pStartSemaphore == SEM_FAILED)
 			{
@@ -171,7 +170,6 @@ CdStreamInit(int32 numChannels)
 	gNumImages = 0;
 
 	gNumChannels = numChannels;
-	ASSERT( gNumChannels != 0 );
 
 	gpReadInfo = (CdReadInfo *)calloc(numChannels, sizeof(CdReadInfo));
 	ASSERT( gpReadInfo != nil );
@@ -247,12 +245,10 @@ CdStreamRead(int32 channel, void *buffer, uint32 offset, uint32 size)
 	if ( pChannel->nSectorsToRead != 0 || pChannel->bReading ) {
 		if (pChannel->hFile == hImage - 1 && pChannel->nSectorOffset == _GET_OFFSET(offset) && pChannel->nSectorsToRead >= size)
 			return STREAM_SUCCESS;
-#ifdef FLUSHABLE_STREAMING
+			
 		flushStream[channel] = 1;
 		CdStreamSync(channel);
-#else
-		return STREAM_NONE;
-#endif
+		//return STREAM_NONE;
 	}
 
 	pChannel->hFile = hImage - 1;
@@ -320,34 +316,34 @@ CdStreamSync(int32 channel)
 	CdReadInfo *pChannel = &gpReadInfo[channel];
 	ASSERT( pChannel != nil );
 
-#ifdef FLUSHABLE_STREAMING
 	if (flushStream[channel]) {
-		pChannel->nSectorsToRead = 0;
 #ifdef ONE_THREAD_PER_CHANNEL
+		pChannel->nSectorsToRead = 0;
 		pthread_kill(pChannel->pChannelThread, SIGUSR1);
 		if (pChannel->bReading) {
 			pChannel->bLocked = true;
-#else
-		if (pChannel->bReading) {
-			pChannel->bLocked = true;
-			pthread_kill(_gCdStreamThread, SIGUSR1);
-#endif
 			while (pChannel->bLocked)
 				sem_wait(pChannel->pDoneSemaphore);
 		}
+#else
+		pChannel->nSectorsToRead = 0;
+		if (pChannel->bReading) {
+			pChannel->bLocked = true;
+			pthread_kill(_gCdStreamThread, SIGUSR1);
+			while (pChannel->bLocked)
+				sem_wait(pChannel->pDoneSemaphore);
+		}
+#endif
 		pChannel->bReading = false;
 		flushStream[channel] = false;
 		return STREAM_NONE;
 	}
-#endif
 
 	if ( pChannel->nSectorsToRead != 0 )
 	{
 		pChannel->bLocked = true;
-		while (pChannel->bLocked && pChannel->nSectorsToRead != 0){
+		while (pChannel->bLocked)
 			sem_wait(pChannel->pDoneSemaphore);
-		}
-		pChannel->bLocked = false;
 	}
 
 	pChannel->bReading = false;
@@ -399,12 +395,7 @@ void *CdStreamThread(void *param)
 #ifndef ONE_THREAD_PER_CHANNEL
 	while (gCdStreamThreadStatus != 2) {
 		sem_wait(gCdStreamSema);
-
 		int32 channel = GetFirstInQueue(&gChannelRequestQ);
-		
-		// spurious wakeup
-		if (channel == -1)
-			continue;
 #else
 	int channel = *((int*)param);
 	while (gpReadInfo[channel].nThreadStatus != 2){
@@ -456,7 +447,7 @@ void *CdStreamThread(void *param)
 		if ( pChannel->bLocked )
 		{
 			pChannel->bLocked = 0;
-			sem_post(pChannel->pDoneSemaphore);
+			sem_post(pChannel->pDoneSemaphore);	
 		}
 		pChannel->bReading = false;
 	}
@@ -533,9 +524,7 @@ void
 CdStreamRemoveImages(void)
 {
 	for ( int32 i = 0; i < gNumChannels; i++ ) {
-#ifdef FLUSHABLE_STREAMING
 		flushStream[i] = 1;
-#endif
 		CdStreamSync(i);
 	}
 

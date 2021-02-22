@@ -115,6 +115,8 @@ typedef ptrdiff_t ssize_t;
 #endif
 
 #include "config.h"
+#include "memoryManager.h"
+#include "relocatableChunk.h"
 
 #include <rphanim.h>
 #include <rpskin.h>
@@ -211,6 +213,18 @@ inline uint32 ldb(uint32 p, uint32 s, uint32 w)
 #define SCREEN_SCALE_AR(a) (a)
 #define SCALE_AND_CENTER_X(x) SCREEN_STRETCH_X(x)
 #endif
+
+// these are temp marcos while we don't implement all PSP UI coordinates
+#define PSP_DEFAULT_SCREEN_WIDTH  (480)
+#define PSP_DEFAULT_SCREEN_HEIGHT (272)
+
+#define PSP_SCALE_TO_PS2_X(a) ((float)a * ((float)DEFAULT_SCREEN_WIDTH / (float)PSP_DEFAULT_SCREEN_WIDTH))
+#define PSP_SCALE_TO_PS2_Y(a) ((float)a * ((float)DEFAULT_SCREEN_HEIGHT / (float)PSP_DEFAULT_SCREEN_HEIGHT))
+
+#define PSP_SCREEN_SCALE_X(a) ((a) * (float) SCREEN_WIDTH / PSP_DEFAULT_SCREEN_WIDTH)
+#define PSP_SCREEN_SCALE_Y(a) ((a) * (float) SCREEN_WIDTH / PSP_DEFAULT_SCREEN_WIDTH)
+#define PSP_SCREEN_SCALE_FROM_RIGHT(a) (SCREEN_WIDTH - PSP_SCREEN_SCALE_X(a))
+#define PSP_SCREEN_SCALE_FROM_BOTTOM(a) (SCREEN_HEIGHT - PSP_SCREEN_SCALE_Y(a))
 
 #include "maths.h"
 #include "Vector.h"

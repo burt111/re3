@@ -114,6 +114,7 @@ CCamera::Init(void)
 	m_1rstPersonRunCloseToAWall = false;
 	m_fPositionAlongSpline = 0.0f;
 	m_bCameraJustRestored = false;
+	m_bFreezePedZoomSwitch = false;
 	Cams[0].Init();
 	Cams[1].Init();
 	Cams[2].Init();
@@ -985,7 +986,7 @@ CCamera::CamControl(void)
 			// Change user selected mode
 			if(CPad::GetPad(0)->CycleCameraModeUpJustDown() && !CReplay::IsPlayingBack() &&
 			   (m_bLookingAtPlayer || WhoIsInControlOfTheCamera == CAMCONTROL_OBBE) &&
-			   !m_WideScreenOn && !m_bFailedCullZoneTestPreviously && !m_bFirstPersonBeingUsed){
+			   !m_WideScreenOn && !m_bFailedCullZoneTestPreviously && !m_bFirstPersonBeingUsed && !m_bFreezePedZoomSwitch){
 				if(FrontEndMenuManager.m_ControlMethod == CONTROL_STANDARD){
 					if(PedZoomIndicator == CAM_ZOOM_3)
 						PedZoomIndicator = CAM_ZOOM_1;
@@ -1768,7 +1769,7 @@ CCamera::CamControl(void)
 		   (m_bLookingAtPlayer || WhoIsInControlOfTheCamera == CAMCONTROL_OBBE) &&
 		   !m_WideScreenOn &&
 		   (WhoIsInControlOfTheCamera != CAMCONTROL_OBBE || bSwitchedToObbeCam))
-			DMAudio.PlayFrontEndSound(SOUND_HUD, 0);
+			DMAudio.PlayFrontEndSound(SOUND_HUD_SOUND, 0);
 }
 
 // What a mess!
@@ -3863,7 +3864,7 @@ CCamera::GetScreenFadeStatus(void)
 }
 
 
-
+//--LCS: TODO
 void
 CCamera::RenderMotionBlur(void)
 {
@@ -3872,7 +3873,8 @@ CCamera::RenderMotionBlur(void)
 
 	CMBlur::MotionBlurRender(m_pRwCamera,
 		m_BlurRed, m_BlurGreen, m_BlurBlue,
-		m_motionBlur, m_BlurType, m_imotionBlurAddAlpha);
+//		m_motionBlur, m_BlurType, m_imotionBlurAddAlpha);
+		m_motionBlur, m_BlurType, 32);	// hack hack
 }
 
 void
