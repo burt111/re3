@@ -8,6 +8,7 @@ enum ePickupType
 	PICKUP_ON_STREET,
 	PICKUP_ONCE,
 	PICKUP_ONCE_TIMEOUT,
+	PICKUP_ONCE_TIMEOUT_SLOW,
 	PICKUP_COLLECTABLE1,
 	PICKUP_IN_SHOP_OUT_OF_STOCK,
 	PICKUP_MONEY,
@@ -18,6 +19,9 @@ enum ePickupType
 	PICKUP_FLOATINGPACKAGE,
 	PICKUP_FLOATINGPACKAGE_FLOATING,
 	PICKUP_ON_STREET_SLOW,
+	PICKUP_ASSET_REVENUE,
+	PICKUP_PROPERTY_LOCKED,
+	PICKUP_PROPERTY_FORSALE,
 	PICKUP_NUMOFTYPES
 };
 
@@ -29,20 +33,29 @@ class CPlayerPed;
 class CPickup
 {
 public:
-	uint8 m_eType;
-	bool m_bRemoved;
-	uint16 m_nQuantity;
+	CVector m_vecPos;
+	float m_fRevenue;
 	CObject *m_pObject;
+	CObject *m_pExtraObject;
+	uint32 m_nQuantity;
 	uint32 m_nTimer;
+	uint16 m_nMoneySpeed;
 	int16 m_eModelIndex;
 	uint16 m_nIndex;
-	CVector m_vecPos;
+	char m_sTextKey[8];
+	uint8 m_eType;
+	bool m_bRemoved;
+	uint8 m_bWasAmmoCollected:1;
+	uint8 m_bWasControlMessageShown:1;
 
-	CObject *GiveUsAPickUpObject(int32 handle);
+	CObject *GiveUsAPickUpObject(CObject **object, CObject **extraObject, int32 handle, int32 extraHandle);
 	bool Update(CPlayerPed *player, CVehicle *vehicle, int playerId);
+	void GetRidOfObjects();
+	void ExtractAmmoFromPickup(CPlayerPed *player);
+	void ProcessGunShot(CVector *vec1, CVector *vec2);
 private:
 	inline bool IsMine() { return m_eType >= PICKUP_MINE_INACTIVE && m_eType <= PICKUP_FLOATINGPACKAGE_FLOATING; }
-	inline bool CanBePickedUp(CPlayerPed *player);
+	inline bool CanBePickedUp(CPlayerPed *player, int playerId);
 	inline void Remove();
 };
 
@@ -54,8 +67,9 @@ struct tPickupMessage
 	eWeaponType m_weaponType;
 	CVector2D m_dist;
 	CRGBA m_color;
-	uint8 m_bOutOfStock : 1;
+	uint8 m_bOutOfStock;
 	uint8 m_quantity;
+	uint16 money;
 };
 
 class CPickups
@@ -65,6 +79,8 @@ class CPickups
 	static int16 NumMessages;
 	static tPickupMessage aMessages[NUMPICKUPMESSAGES];
 public:
+	static int32 PlayerOnWeaponPickup;
+
 	static void Init();
 	static void Update();
 	static void RenderPickUpText();
@@ -72,19 +88,22 @@ public:
 	static void DoMoneyEffects(CEntity *ent);
 	static void DoMineEffects(CEntity *ent);
 	static void DoPickUpEffects(CEntity *ent);
-	static int32 GenerateNewOne(CVector pos, uint32 modelIndex, uint8 type, uint32 quantity);
+	static int32 GenerateNewOne(CVector pos, uint32 modelIndex, uint8 type, uint32 quantity, uint32 rate = 0, bool highPriority = false, char* pText = nil);
 	static int32 GenerateNewOne_WeaponType(CVector pos, eWeaponType weaponType, uint8 type, uint32 quantity);
 	static void RemovePickUp(int32 pickupIndex);
-	static void RemoveAllFloatingPickups();
 	static void AddToCollectedPickupsArray(int32 index);
 	static bool IsPickUpPickedUp(int32 pickupId);
 	static int32 ModelForWeapon(eWeaponType weaponType);
 	static enum eWeaponType WeaponForModel(int32 model);
-	static int32 FindColourIndexForWeaponMI(int32 model);
 	static int32 GetActualPickupIndex(int32 index);
 	static int32 GetNewUniquePickupIndex(int32 slot);
 	static void PassTime(uint32 time);
 	static bool GivePlayerGoodiesWithPickUpMI(int16 modelIndex, int playerIndex);
+	static bool TestForPickupsInBubble(CVector pos, float range);
+	static bool TryToMerge_WeaponType(CVector pos, eWeaponType weapon, uint8 type, uint32 quantity, bool unused);
+	static void CreateSomeMoney(CVector, int);
+	static void DetonateMinesHitByGunShot(CVector *vec1, CVector *vec2);
+	static void RemoveUnnecessaryPickups(const CVector& center, float radius);
 	static void Load(uint8 *buf, uint32 size);
 	static void Save(uint8 *buf, uint32 *size);
 
@@ -95,11 +114,16 @@ public:
 	static CVehicle *pPlayerVehicle;
 	static CVector StaticCamCoors;
 	static uint32 StaticCamStartTime;
+	
+	static void RemoveAllPickupsOfACertainWeaponGroupWithNoAmmo(eWeaponType);
+	static CPickup *FindPickUpForThisObject(CEntity*);
 };
 
-extern uint16 AmmoForWeapon[20];
-extern uint16 AmmoForWeapon_OnStreet[20];
-extern uint16 CostOfWeapon[20];
+extern uint16 AmmoForWeapon[WEAPONTYPE_TOTALWEAPONS + 1];
+extern uint16 AmmoForWeapon_OnStreet[WEAPONTYPE_TOTALWEAPONS + 1];
+extern uint16 CostOfWeapon[WEAPONTYPE_TOTALWEAPONS + 3];
+
+extern int32 CollectPickupBuffer;
 
 enum ePacmanPickupType
 {

@@ -6,6 +6,7 @@
 
 class CEntity;
 class CBuilding;
+class CPhysical;
 class CVehicle;
 class CPed;
 class CObject;
@@ -20,18 +21,19 @@ void FlushLog();
 
 #define PICKUP_PLACEMENT_OFFSET (0.5f)
 #define PED_FIND_Z_OFFSET (5.0f)
+#define COP_PED_FIND_Z_OFFSET (10.0f)
 
 #define UPSIDEDOWN_UP_THRESHOLD (-0.97f)
 #define UPSIDEDOWN_MOVE_SPEED_THRESHOLD (0.01f)
 #define UPSIDEDOWN_TURN_SPEED_THRESHOLD (0.02f)
 #define UPSIDEDOWN_TIMER_THRESHOLD (1000)
 
-#define SPHERE_MARKER_R (0)
-#define SPHERE_MARKER_G (128)
-#define SPHERE_MARKER_B (255)
-#define SPHERE_MARKER_A (128)
-#define SPHERE_MARKER_PULSE_PERIOD (2048)
-#define SPHERE_MARKER_PULSE_FRACTION (0.1f)
+#define SPHERE_MARKER_R (252)
+#define SPHERE_MARKER_G (138)
+#define SPHERE_MARKER_B (242)
+#define SPHERE_MARKER_A (228)
+#define SPHERE_MARKER_PULSE_PERIOD 2048
+#define SPHERE_MARKER_PULSE_FRACTION 0.1f
 
 #ifdef USE_PRECISE_MEASUREMENT_CONVERTION
 #define MILES_IN_METER (0.000621371192f)
@@ -45,9 +47,7 @@ void FlushLog();
 
 #define KEY_LENGTH_IN_SCRIPT (8)
 
-#if GTA_VERSION <= GTA3_PS2_160
-#define GTA_SCRIPT_COLLECTIVE
-#endif
+//#define GTA_SCRIPT_COLLECTIVE
 
 struct intro_script_rectangle 
 {
@@ -64,7 +64,7 @@ struct intro_script_rectangle
 VALIDATE_SIZE(intro_script_rectangle, 0x18);
 
 enum {
-	SCRIPT_TEXT_MAX_LENGTH = 500
+	SCRIPT_TEXT_MAX_LENGTH = 100
 };
 
 struct intro_text_line 
@@ -105,7 +105,7 @@ struct intro_text_line
 		m_sBackgroundColor = CRGBA(128, 128, 128, 128);
 		m_bTextProportional = true;
 		m_bTextBeforeFade = false;
-		m_nFont = FONT_HEADING;
+		m_nFont = FONT_STANDARD;
 		m_fAtX = 0.0f;
 		m_fAtY = 0.0f;
 		memset(&m_Text, 0, sizeof(m_Text));
@@ -149,7 +149,7 @@ struct cleanup_entity_struct
 enum {
 	MAX_CLEANUP = 50,
 	MAX_UPSIDEDOWN_CAR_CHECKS = 6,
-	MAX_STUCK_CAR_CHECKS = 6
+	MAX_STUCK_CAR_CHECKS = 16
 };
 
 class CMissionCleanup
@@ -165,6 +165,7 @@ public:
 	void AddEntityToList(int32, uint8);
 	void RemoveEntityFromList(int32, uint8);
 	void Process();
+	void CheckIfCollisionHasLoadedForMissionObjects();
 };
 
 struct upsidedown_car_data
@@ -248,11 +249,7 @@ struct tBuildingSwap
 
 
 enum {
-#if GTA_VERSION > GTA3_PS2_160
 	MAX_STACK_DEPTH = 6,
-#else
-	MAX_STACK_DEPTH = 4,
-#endif
 	NUM_LOCAL_VARS = 16,
 	NUM_TIMERS = 2
 };
@@ -287,6 +284,7 @@ public:
 	uint32 m_anStack[MAX_STACK_DEPTH];
 	uint16 m_nStackPointer;
 	int32 m_anLocalVariables[NUM_LOCAL_VARS + NUM_TIMERS];
+	bool m_bIsActive;
 	bool m_bCondResult;
 	bool m_bIsMissionScript;
 	bool m_bSkipWakeTime;
@@ -338,9 +336,11 @@ public:
 	int8 ProcessCommands800To899(int32);
 	int8 ProcessCommands900To999(int32);
 	int8 ProcessCommands1000To1099(int32);
-#if GTA_VERSION > GTA3_PS2_160
 	int8 ProcessCommands1100To1199(int32);
-#endif
+	int8 ProcessCommands1200To1299(int32);
+	int8 ProcessCommands1300To1399(int32);
+	int8 ProcessCommands1400To1499(int32);
+
 	void LocatePlayerCommand(int32, uint32*);
 	void LocatePlayerCharCommand(int32, uint32*);
 	void LocatePlayerCarCommand(int32, uint32*);
@@ -352,244 +352,4 @@ public:
 	void LocateSniperBulletCommand(int32, uint32*);
 	void PlayerInAreaCheckCommand(int32, uint32*);
 	void PlayerInAngledAreaCheckCommand(int32, uint32*);
-	void CharInAreaCheckCommand(int32, uint32*);
-	void CarInAreaCheckCommand(int32, uint32*);
-
-#ifdef GTA_SCRIPT_COLLECTIVE
-	void LocateCollectiveCommand(int32, uint32*);
-	void LocateCollectiveCharCommand(int32, uint32*);
-	void LocateCollectiveCarCommand(int32, uint32*);
-	void LocateCollectivePlayerCommand(int32, uint32*);
-	void CollectiveInAreaCheckCommand(int32, uint32*);
-#endif
-
-#ifdef MISSION_REPLAY
-	bool CanAllowMissionReplay();
-#endif
-
-#ifdef USE_ADVANCED_SCRIPT_DEBUG_OUTPUT
-	int CollectParameterForDebug(char* buf, bool& var);
-	void GetStoredParameterForDebug(char* buf);
-#endif
-
-	float LimitAngleOnCircle(float angle) { return angle < 0.0f ? angle + 360.0f : angle; }
-
-	bool ThisIsAValidRandomPed(uint32 pedtype) {
-		switch (pedtype) {
-		case PEDTYPE_CIVMALE:
-		case PEDTYPE_CIVFEMALE:
-		case PEDTYPE_GANG1:
-		case PEDTYPE_GANG2:
-		case PEDTYPE_GANG3:
-		case PEDTYPE_GANG4:
-		case PEDTYPE_GANG5:
-		case PEDTYPE_GANG6:
-		case PEDTYPE_GANG7:
-		case PEDTYPE_GANG8:
-		case PEDTYPE_GANG9:
-		case PEDTYPE_CRIMINAL:
-		case PEDTYPE_PROSTITUTE:
-			return true;
-		default:
-			return false;
-		}
-	}
-};
-
-
-enum {
-	VAR_LOCAL = 1,
-	VAR_GLOBAL = 2,
-};
-
-enum {
-	SIZE_MAIN_SCRIPT = 128 * 1024,
-	SIZE_MISSION_SCRIPT = 32 * 1024,
-	SIZE_SCRIPT_SPACE = SIZE_MAIN_SCRIPT + SIZE_MISSION_SCRIPT
-};
-
-enum {
-	MAX_NUM_SCRIPTS = 128,
-	MAX_NUM_CONTACTS = 16,
-	MAX_NUM_INTRO_TEXT_LINES = 2,
-	MAX_NUM_INTRO_RECTANGLES = 16,
-	MAX_NUM_SCRIPT_SRPITES = 16,
-	MAX_NUM_SCRIPT_SPHERES = 16,
-	MAX_NUM_COLLECTIVES = 32,
-	MAX_NUM_USED_OBJECTS = 200,
-	MAX_NUM_MISSION_SCRIPTS = 120,
-	MAX_NUM_BUILDING_SWAPS = 25,
-	MAX_NUM_INVISIBILITY_SETTINGS = 20,
-	MAX_NUM_STORED_LINES = 1024
-};
-
-class CTheScripts
-{
-public:
-	static uint8 ScriptSpace[SIZE_SCRIPT_SPACE];
-	static CRunningScript ScriptsArray[MAX_NUM_SCRIPTS];
-	static int32 BaseBriefIdForContact[MAX_NUM_CONTACTS];
-	static int32 OnAMissionForContactFlag[MAX_NUM_CONTACTS];
-	static intro_text_line IntroTextLines[MAX_NUM_INTRO_TEXT_LINES];
-	static intro_script_rectangle IntroRectangles[MAX_NUM_INTRO_RECTANGLES];
-	static CSprite2d ScriptSprites[MAX_NUM_SCRIPT_SRPITES];
-	static script_sphere_struct ScriptSphereArray[MAX_NUM_SCRIPT_SPHERES];
-	static tCollectiveData CollectiveArray[MAX_NUM_COLLECTIVES];
-	static tUsedObject UsedObjectArray[MAX_NUM_USED_OBJECTS];
-	static int32 MultiScriptArray[MAX_NUM_MISSION_SCRIPTS];
-	static tBuildingSwap BuildingSwapArray[MAX_NUM_BUILDING_SWAPS];
-	static CEntity* InvisibilitySettingArray[MAX_NUM_INVISIBILITY_SETTINGS];
-	static CStoredLine aStoredLines[MAX_NUM_STORED_LINES];
-	static bool DbgFlag;
-	static uint32 OnAMissionFlag;
-	static CMissionCleanup MissionCleanUp;
-	static CStuckCarCheck StuckCars;
-	static CUpsideDownCarCheck UpsideDownCars;
-	static int32 StoreVehicleIndex;
-	static bool StoreVehicleWasRandom;
-	static CRunningScript *pIdleScripts;
-	static CRunningScript *pActiveScripts;
-	static int32 NextFreeCollectiveIndex;
-	static int32 LastRandomPedId;
-	static uint16 NumberOfUsedObjects;
-	static bool bAlreadyRunningAMissionScript;
-	static bool bUsingAMultiScriptFile;
-	static uint16 NumberOfMissionScripts;
-	static uint32 LargestMissionScriptSize;
-	static uint32 MainScriptSize;
-	static uint8 FailCurrentMission;
-	static uint8 CountdownToMakePlayerUnsafe;
-	static uint8 DelayMakingPlayerUnsafeThisTime;
-	static uint16 NumScriptDebugLines;
-	static uint16 NumberOfIntroRectanglesThisFrame;
-	static uint16 NumberOfIntroTextLinesThisFrame;
-	static uint8 UseTextCommands;
-	static uint16 CommandsExecuted;
-	static uint16 ScriptsUpdated;
-
-	static void Init();
-	static void Process();
-
-	static CRunningScript* StartTestScript();
-	static bool IsPlayerOnAMission();
-	static void ClearSpaceForMissionEntity(const CVector&, CEntity*);
-
-	static void UndoBuildingSwaps();
-	static void UndoEntityInvisibilitySettings();
-
-	static void ScriptDebugLine3D(float x1, float y1, float z1, float x2, float y2, float z2, uint32 col, uint32 col2);
-	static void RenderTheScriptDebugLines();
-
-	static void SaveAllScripts(uint8*, uint32*);
-	static void LoadAllScripts(uint8*, uint32);
-
-	static bool IsDebugOn() { return DbgFlag; };
-	static void InvertDebugFlag() { DbgFlag = !DbgFlag; }
-
-	static int32* GetPointerToScriptVariable(int32 offset) { assert(offset >= 8 && offset < CTheScripts::GetSizeOfVariableSpace()); return (int32*)&ScriptSpace[offset]; }
-
-	static void ResetCountdownToMakePlayerUnsafe() { CountdownToMakePlayerUnsafe = 0; }
-	static bool IsCountdownToMakePlayerUnsafeOn() { return CountdownToMakePlayerUnsafe != 0; }
-
-	static int32 Read4BytesFromScript(uint32* pIp) {
-		int32 retval = ScriptSpace[*pIp + 3] << 24 | ScriptSpace[*pIp + 2] << 16 | ScriptSpace[*pIp + 1] << 8 | ScriptSpace[*pIp];
-		*pIp += 4;
-		return retval;
-	}
-	static int16 Read2BytesFromScript(uint32* pIp) {
-		int16 retval = ScriptSpace[*pIp + 1] << 8 | ScriptSpace[*pIp];
-		*pIp += 2;
-		return retval;
-	}
-	static int8 Read1ByteFromScript(uint32* pIp) {
-		int8 retval = ScriptSpace[*pIp];
-		*pIp += 1;
-		return retval;
-	}
-	static float ReadFloatFromScript(uint32* pIp) {
-		return Read2BytesFromScript(pIp) / 16.0f;
-	}
-	static void ReadTextLabelFromScript(uint32* pIp, char* buf) {
-		strncpy(buf, (const char*)&CTheScripts::ScriptSpace[*pIp], KEY_LENGTH_IN_SCRIPT);
-	}
-	static wchar* GetTextByKeyFromScript(uint32* pIp) {
-		wchar* text = TheText.Get((const char*)&CTheScripts::ScriptSpace[*pIp]);
-		*pIp += KEY_LENGTH_IN_SCRIPT;
-		return text;
-	}
-	static int32 GetSizeOfVariableSpace()
-	{
-		uint32 tmp = 3;
-		return Read4BytesFromScript(&tmp);
-	}
-
-	static CRunningScript* StartNewScript(uint32);
-
-	static void CleanUpThisVehicle(CVehicle*);
-	static void CleanUpThisPed(CPed*);
-	static void CleanUpThisObject(CObject*);
-
-	static bool IsPedStopped(CPed*);
-	static bool IsPlayerStopped(CPlayerInfo*);
-	static bool IsVehicleStopped(CVehicle*);
-
-	static void PrintListSizes();
-	static void ReadObjectNamesFromScript();
-	static void UpdateObjectIndices();
-	static void ReadMultiScriptFileOffsetsFromScript();
-	static void DrawScriptSpheres();
-	static void HighlightImportantArea(uint32, float, float, float, float, float);
-	static void HighlightImportantAngledArea(uint32, float, float, float, float, float, float, float, float, float);
-	static void DrawDebugSquare(float, float, float, float);
-	static void DrawDebugAngledSquare(float, float, float, float, float, float, float, float);
-	static void DrawDebugCube(float, float, float, float, float, float);
-	static void DrawDebugAngledCube(float, float, float, float, float, float, float, float, float, float);
-
-	static void AddToInvisibilitySwapArray(CEntity*, bool);
-	static void AddToBuildingSwapArray(CBuilding*, int32, int32);
-
-	static int32 GetActualScriptSphereIndex(int32 index);
-	static int32 AddScriptSphere(int32 id, CVector pos, float radius);
-	static int32 GetNewUniqueScriptSphereIndex(int32 index);
-	static void RemoveScriptSphere(int32 index);
-
-#ifdef GTA_SCRIPT_COLLECTIVE
-	static void AdvanceCollectiveIndex()
-	{
-		if (NextFreeCollectiveIndex == INT32_MAX)
-			NextFreeCollectiveIndex = 0;
-		else
-			NextFreeCollectiveIndex++;
-	}
-
-	static int AddPedsInVehicleToCollective(int);
-	static int AddPedsInAreaToCollective(float, float, float, float);
-	static int FindFreeSlotInCollectiveArray();
-	static void SetObjectiveForAllPedsInCollective(int, eObjective, int16, int16);
-	static void SetObjectiveForAllPedsInCollective(int, eObjective, CVector, float);
-	static void SetObjectiveForAllPedsInCollective(int, eObjective, CVector);
-	static void SetObjectiveForAllPedsInCollective(int, eObjective, void*);
-	static void SetObjectiveForAllPedsInCollective(int, eObjective);
-#endif
-
-#ifdef MISSION_SWITCHER
-public:
-	static void SwitchToMission(int32 mission);
-#endif
-};
-
-#ifdef MISSION_REPLAY
-extern int AllowMissionReplay;
-extern uint32 WaitForMissionActivate;
-extern uint32 WaitForSave;
-extern uint32 MissionStartTime;
-extern int missionRetryScriptIndex;
-extern bool doingMissionRetry;
-
-uint32 AddExtraDeathDelay();
-void RetryMission(int, int);
-#endif
-
-#ifdef USE_DEBUG_SCRIPT_LOADER
-extern int scriptToLoad;
-#endif
+	void CharInAr

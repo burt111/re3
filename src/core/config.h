@@ -1,80 +1,80 @@
 #pragma once
 
-// disables (most) stuff that wasn't in original gta3.exe - check section at the bottom of this file
+// disables (most) stuff that wasn't in original gta-vc.exe - check section at the bottom of this file
 //#define VANILLA_DEFINES
 
 enum Config {
-	NUMPLAYERS = 1,	// 4 on PS2
+	NUMPLAYERS = 1,
 
-	NUMCDIMAGES = 12, // gta3.img duplicates (not used on PC)
+	NUMCDIMAGES = 6, // gta3.img duplicates (not used on PC)
 	MAX_CDIMAGES = 8, // additional cdimages
 	MAX_CDCHANNELS = 5,
 
-	MODELINFOSIZE = 5500,	// 3150 on PS2
-#if defined __MWERKS__ || defined VANILLA_DEFINES
-	TXDSTORESIZE = 850,
-#else
-	TXDSTORESIZE = 1024,	// for Xbox map
-#endif
-	EXTRADIRSIZE = 128,
+	MODELINFOSIZE = 6500,	// 4900 on PS2
+	TXDSTORESIZE = 1385,
+	COLSTORESIZE = 31,
+	EXTRADIRSIZE = 256,
 	CUTSCENEDIRSIZE = 512,
 
-	SIMPLEMODELSIZE = 5000,	// 2910 on PS2
-	MLOMODELSIZE = 1,
-	MLOINSTANCESIZE = 1,
-	TIMEMODELSIZE = 30,
+	SIMPLEMODELSIZE = 3885,
+	TIMEMODELSIZE = 385,
 	CLUMPMODELSIZE = 5,
-	PEDMODELSIZE = 90,
-	VEHICLEMODELSIZE = 120,	// 70 on PS2
-	XTRACOMPSMODELSIZE = 2,
-	TWODFXSIZE = 2000,	// 1210 on PS2
+	WEAPONMODELSIZE = 37,
+	PEDMODELSIZE = 130,
+	VEHICLEMODELSIZE = 110,
+	TWODFXSIZE = 1210,
 
 	MAXVEHICLESLOADED = 50, // 70 on mobile
 
-	NUMOBJECTINFO = 168, // object.dat
+	NUMOBJECTINFO = 210,
 
 	// Pool sizes
-	NUMPTRNODES = 30000,  // 26000 on PS2
-	NUMENTRYINFOS = 5400, // 3200 on PS2
-	NUMPEDS = 140,        // 90 on PS2
-	NUMVEHICLES = 110,    // 70 on PS2
-	NUMBUILDINGS = 5500,  // 4915 on PS2
-	NUMTREADABLES = 1214,
-	NUMOBJECTS = 450,
-	NUMDUMMIES = 2802, // 2368 on PS2
-	NUMAUDIOSCRIPTOBJECTS = 256,
-	NUMCUTSCENEOBJECTS = 50,
+	NUMPTRNODES = 50000,
+	NUMENTRYINFOS = 3200,
+	NUMPEDS = 140,
+	NUMVEHICLES = 110,
+	NUMBUILDINGS = 7000,
+	NUMTREADABLES = 1,
+	NUMOBJECTS = 460,
+	NUMDUMMIES = 2340,
+	NUMAUDIOSCRIPTOBJECTS = 192,
+	NUMCOLMODELS = 4400,
+	NUMCUTSCENEOBJECTS = 50,	// not a pool in VC
 
-	NUMANIMBLOCKS = 2,
-	NUMANIMATIONS = 250,
+	NUMANIMBLOCKS = 35,
+	NUMANIMATIONS = 450,
 
-	NUMTEMPOBJECTS = 30,
+	NUMTEMPOBJECTS = 40,
 
 	// Path data
-	NUM_PATHNODES = 4930,
-	NUM_CARPATHLINKS = 2076,
+	NUM_PATHNODES = 9650,
+	NUM_CARPATHLINKS = 3500,
 	NUM_MAPOBJECTS = 1250,
-	NUM_PATHCONNECTIONS = 10260,
+	NUM_PATHCONNECTIONS = 20400,
 
 	// Link list lengths
 	NUMALPHALIST = 20,
-	NUMALPHAENTITYLIST = 150,
-	NUMCOLCACHELINKS = 200,
+	NUMBOATALPHALIST = 20,
+	NUMALPHAENTITYLIST = 200,
+	NUMALPHAUNTERWATERENTITYLIST = 30,
+	NUMCOLCACHELINKS = 50,
 	NUMREFERENCES = 800,
 
 	// Zones
-	NUMAUDIOZONES = 36,
-	NUMZONES = 50,
-	NUMMAPZONES = 25,
+	NUMAUDIOZONES = 14,
+	NUMINFOZONES = 169,
+	NUMMAPZONES = 39,
+	NUMNAVIGZONES = 20,
 
 	// Cull zones
-	NUMCULLZONES = 512,
-	NUMATTRIBZONES = 288,
-	NUMZONEINDICES = 55000,
+	NUMATTRIBZONES = 704,
+
+	NUMOCCLUSIONVOLUMES = 350,
+	NUMACTIVEOCCLUDERS = 48,
 
 	PATHNODESIZE = 4500,
 
-	NUMWEATHERS = 4,
+	NUMWEATHERS = 7,
 	NUMHOURS = 24,
 
 	NUMEXTRADIRECTIONALS = 4,
@@ -90,8 +90,9 @@ enum Config {
 	NUMMBLURSTREAKS = 4,
 	NUMSKIDMARKS = 32,
 
-	NUMONSCREENTIMERENTRIES = 1,
-	NUMRADARBLIPS = 32,
+	NUMONSCREENCLOCKS = 1,
+	NUMONSCREENCOUNTERS = 3,
+	NUMRADARBLIPS = 75,
 	NUMGENERALPICKUPS = 320,
 	NUMSCRIPTEDPICKUPS = 16,
 	NUMPICKUPS = NUMGENERALPICKUPS + NUMSCRIPTEDPICKUPS,
@@ -99,7 +100,7 @@ enum Config {
 	NUMPACMANPICKUPS = 256,
 	NUMEVENTS = 64,
 
-	NUM_CARGENS = 160,
+	NUM_CARGENS = 185,
 
 	NUM_PATH_NODES_IN_AUTOPILOT = 8,
 
@@ -114,11 +115,13 @@ enum Config {
 
 	NUMPEDROUTES = 200,
 	NUMPHONES = 50,
-	NUMPEDGROUPS = 31,
-	NUMMODELSPERPEDGROUP = 8,
+	NUMPEDGROUPS = 67,
+	NUMMODELSPERPEDGROUP = 16,
+	MAXZONEPEDSLOADED = 8,
 	NUMSHOTINFOS = 100,
 
-	NUMROADBLOCKS = 600,
+	NUMROADBLOCKS = 300,
+	NUM_SCRIPT_ROADBLOCKS = 16,
 
 	NUMVISIBLEENTITIES = 2000,
 	NUMINVISIBLEENTITIES = 150,
@@ -129,16 +132,21 @@ enum Config {
 
 	NUM_SOUNDS_SAMPLES_BANKS = 2,
 	NUM_SOUNDS_SAMPLES_SLOTS = 27,
-	NUM_AUDIOENTITIES = 200,
+	NUM_AUDIOENTITIES = 250,
 
-	NUM_AUDIO_REFLECTIONS = 5,
+	NUM_AUDIO_REFLECTIONS = 8,
 	NUM_SCRIPT_MAX_ENTITIES = 40,
 
-	NUM_GARAGE_STORED_CARS = 6,
+	NUM_GARAGE_STORED_CARS = 4,
 
 	NUM_CRANES = 8,
+	NUM_ESCALATORS = 22,
+	NUM_WATER_CREATURES = 8,
 
 	NUM_EXPLOSIONS = 48,
+
+	NUM_SETPIECES = 96,
+	NUM_SHORTCUT_START_POINTS = 16
 };
 
 // We don't expect to compile for PS2 or Xbox
@@ -168,14 +176,17 @@ enum Config {
 #endif
 
 // Version defines
-#define GTA3_PS2_140	300
-#define GTA3_PS2_160	301
-#define GTA3_PC_10	310
-#define GTA3_PC_11	311
-#define GTA3_PC_STEAM	312
+#define GTAVC_PS2	400
+#define GTAVC_PC_10	410
+#define GTAVC_PC_11	411
+#define GTAVC_PC_JAP	412
 // TODO? maybe something for xbox or android?
 
-#define GTA_VERSION	GTA3_PC_11
+#define GTA_VERSION	GTAVC_PC_11
+
+// TODO(MIAMI): someone ought to find and check out uses of these defines:
+//#define GTA3_STEAM_PATCH
+//#define GTAVC_JP_PATCH
 
 // quality of life fixes that should also be in FINAL
 #define NASTY_GAME	// nasty game for all languages
@@ -183,7 +194,6 @@ enum Config {
 
 // those infamous texts
 #define DRAW_GAME_VERSION_TEXT
-#define DRAW_MENU_VERSION_TEXT
 
 // Memory allocation and compression
 // #define USE_CUSTOM_ALLOCATOR		// use CMemoryHeap for allocation. use with care, not finished yet
@@ -193,9 +203,8 @@ enum Config {
 #if defined GTA_PS2
 #	define GTA_PS2_STUFF
 #	define RANDOMSPLASH
-#	define USE_CUSTOM_ALLOCATOR
+//#	define USE_CUSTOM_ALLOCATOR
 #	define VU_COLLISION
-#	define ANIM_COMPRESSION
 #elif defined GTA_PC
 #	ifdef GTA_PS2_STUFF
 #		define USE_PS2_RAND
@@ -233,29 +242,22 @@ enum Config {
 #endif
 
 #define FIX_BUGS		// fixes bugs that we've came across during reversing. You can undefine this only on release builds.
-#define MORE_LANGUAGES		// Add more translations to the game
+//#define MORE_LANGUAGES		// Add more translations to the game
 #define COMPATIBLE_SAVES // this allows changing structs while keeping saves compatible
 #define LOAD_INI_SETTINGS // as the name suggests. fundamental for CUSTOM_FRONTEND_OPTIONS
+#define FIX_HIGH_FPS_BUGS_ON_FRONTEND
 
 #if defined(__LP64__) || defined(_WIN64)
 #define FIX_BUGS_64 // Must have fixes to be able to run 64 bit build
 #endif
 
-#define ASCII_STRCMP // use faster ascii str comparisons
-
-#if !defined _WIN32 || defined __MWERKS__ || defined __MINGW32__ || defined VANILLA_DEFINES
-#undef ASCII_STRCMP
-#endif
-
 // Just debug menu entries
 #ifdef DEBUGMENU
+#define RELOADABLES			// some debug menu options to reload TXD files
 #define MISSION_SWITCHER // from debug menu
 #endif
 
 // Rendering/display
-//#define EXTRA_MODEL_FLAGS	// from mobile to optimize rendering
-//# define HARDCODED_MODEL_FLAGS	// sets the flags enabled above from hardcoded model names.
-				// NB: keep this enabled unless your map IDEs have these flags baked in
 #define ASPECT_RATIO_SCALE	// Not just makes everything scale with aspect ratio, also adds support for all aspect ratios
 #define PROPER_SCALING		// use original DEFAULT_SCREEN_WIDTH/DEFAULT_SCREEN_HEIGHT from PS2 instead of PC(R* changed HEIGHT here to make radar look better, but broke other hud elements aspect ratio).
 #define DEFAULT_NATIVE_RESOLUTION	// Set default video mode to your native resolution (fixes Windows 10 launch)
@@ -279,9 +281,12 @@ enum Config {
 #undef SCREEN_DROPLETS		// we need the backbuffer for this effect
 #endif
 
-// Particle
-//#define PC_PARTICLE
-//#define PS2_ALTERNATIVE_CARSPLASH // unused on PS2
+// Water & Particle
+// #define PC_WATER
+#define WATER_CHEATS
+
+//#define USE_CUTSCENE_SHADOW_FOR_PED
+#define DISABLE_CUTSCENE_SHADOWS
 
 // Pad
 #if !defined(RW_GL3) && defined(_WIN32)
@@ -292,32 +297,28 @@ enum Config {
 #endif
 #define DETECT_PAD_INPUT_SWITCH // Adds automatic switch of pad related stuff between controller and kb/m
 #define KANGAROO_CHEAT
-#define ALLCARSHELI_CHEAT
-#define ALT_DODO_CHEAT
+#define RESTORE_ALLCARSHELI_CHEAT
+#define BETTER_ALLCARSAREDODO_CHEAT
+#define WALLCLIMB_CHEAT
 #define REGISTER_START_BUTTON
-#define BIND_VEHICLE_FIREWEAPON // Adds ability to rebind fire key for 'in vehicle' controls
+//#define BIND_VEHICLE_FIREWEAPON // Adds ability to rebind fire key for 'in vehicle' controls
 #define BUTTON_ICONS // use textures to show controller buttons
 
 // Hud, frontend and radar
-//#define PS2_HUD
-#define HUD_ENHANCEMENTS	// Adjusts some aspects to make the HUD look/behave a little bit better.
-// #define BETA_SLIDING_TEXT
-#define TRIANGULAR_BLIPS	// height indicating triangular radar blips, as in VC
-#define FIX_RADAR			// use radar size from early version before R* broke it
-// #define XBOX_SUBTITLES	// the infamous outlines
-#define RADIO_OFF_TEXT
 #define PC_MENU
+#define FIX_RADAR			// use radar size from early version before R* broke it
+#define RADIO_OFF_TEXT		// Won't work without FIX_BUGS
 
 #ifndef PC_MENU
 #	define PS2_MENU
 //#	define PS2_MENU_USEALLPAGEICONS
 #else
-#	define MENU_MAP			// VC-like menu map. Make sure you have new menu.txd
-#	define SCROLLABLE_STATS_PAGE	// only draggable by mouse atm
+#	define MAP_ENHANCEMENTS			// Adding waypoint and better mouse support
 #	define TRIANGLE_BACK_BUTTON
 //#	define CIRCLE_BACK_BUTTON
-//#	define PS2_LIKE_MENU	// An effort to recreate PS2 menu, cycling through tabs, different bg etc.
-//#	define PS2_SAVE_DIALOG		// PS2 style save dialog with transparent black box
+#define LEGACY_MENU_OPTIONS			// i.e. frame sync(vsync)
+#define MUCH_SHORTER_OUTRO_SCREEN
+// #define XBOX_MESSAGE_SCREEN			// Blue background, no "saved successfully press OK" screen etc.
 #	define CUSTOM_FRONTEND_OPTIONS
 
 #	ifdef CUSTOM_FRONTEND_OPTIONS
@@ -325,7 +326,7 @@ enum Config {
 #		define NO_ISLAND_LOADING  // disable loadscreen between islands via loading all island data at once, consumes more memory and CPU
 #		define CUTSCENE_BORDERS_SWITCH
 #		define MULTISAMPLING		// adds MSAA option
-#		define INVERT_LOOK_FOR_PAD // add bInvertLook4Pad from VC
+#		define INVERT_LOOK_FOR_PAD // enable the hidden option
 #	endif
 #endif
 
@@ -333,8 +334,14 @@ enum Config {
 #define USE_DEBUG_SCRIPT_LOADER	// Loads main.scm by default. Hold R for main_freeroam.scm and D for main_d.scm
 #define USE_MEASUREMENTS_IN_METERS // makes game use meters instead of feet in script
 #define USE_PRECISE_MEASUREMENT_CONVERTION // makes game convert feet to meeters more precisely
+#define SUPPORT_JAPANESE_SCRIPT
+//#define SUPPORT_XBOX_SCRIPT
+//#define SUPPORT_MOBILE_SCRIPT
+#if (defined SUPPORT_XBOX_SCRIPT && defined SUPPORT_MOBILE_SCRIPT)
+static_assert(false, "SUPPORT_XBOX_SCRIPT and SUPPORT_MOBILE_SCRIPT are mutually exclusive");
+#endif
 #ifdef PC_MENU
-#	define MISSION_REPLAY // mobile feature
+//#define MISSION_REPLAY // mobile feature
 #endif
 //#define SIMPLIER_MISSIONS // apply simplifications from mobile
 #define USE_ADVANCED_SCRIPT_DEBUG_OUTPUT
@@ -359,36 +366,30 @@ enum Config {
 
 // Vehicles
 #define EXPLODING_AIRTRAIN	// can blow up jumbo jet with rocket launcher
-//#define REMOVE_TREADABLE_PATHFIND
+#define CPLANE_ROTORS		// make the rotors of the NPC police heli rotate
 
 // Pickups
 //#define MONEY_MESSAGES
 #define CAMERA_PICKUP
 
 // Peds
-#define PED_SKIN		// support for skinned geometry on peds
-#define ANIMATE_PED_COL_MODEL
-// #define VC_PED_PORTS			// various ports from VC's CPed, mostly subtle
-// #define NEW_WALK_AROUND_ALGORITHM	// to make walking around vehicles/objects less awkward
 #define CANCELLABLE_CAR_ENTER
-//#define PEDS_REPORT_CRIMES_ON_PHONE
 
 // Camera
-//#define PS2_CAM_TRANSITION	// old way of transitioning between cam modes
 #define IMPROVED_CAMERA		// Better Debug cam, and maybe more in the future
 #define FREE_CAM		// Rotating cam
 
 // Audio
-#define RADIO_SCROLL_TO_PREV_STATION
-#define AUDIO_CACHE
+#define RADIO_SCROLL_TO_PREV_STATION // Won't work without FIX_BUGS
+#define AUDIO_CACHE // cache sound lengths to speed up the cold boot
 //#define PS2_AUDIO_PATHS // changes audio paths for cutscenes and radio to PS2 paths (needs vbdec on MSS builds)
 //#define AUDIO_OAL_USE_SNDFILE // use libsndfile to decode WAVs instead of our internal decoder
 #define AUDIO_OAL_USE_MPG123 // use mpg123 to support mp3 files
 
 #ifdef AUDIO_OPUS
 #define AUDIO_OAL_USE_OPUS // enable support of opus files
-#define OPUS_AUDIO_PATHS // changes audio paths to opus paths (doesn't work if AUDIO_OAL_USE_OPUS isn't enabled)
-#define OPUS_SFX  // enable if your sfx.raw is encoded with opus (doesn't work if AUDIO_OAL_USE_OPUS isn't enabled)
+//#define OPUS_AUDIO_PATHS // (not supported on VC yet) changes audio paths to opus paths (doesn't work if AUDIO_OAL_USE_OPUS isn't enabled)
+//#define OPUS_SFX  // enable if your sfx.raw is encoded with opus (doesn't work if AUDIO_OAL_USE_OPUS isn't enabled)
 
 #ifndef AUDIO_OAL_USE_OPUS
 #undef OPUS_AUDIO_PATHS
@@ -408,9 +409,6 @@ enum Config {
 #ifdef SQUEEZE_PERFORMANCE
 	#undef PS2_ALPHA_TEST
 	#undef NO_ISLAND_LOADING
-	#define PC_PARTICLE
-	#define VC_PED_PORTS // To not process collisions always. But should be tested if that's really beneficial
-	#define VC_RAIN_NERF // Reduces number of rain particles
 #endif
 
 // -------
@@ -419,18 +417,16 @@ enum Config {
 #define FINAL
 #undef CHATTYSPLASH
 #undef TIMEBARS
-//#define USE_MY_DOCUMENTS
 
 #define MASTER
 #undef VALIDATE_SAVE_SIZE
 #undef NO_MOVIES
 #undef DEBUGMENU
 
+#undef DRAW_GAME_VERSION_TEXT
+
 //#undef NASTY_GAME
 //#undef NO_CDCHECK
-
-#undef DRAW_GAME_VERSION_TEXT
-#undef DRAW_MENU_VERSION_TEXT
 
 #undef GTA_PS2_STUFF
 #undef USE_PS2_RAND
@@ -442,6 +438,7 @@ enum Config {
 #undef MORE_LANGUAGES
 #undef COMPATIBLE_SAVES
 #undef LOAD_INI_SETTINGS
+#undef FIX_HIGH_FPS_BUGS_ON_FRONTEND
 
 #undef ASPECT_RATIO_SCALE
 #undef PROPER_SCALING
@@ -450,29 +447,30 @@ enum Config {
 #undef IMPROVED_VIDEOMODE
 #undef DISABLE_LOADING_SCREEN
 #undef DISABLE_VSYNC_ON_TEXTURE_CONVERSION
-#undef ANISOTROPIC_FILTERING
-//#define USE_TEXTURE_POOL // not possible because R* used custom RW33
 
 #undef FIX_SPRITES
 
-#define PC_PARTICLE
+#define PC_WATER
+#undef WATER_CHEATS
+
+#undef USE_CUTSCENE_SHADOW_FOR_PED
+#undef DISABLE_CUTSCENE_SHADOWS
 
 #undef XINPUT
 #undef DETECT_PAD_INPUT_SWITCH
 #undef KANGAROO_CHEAT
-#undef ALLCARSHELI_CHEAT
-#undef ALT_DODO_CHEAT
+#undef RESTORE_ALLCARSHELI_CHEAT
+#undef BETTER_ALLCARSAREDODO_CHEAT
+#undef WALLCLIMB_CHEAT
 #undef REGISTER_START_BUTTON
 #undef BIND_VEHICLE_FIREWEAPON
 #undef BUTTON_ICONS
 
-#undef HUD_ENHANCEMENTS
-#undef TRIANGULAR_BLIPS
 #undef FIX_RADAR
 #undef RADIO_OFF_TEXT
 
-#undef MENU_MAP
-#undef SCROLLABLE_STATS_PAGE
+#undef MAP_ENHANCEMENTS
+#undef MUCH_SHORTER_OUTRO_SCREEN
 #undef CUSTOM_FRONTEND_OPTIONS
 
 #undef GRAPHICS_MENU_OPTIONS
@@ -484,6 +482,7 @@ enum Config {
 #undef USE_DEBUG_SCRIPT_LOADER
 #undef USE_MEASUREMENTS_IN_METERS
 #undef USE_PRECISE_MEASUREMENT_CONVERTION
+#undef SUPPORT_JAPANESE_SCRIPT
 #undef MISSION_REPLAY
 #undef USE_ADVANCED_SCRIPT_DEBUG_OUTPUT
 #undef USE_BASIC_SCRIPT_DEBUG_OUTPUT
@@ -491,12 +490,12 @@ enum Config {
 #define DONT_FIX_REPLAY_BUGS
 
 #undef EXPLODING_AIRTRAIN
+#undef CPLANE_ROTORS
 #undef CAMERA_PICKUP
-#undef PED_SKIN
-#undef ANIMATE_PED_COL_MODEL
 #undef CANCELLABLE_CAR_ENTER
 #undef IMPROVED_CAMERA
 #undef FREE_CAM
-#undef RADIO_SCROLL_TO_PREV_STATION
 #undef BIG_IMG
+
+#undef RADIO_SCROLL_TO_PREV_STATION
 #endif

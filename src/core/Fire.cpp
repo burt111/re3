@@ -15,6 +15,8 @@
 #include "DamageManager.h"
 #include "Ped.h"
 #include "Fire.h"
+#include "GameLogic.h"
+#include "CarAI.h"
 
 CFireManager gFireManager;
 
@@ -25,14 +27,13 @@ CFire::CFire()
 	m_bPropagationFlag = true;
 	m_bAudioSet = true;
 	m_vecPos = CVector(0.0f, 0.0f, 0.0f);
-	m_pEntity = nil;
-	m_pSource = nil;
-	m_nFiremenPuttingOut = 0;
 	m_nExtinguishTime = 0;
 	m_nStartTime = 0;
-	field_20 = 1;
-	m_nNextTimeToAddFlames = 0;
+	m_pEntity = nil;
+	m_pSource = nil;
 	m_fStrength = 0.8f;
+	m_fWaterExtinguishCountdown = 1.0f;
+  	m_bExtinguishedWithWater = false;
 }
 
 CFire::~CFire() {}
@@ -51,6 +52,8 @@ CFire::ProcessFire(void)
 	CPed *ped = (CPed *)m_pEntity;
 	CVehicle *veh = (CVehicle*)m_pEntity;
 
+	m_fWaterExtinguishCountdown = Min(1.0f, 0.002f * CTimer::GetTimeStep() + m_fWaterExtinguishCountdown);
+
 	if (m_pEntity) {
 		m_vecPos = m_pEntity->GetPosition();
 
@@ -59,6 +62,12 @@ CFire::ProcessFire(void)
 				Extinguish();
 				return;
 			}
+#if defined GTAVC_JP_PATCH && !defined FIX_BUGS
+			if (m_pEntity == CGameLogic::pShortCutTaxi && CGameLogic::ShortCutState == CGameLogic::SHORTCUT_TRANSITION) {
+				Extinguish();
+				return;
+			}
+#endif
 			if (ped->m_nMoveState != PEDMOVE_RUN)
 				m_vecPos.z -= 1.0f;
 			if (ped->bInVehicle && ped->m_pMyVehicle) {
@@ -84,6 +93,12 @@ CFire::ProcessFire(void)
 				Extinguish();
 				return;
 			}
+#ifdef FIX_BUGS
+			if (m_pEntity == CGameLogic::pShortCutTaxi && CGameLogic::ShortCutState == CGameLogic::SHORTCUT_TRANSITION) {
+				Extinguish();
+				return;
+			}
+#endif
 			if (!m_bIsScriptFire) {
 				fDamageVehicle = 1.2f * CTimer::GetTimeStep();
 				veh->InflictDamage((CVehicle *)m_pSource, WEAPONTYPE_FLAMETHROWER, fDamageVehicle);
@@ -92,7 +107,7 @@ CFire::ProcessFire(void)
 	}
 	if (!FindPlayerVehicle() &&
 #ifdef FIX_BUGS
-		FindPlayerPed() && 
+		FindPlayerPed() &&
 #endif
 		!FindPlayerPed()->m_pFire && !(FindPlayerPed()->bFireProof)
 		&& ((FindPlayerPed()->GetPosition() - m_vecPos).MagnitudeSqr() < 2.0f)) {
@@ -100,7 +115,7 @@ CFire::ProcessFire(void)
 		gFireManager.StartFire(FindPlayerPed(), m_pSource, 0.8f, 1);
 	}
 	if (CTimer::GetTimeInMilliseconds() > m_nNextTimeToAddFlames) {
-		m_nNextTimeToAddFlames = CTimer::GetTimeInMilliseconds() + 80;
+		m_nNextTimeToAddFlames = CTimer::GetTimeInMilliseconds() + (m_fWaterExtinguishCountdown < 0.3f ? 400 : (m_fWaterExtinguishCountdown < 0.7f ? 200 : 80));
 		firePos = m_vecPos;
 
 		if (veh && veh->IsVehicle() && veh->IsCar()) {
@@ -138,7 +153,7 @@ CFire::ProcessFire(void)
 		fGreen = nRandNumber / 128.f;
 		fRed = nRandNumber / 128.f;
 
-		CPointLights::AddLight(CPointLights::LIGHT_POINT, m_vecPos, CVector(0.0f, 0.0f, 0.0f), 12.0f, fRed, fGreen, 0, 0, 0);
+		CPointLights::AddLight(CPointLights::LIGHT_POINT, m_vecPos, CVector(0.0f, 0.0f, 0.0f), 12.0f, fRed, fGreen, 0.0f, 0, 0);
 	} else {
 		Extinguish();
 	}
@@ -160,11 +175,23 @@ CFire::Extinguish(void)
 
 		m_nExtinguishTime = 0;
 		m_bIsOngoing = false;
+		m_bExtinguishedWithWater = false;
 
 		if (m_pEntity) {
 			if (m_pEntity->IsPed()) {
-				((CPed *)m_pEntity)->RestorePreviousState();
-				((CPed *)m_pEntity)->m_pFire = nil;
+				CPed *ped = (CPed*)m_pEntity;
+				if (ped->CanSetPedState()) {
+					if (ped->m_nPedState != PED_DRIVING && ped->m_nPedState != PED_FALL) {
+						if (ped->IsPlayer()) {
+							ped->SetIdle();
+						} else {
+							ped->m_nLastPedState = PED_NONE;
+							ped->SetWanderPath(0);
+							ped->SetWaitState(WAITSTATE_FINISH_FLEE, 0);
+						}
+					}
+				}
+				ped->m_pFire = nil;
 			} else if (m_pEntity->IsVehicle()) {
 				((CVehicle *)m_pEntity)->m_pCarFire = nil;
 			}
@@ -174,7 +201,7 @@ CFire::Extinguish(void)
 }
 
 void
-CFireManager::StartFire(CVector pos, float size, bool propagation)
+CFireManager::StartFire(CVector pos, float size, uint8 propagation)
 {
 	CFire *fire = GetNextFreeFire();
 
@@ -191,11 +218,12 @@ CFireManager::StartFire(CVector pos, float size, bool propagation)
 		fire->m_nNextTimeToAddFlames = 0;
 		fire->ReportThisFire();
 		fire->m_fStrength = size;
+		fire->m_bExtinguishedWithWater = false;
 	}
 }
 
 CFire *
-CFireManager::StartFire(CEntity *entityOnFire, CEntity *fleeFrom, float strength, bool propagation)
+CFireManager::StartFire(CEntity *entityOnFire, CEntity *fleeFrom, float strength, uint8 propagation)
 {
 	CPed *ped = (CPed *)entityOnFire;
 	CVehicle *veh = (CVehicle *)entityOnFire;
@@ -224,6 +252,7 @@ CFireManager::StartFire(CEntity *entityOnFire, CEntity *fleeFrom, float strength
 					ped->SetFlee(pos, 10000);
 					ped->m_fleeFrom = nil;
 				}
+				ped->m_fleeTimer = CTimer::GetTimeInMilliseconds() + 10000;
 				ped->bDrawLast = false;
 				ped->SetMoveState(PEDMOVE_SPRINT);
 				ped->SetMoveAnim();
@@ -241,6 +270,9 @@ CFireManager::StartFire(CEntity *entityOnFire, CEntity *fleeFrom, float strength
 		} else {
 			if (entityOnFire->IsVehicle()) {
 				veh->m_pCarFire = fire;
+				if (CModelInfo::IsBikeModel(veh->GetModelIndex()) || CModelInfo::IsCarModel(veh->GetModelIndex()))
+        				CCarAI::TellOccupantsToFleeCar(veh);
+
 				if (fleeFrom) {
 					CEventList::RegisterEvent(EVENT_CAR_SET_ON_FIRE, EVENT_ENTITY_VEHICLE,
 						entityOnFire, (CPed *)fleeFrom, 10000);
@@ -249,6 +281,7 @@ CFireManager::StartFire(CEntity *entityOnFire, CEntity *fleeFrom, float strength
 		}
 
 		fire->m_bIsOngoing = true;
+		fire->m_bExtinguishedWithWater = false;
 		fire->m_bIsScriptFire = false;
 		fire->m_vecPos = entityOnFire->GetPosition();
 
@@ -287,26 +320,23 @@ CFireManager::Update(void)
 
 CFire* CFireManager::FindNearestFire(CVector vecPos, float *pDistance)
 {
-	for (int i = 0; i < MAX_FIREMEN_ATTENDING; i++) {
-		int fireId = -1;
-		float minDistance = 999999;
-		for (int j = 0; j < NUM_FIRES; j++) {
-			if (!m_aFires[j].m_bIsOngoing)
-				continue;
-			if (m_aFires[j].m_bIsScriptFire)
-				continue;
-			if (m_aFires[j].m_nFiremenPuttingOut != i)
-				continue;
-			float distance = (m_aFires[j].m_vecPos - vecPos).Magnitude2D();
-			if (distance < minDistance) {
-				minDistance = distance;
-				fireId = j;
-			}
+	int fireId = -1;
+	float minDistance = 999999;
+	for (int j = 0; j < NUM_FIRES; j++) {
+		if (!m_aFires[j].m_bIsOngoing)
+			continue;
+		if (m_aFires[j].m_bIsScriptFire)
+			continue;
+		float distance = (m_aFires[j].m_vecPos - vecPos).Magnitude2D();
+		if (distance < minDistance) {
+			minDistance = distance;
+			fireId = j;
 		}
-		*pDistance = minDistance;
-		if (fireId != -1)
-			return &m_aFires[fireId];
 	}
+	*pDistance = minDistance;
+	if (fireId != -1)
+		return &m_aFires[fireId];
+
 	return nil;
 }
 
@@ -359,8 +389,36 @@ CFireManager::ExtinguishPoint(CVector point, float range)
 	}
 }
 
+bool
+CFireManager::ExtinguishPointWithWater(CVector point, float range)
+{
+    int i;
+    for (i = 0; i < NUM_FIRES;) {
+        if (m_aFires[i].m_bIsOngoing && (point - m_aFires[i].m_vecPos).MagnitudeSqr() < sq(range)) {
+                break;
+        }
+        if (++i >= NUM_FIRES)
+          return false;
+    }
+    
+	CFire *fireToExtinguish = &m_aFires[i];
+	fireToExtinguish->m_fWaterExtinguishCountdown -= 0.012f * CTimer::GetTimeStep();
+	CVector steamPos = fireToExtinguish->m_vecPos +
+		CVector((CGeneral::GetRandomNumber() - 128) * 3.1f / 200.f,
+			(CGeneral::GetRandomNumber() - 128) * 3.1f / 200.f,
+			CGeneral::GetRandomNumber() / 200.f);
+
+	CParticle::AddParticle(PARTICLE_STEAM_NY_SLOWMOTION, steamPos, CVector(0.f, 0.f, 0.2f), nil, 0.5f);
+	CParticle::AddParticle(PARTICLE_STEAM_NY_SLOWMOTION, steamPos, CVector(0.f, 0.f, 0.1f), nil, 0.8f);
+	fireToExtinguish->m_bExtinguishedWithWater = true;
+	if (fireToExtinguish->m_fWaterExtinguishCountdown < 0.0f )
+	  fireToExtinguish->Extinguish();
+
+	return true;
+}
+
 int32
-CFireManager::StartScriptFire(const CVector &pos, CEntity *target, float strength, bool propagation)
+CFireManager::StartScriptFire(const CVector &pos, CEntity *target, float strength, uint8 propagation)
 {
 	CFire *fire;
 	CPed *ped = (CPed *)target;
@@ -387,12 +445,15 @@ CFireManager::StartScriptFire(const CVector &pos, CEntity *target, float strengt
 	fire->m_vecPos = pos;
 	fire->m_nStartTime = CTimer::GetTimeInMilliseconds() + 400;
 	fire->m_pEntity = target;
+	fire->m_bExtinguishedWithWater = false;
 
 	if (target)
 		target->RegisterReference(&fire->m_pEntity);
 	fire->m_pSource = nil;
 	fire->m_nNextTimeToAddFlames = 0;
 	fire->m_fStrength = strength;
+	fire->m_fWaterExtinguishCountdown = 1.0f;
+
 	if (target) {
 		if (target->IsPed()) {
 			ped->m_pFire = fire;
@@ -420,8 +481,7 @@ CFireManager::RemoveAllScriptFires(void)
 {
 	for (int i = 0; i < NUM_FIRES; i++) {
 		if (m_aFires[i].m_bIsScriptFire) {
-			m_aFires[i].Extinguish();
-			m_aFires[i].m_bIsScriptFire = false;
+			RemoveScriptFire(i);
 		}
 	}
 }

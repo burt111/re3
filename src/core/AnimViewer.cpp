@@ -12,11 +12,13 @@
 #include "General.h"
 #include "Camera.h"
 #include "Vehicle.h"
+#include "Bike.h"
 #include "PlayerSkin.h"
 #include "PlayerInfo.h"
 #include "World.h"
 #include "Renderer.h"
 #include "AnimManager.h"
+#include "AnimBlendAssocGroup.h"
 #include "AnimViewer.h"
 #include "PlayerPed.h"
 #include "Pools.h"
@@ -45,13 +47,10 @@ CEntity *CAnimViewer::pTarget = nil;
 void
 CAnimViewer::Render(void) {
 	if (pTarget) {
-//		pTarget->GetPosition() = CVector(0.0f, 0.0f, 0.0f); // Only on Mobile
 		if (pTarget) {
 #ifdef FIX_BUGS
-#ifdef PED_SKIN
-			if(pTarget->IsPed() && IsClumpSkinned(pTarget->GetClump()))
+			if(pTarget->IsPed())
 				((CPed*)pTarget)->UpdateRpHAnim();
-#endif
 #endif
 			pTarget->Render();
 			CRenderer::RenderOneNonRoad(pTarget);
@@ -61,13 +60,14 @@ CAnimViewer::Render(void) {
 
 void
 CAnimViewer::Initialise(void) {
-	// we need messages, messages needs hud, hud needs this
+
+	// we need messages, messages needs hud, hud needs those
+	int hudSlot = CTxdStore::AddTxdSlot("hud");
+	CTxdStore::LoadTxd(hudSlot, "MODELS/HUD.TXD");
 	CHud::m_Wants_To_Draw_Hud = false;
 
 	animTxdSlot = CTxdStore::AddTxdSlot("generic");
 	CTxdStore::Create(animTxdSlot);
-	int hudSlot = CTxdStore::AddTxdSlot("hud");
-	CTxdStore::LoadTxd(hudSlot, "MODELS/HUD.TXD");
 	int particleSlot = CTxdStore::AddTxdSlot("particle");
 	CTxdStore::LoadTxd(particleSlot, "MODELS/PARTICLE.TXD");
 	CTxdStore::SetCurrentTxd(animTxdSlot);
@@ -76,7 +76,6 @@ CAnimViewer::Initialise(void) {
 	TheCamera.Init();
 	TheCamera.SetRwCamera(Scene.camera);
 	TheCamera.Cams[TheCamera.ActiveCam].Distance = 5.0f;
-
 	ThePaths.Init();
 	ThePaths.AllocatePathFindInfoMem(4500);
 	CCollision::Init();
@@ -90,14 +89,16 @@ CAnimViewer::Initialise(void) {
 	CPedStats::Initialise();
 	CMessages::Init();
 	CdStreamAddImage("MODELS\\GTA3.IMG");
+	CFileLoader::LoadLevel("DATA\\DEFAULT.DAT");
 	CFileLoader::LoadLevel("DATA\\ANIMVIEWER.DAT");
 	CStreaming::Init();
+	for(int i = 0; i < MODELINFOSIZE; i++)
+		if(CModelInfo::GetModelInfo(i))
+			CModelInfo::GetModelInfo(i)->ConvertAnimFileIndex();
 	CStreaming::LoadInitialPeds();
 	CStreaming::RequestSpecialModel(MI_PLAYER, "player", STREAMFLAGS_DONT_REMOVE);
 	CStreaming::LoadAllRequestedModels(false);
 	CRenderer::Init();
-	CRadar::Initialise();
-	CRadar::LoadTextures();
 	CVehicleModelInfo::LoadVehicleColours();
 #ifdef FIX_BUGS
 	CVehicleModelInfo::LoadEnvironmentMaps();
@@ -105,14 +106,13 @@ CAnimViewer::Initialise(void) {
 	CAnimManager::LoadAnimFiles();
 	CWorld::PlayerInFocus = 0;
 	CWeapon::InitialiseWeapons();
-	CShadows::Init();
 	CPed::Initialise();
 	CTimer::Initialise();
 	CClock::Initialise(60000);
 	CTimeCycle::Initialise();
 	CCarCtrl::Init();
 	CPlayerPed *player = new CPlayerPed();
-	player->SetPosition(0.0f, 0.0f, 0.0f); // This is 1000.f for all axes on Xbox, but 0.f on mobile?
+	player->SetPosition(1000.0f, 1000.0f, 1000.0f);
 	CWorld::Players[0].m_pPed = player;
 	CDraw::SetFOV(120.0f);
 	CDraw::ms_fLODDistance = 500.0f;
@@ -138,12 +138,27 @@ CAnimViewer::Initialise(void) {
 		}
 		CFileMgr::CloseFile(fd);
 	} else {
-		// From xbox
-		CStreaming::RequestSpecialChar(0, "luigi", STREAMFLAGS_DONT_REMOVE);
-		CStreaming::RequestSpecialChar(1, "joey", STREAMFLAGS_DONT_REMOVE);
-		CStreaming::RequestSpecialChar(2, "tony", STREAMFLAGS_DONT_REMOVE);
-		CStreaming::RequestSpecialChar(3, "curly", STREAMFLAGS_DONT_REMOVE);
+		// TODO? maybe request some special models here so the thing doesn't crash
 	}
+
+	// From LCS. idk if needed
+	int vanBlock = CAnimManager::GetAnimationBlockIndex("van");
+	int bikesBlock = CAnimManager::GetAnimationBlockIndex("bikes");
+	int bikevBlock = CAnimManager::GetAnimationBlockIndex("bikev");
+	int bikehBlock = CAnimManager::GetAnimationBlockIndex("bikeh");
+	int bikedBlock = CAnimManager::GetAnimationBlockIndex("biked");
+	CStreaming::FlushRequestList();
+	CStreaming::RequestAnim(vanBlock, STREAMFLAGS_DEPENDENCY);
+	CStreaming::RequestAnim(bikesBlock, STREAMFLAGS_DEPENDENCY);
+	CStreaming::RequestAnim(bikevBlock, STREAMFLAGS_DEPENDENCY);
+	CStreaming::RequestAnim(bikehBlock, STREAMFLAGS_DEPENDENCY);
+	CStreaming::RequestAnim(bikedBlock, STREAMFLAGS_DEPENDENCY);
+	CStreaming::LoadAllRequestedModels(false);
+	CAnimManager::AddAnimBlockRef(vanBlock);
+	CAnimManager::AddAnimBlockRef(bikesBlock);
+	CAnimManager::AddAnimBlockRef(bikevBlock);
+	CAnimManager::AddAnimBlockRef(bikehBlock);
+	CAnimManager::AddAnimBlockRef(bikedBlock);
 }
 
 int
@@ -230,7 +245,7 @@ CAnimViewer::Update(void)
 	if (modelInfo->GetModelType() == MITYPE_PED) {
 		int animGroup = ((CPedModelInfo*)modelInfo)->m_animGroup;
 
-		if (animId > ANIM_STD_IDLE)
+		if (animId > ANIM_IDLE_STANCE)
 			animGroup = ASSOCGRP_STD;
 
 		if (reloadIFP) {
@@ -270,6 +285,8 @@ CAnimViewer::Update(void)
 					pTarget = new CAutomobile(modelId, RANDOM_VEHICLE);
 				} else if (veh->m_vehicleType == VEHICLE_TYPE_BOAT) {
 					pTarget = new CBoat(modelId, RANDOM_VEHICLE);
+				} else if (veh->m_vehicleType == VEHICLE_TYPE_BIKE) {
+					pTarget = new CBike(modelId, RANDOM_VEHICLE);
 				} else {
 					pTarget = new CObject(modelId, true);
 					if (!modelInfo->GetColModel()) {
@@ -300,7 +317,6 @@ CAnimViewer::Update(void)
 		pTarget->GetMatrix().GetPosition().z = 10.0f;
 #else
 		pTarget->GetMatrix().GetPosition().z = 0.0f;
-
 #endif
 
 		if (modelInfo->GetModelType() == MITYPE_PED) {
@@ -318,14 +334,14 @@ CAnimViewer::Update(void)
 				CMessages::AddMessage(gUString, 1000, 0);
 
 			} else if (pad->GetCircleJustDown()) {
-				PlayAnimation(pTarget->GetClump(), animGroup, ANIM_STD_IDLE);
+				PlayAnimation(pTarget->GetClump(), animGroup, ANIM_IDLE_STANCE);
 				AsciiToUnicode("Idle animation playing", gUString);
 				CMessages::AddMessage(gUString, 1000, 0);
 
 			} else if (pad->GetDPadUpJustDown()) {
 				animId--;
 				if (animId < 0) {
-					animId = ANIM_STD_NUM - 1;
+					animId = NUM_STD_ANIMS - 1;
 				}
 				PlayAnimation(pTarget->GetClump(), animGroup, (AnimationId)animId);
 
@@ -334,7 +350,7 @@ CAnimViewer::Update(void)
 				CMessages::AddMessage(gUString, 1000, 0);
 
 			} else if (pad->GetDPadDownJustDown()) {
-				animId = (animId == (ANIM_STD_NUM - 1) ? 0 : animId + 1);
+				animId = (animId == (NUM_STD_ANIMS - 1) ? 0 : animId + 1);
 				PlayAnimation(pTarget->GetClump(), animGroup, (AnimationId)animId);
 
 				sprintf(gString, "Current anim: %d", animId);
@@ -349,16 +365,15 @@ CAnimViewer::Update(void)
 				CMessages::AddMessage(gUString, 1000, 0);
 				// Originally it was GetPad(1)->LeftShoulder2
 			} else if (pad->NewState.Triangle) {
-#ifdef PED_SKIN
-				if(IsClumpSkinned(pTarget->GetClump()))
-					((CPedModelInfo *)CModelInfo::GetModelInfo(pTarget->GetModelIndex()))->AnimatePedColModelSkinned(pTarget->GetClump());
-				else
-#endif
-					CPedModelInfo::AnimatePedColModel(((CPedModelInfo *)CModelInfo::GetModelInfo(pTarget->GetModelIndex()))->GetHitColModel(),
-					                                  RpClumpGetFrame(pTarget->GetClump()));
+				((CPedModelInfo *)CModelInfo::GetModelInfo(pTarget->GetModelIndex()))->AnimatePedColModelSkinned(pTarget->GetClump());
 				AsciiToUnicode("Ped Col model will be animated as long as you hold the button", gUString);
 				CMessages::AddMessage(gUString, 100, 0);
 			}
+
+			// From LCS
+			if (CAnimManager::GetAnimAssocGroups()[animGroup].numAssociations <= animId)
+				animId = 0;
+
 		} else if (modelInfo->GetModelType() == MITYPE_VEHICLE) {
 
 			if (pad->GetLeftShoulder1JustDown()) {

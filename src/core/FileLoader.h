@@ -5,10 +5,11 @@ class CFileLoader
 	static char ms_line[256];
 public:
 	static void LoadLevel(const char *filename);
-	static void LoadCollisionFromDatFile(int currlevel);
 	static char *LoadLine(int fd);
 	static RwTexDictionary *LoadTexDictionary(const char *filename);
-	static void LoadCollisionFile(const char *filename);
+	static void LoadCollisionFile(const char *filename, uint8 colSlot);
+	static bool LoadCollisionFileFirstTime(uint8 *buffer, uint32 size, uint8 colSlot);
+	static bool LoadCollisionFile(uint8 *buffer, uint32 size, uint8 colSlot);
 	static void LoadCollisionModel(uint8 *buf, struct CColModel &model, char *name);
 	static void LoadModelFile(const char *filename);
 	static RpAtomic *FindRelatedModelInfoCB(RpAtomic *atomic, void *data);
@@ -22,16 +23,15 @@ public:
 	static void AddTexDictionaries(RwTexDictionary *dst, RwTexDictionary *src);
 
 	static void LoadObjectTypes(const char *filename);
-	static void LoadObject(const char *line);
-	static int LoadMLO(const char *line);
-	static void LoadMLOInstance(int id, const char *line);
-	static void LoadTimeObject(const char *line);
+	static int LoadObject(const char *line);
+	static int LoadTimeObject(const char *line);
+	static int LoadWeaponObject(const char *line);
 	static void LoadClumpObject(const char *line);
 	static void LoadVehicleObject(const char *line);
 	static void LoadPedObject(const char *line);
-	static int LoadPathHeader(const char *line, char *type);
+	static int LoadPathHeader(const char *line, int &type);
 	static void LoadPedPathNode(const char *line, int id, int node);
-	static void LoadCarPathNode(const char *line, int id, int node);
+	static void LoadCarPathNode(const char *line, int id, int node, bool waterPath);
 	static void Load2dEffect(const char *line);
 
 	static void LoadScene(const char *filename);
@@ -39,8 +39,7 @@ public:
 	static void LoadZone(const char *line);
 	static void LoadCullZone(const char *line);
 	static void LoadPickup(const char *line);
-
-	static void LoadMapZones(const char *filename);
+	static void LoadOcclusionVolume(const char *line);
 
 	static void ReloadPaths(const char *filename);
 	static void ReloadObjectTypes(const char *filename);

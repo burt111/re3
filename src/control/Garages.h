@@ -41,12 +41,24 @@ enum eGarageType
 	GARAGE_FOR_SCRIPT_TO_OPEN_AND_CLOSE,
 	GARAGE_KEEPS_OPENING_FOR_SPECIFIC_CAR,
 	GARAGE_MISSION_KEEPCAR_REMAINCLOSED,
+	GARAGE_COLLECTCARS_4,
+	GARAGE_FOR_SCRIPT_TO_OPEN_FOR_CAR,
+	GARAGE_HIDEOUT_FOUR,
+	GARAGE_HIDEOUT_FIVE,
+	GARAGE_HIDEOUT_SIX,
+	GARAGE_HIDEOUT_SEVEN,
+	GARAGE_HIDEOUT_EIGHT,
+	GARAGE_HIDEOUT_NINE,
+	GARAGE_HIDEOUT_TEN,
+	GARAGE_HIDEOUT_ELEVEN,
+	GARAGE_HIDEOUT_TWELVE
 };
 
 enum
 {
-	TOTAL_COLLECTCARS_GARAGES = GARAGE_COLLECTCARS_3 - GARAGE_COLLECTCARS_1 + 1,
-	TOTAL_COLLECTCARS_CARS = 16
+	TOTAL_COLLECTCARS_GARAGES = 4,
+	TOTAL_HIDEOUT_GARAGES = 12,
+	TOTAL_COLLECTCARS_CARS = 6
 };
 
 class CStoredCar
@@ -83,6 +95,7 @@ class CGarage
 public:
 	uint8 m_eGarageType;
 	uint8 m_eGarageState;
+	uint8 m_nMaxStoredCars;
 	bool field_2; // unused
 	bool m_bClosingWithoutTargetCar;
 	bool m_bDeactivated;
@@ -97,12 +110,17 @@ public:
 	bool m_bRecreateDoorOnNextRefresh;
 	bool m_bRotatedDoor;
 	bool m_bCameraFollowsPlayer;
-	float m_fX1;
-	float m_fX2;
-	float m_fY1;
-	float m_fY2;
-	float m_fZ1;
-	float m_fZ2;
+	CVector2D m_vecCorner1;
+	float m_fInfZ;
+	CVector2D m_vDir1;
+	CVector2D m_vDir2;
+	float m_fSupZ;
+	float m_fDir1Len;
+	float m_fDir2Len;
+	float m_fInfX;
+	float m_fSupX;
+	float m_fInfY;
+	float m_fSupY;
 	float m_fDoorPos;
 	float m_fDoorHeight;
 	float m_fDoor1X;
@@ -114,7 +132,6 @@ public:
 	uint32 m_nTimeToStartAction;
 	uint8 m_bCollectedCarsState;
 	CVehicle *m_pTarget;
-	void* field_96; // unused
 	CStoredCar m_sStoredCar; // not needed
 
 	void OpenThisGarage();
@@ -123,16 +140,16 @@ public:
 	bool IsClosed() { return m_eGarageState == GS_FULLYCLOSED; }
 	bool IsUsed() { return m_eGarageType != GARAGE_NONE; }
 	void Update();
-	float GetGarageCenterX() { return (m_fX1 + m_fX2) / 2; }
-	float GetGarageCenterY() { return (m_fY1 + m_fY2) / 2; }
+	float GetGarageCenterX() { return (m_fInfX + m_fSupX) / 2; }
+	float GetGarageCenterY() { return (m_fInfY + m_fSupY) / 2; }
 	bool IsFar()
 	{ 
 #ifdef FIX_BUGS
 		return Abs(TheCamera.GetPosition().x - GetGarageCenterX()) > SWITCH_GARAGE_DISTANCE_CLOSE ||
 			Abs(TheCamera.GetPosition().y - GetGarageCenterY()) > SWITCH_GARAGE_DISTANCE_CLOSE;
 #else
-		return Abs(TheCamera.GetPosition().x - m_fX1) > SWITCH_GARAGE_DISTANCE_CLOSE || 
-			Abs(TheCamera.GetPosition().y - m_fY1) > SWITCH_GARAGE_DISTANCE_CLOSE;
+		return Abs(TheCamera.GetPosition().x - m_fInfX) > SWITCH_GARAGE_DISTANCE_CLOSE ||
+			Abs(TheCamera.GetPosition().y - m_fInfY) > SWITCH_GARAGE_DISTANCE_CLOSE;
 #endif
 	}
 	void TidyUpGarageClose();
@@ -142,7 +159,6 @@ public:
 	void UpdateDoorsHeight();
 	bool IsEntityEntirelyInside3D(CEntity*, float);
 	bool IsEntityEntirelyOutside(CEntity*, float);
-	bool IsEntityEntirelyInside(CEntity*);
 	float CalcDistToGarageRectangleSquared(float, float);
 	float CalcSmallestDistToGarageDoorSquared(float, float);
 	bool IsAnyOtherCarTouchingGarage(CVehicle* pException);
@@ -171,14 +187,18 @@ public:
 	void MarkThisCarAsCollectedFor60Seconds(int mi);
 	bool IsPlayerEntirelyInsideGarage();
 
-};
+	bool IsPointInsideGarage(CVector);
+	bool IsPointInsideGarage(CVector, float);
+	void ThrowCarsNearDoorOutOfGarage(CVehicle*);
 
-VALIDATE_SIZE(CGarage, 140);
+	int32 FindMaxNumStoredCarsForGarage() { return Min(NUM_GARAGE_STORED_CARS, m_nMaxStoredCars); }
+
+};
 
 class CGarages
 {
 	enum {
-		MESSAGE_LENGTH = 8
+		MESSAGE_LENGTH = 8,
 	};
 public:
 	static int32 BankVansCollected;
@@ -197,9 +217,7 @@ public:
 	static bool PlayerInGarage;
 	static int32 PoliceCarsCollected;
 	static CGarage aGarages[NUM_GARAGES];
-	static CStoredCar aCarsInSafeHouse1[NUM_GARAGE_STORED_CARS];
-	static CStoredCar aCarsInSafeHouse2[NUM_GARAGE_STORED_CARS];
-	static CStoredCar aCarsInSafeHouse3[NUM_GARAGE_STORED_CARS];
+	static CStoredCar aCarsInSafeHouses[TOTAL_HIDEOUT_GARAGES][NUM_GARAGE_STORED_CARS];
 	static bool bCamShouldBeOutisde;
 
 	static void Init(void);
@@ -208,7 +226,7 @@ public:
 #endif
 	static void Update(void);
 
-	static int16 AddOne(CVector pos1, CVector pos2, uint8 type, int32 targetId);
+	static int16 AddOne(float X1, float Y1, float Z1, float X2, float Y2, float X3, float Y3, float Z2, uint8 type, int32 targetId);
 	static void ChangeGarageType(int16, uint8, int32);
 	static void PrintMessages(void);
 	static void TriggerMessage(const char* text, int16, uint16 time, int16);
@@ -241,13 +259,42 @@ public:
 	static void SetFreeBombs(bool bValue) { BombsAreFree = bValue; }
 	static void SetFreeResprays(bool bValue) { RespraysAreFree = bValue; }
 	static void StopCarFromBlowingUp(CAutomobile*);
+	static void SetMaxNumStoredCarsForGarage(int16 garage, uint8 num) { aGarages[garage].m_nMaxStoredCars = num; }
 
 	static bool IsCarSprayable(CVehicle*);
 	static float FindDoorHeightForMI(int32);
 	static void CloseHideOutGaragesBeforeSave(void);
 	static int32 CountCarsInHideoutGarage(uint8);
-	static int32 FindMaxNumStoredCarsForGarage(uint8);
 	static int32 GetBombTypeForGarageType(uint8 type) { return type - GARAGE_BOMBSHOP1 + 1; }
-	static int32 GetCarsCollectedIndexForGarageType(uint8 type) { return type - GARAGE_COLLECTCARS_1; }
+	static int32 GetCarsCollectedIndexForGarageType(uint8 type)
+	{
+		switch (type) {
+		case GARAGE_COLLECTCARS_1: return 0;
+		case GARAGE_COLLECTCARS_2: return 1;
+		case GARAGE_COLLECTCARS_3: return 2;
+		case GARAGE_COLLECTCARS_4: return 3;
+		default: assert(0);
+		}
+		return 0;
+	}
+	static int32 FindSafeHouseIndexForGarageType(uint8 type)
+	{
+		switch (type) {
+		case GARAGE_HIDEOUT_ONE: return 0;
+		case GARAGE_HIDEOUT_TWO: return 1;
+		case GARAGE_HIDEOUT_THREE: return 2;
+		case GARAGE_HIDEOUT_FOUR: return 3;
+		case GARAGE_HIDEOUT_FIVE: return 4;
+		case GARAGE_HIDEOUT_SIX: return 5;
+		case GARAGE_HIDEOUT_SEVEN: return 6;
+		case GARAGE_HIDEOUT_EIGHT: return 7;
+		case GARAGE_HIDEOUT_NINE: return 8;
+		case GARAGE_HIDEOUT_TEN: return 9;
+		case GARAGE_HIDEOUT_ELEVEN: return 10;
+		case GARAGE_HIDEOUT_TWELVE: return 11;
+		}
+		return -1;
+	}
+	static bool IsThisGarageTypeSafehouse(uint8 type) { return FindSafeHouseIndexForGarageType(type) >= 0; }
 
 };

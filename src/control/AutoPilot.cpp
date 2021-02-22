@@ -52,8 +52,8 @@ void CAutoPilot::Save(uint8*& buf)
 	WriteSaveBuf<int32>(buf, m_nCurrentRouteNode);
 	WriteSaveBuf<int32>(buf, m_nNextRouteNode);
 	WriteSaveBuf<int32>(buf, m_nPrevRouteNode);
-	WriteSaveBuf<int32>(buf, m_nTimeEnteredCurve);
-	WriteSaveBuf<int32>(buf, m_nTimeToSpendOnCurrentCurve);
+	WriteSaveBuf<uint32>(buf, m_nTimeEnteredCurve);
+	WriteSaveBuf<uint32>(buf, m_nTimeToSpendOnCurrentCurve);
 	WriteSaveBuf<uint32>(buf, m_nCurrentPathNodeInfo);
 	WriteSaveBuf<uint32>(buf, m_nNextPathNodeInfo);
 	WriteSaveBuf<uint32>(buf, m_nPreviousPathNodeInfo);
@@ -70,6 +70,9 @@ void CAutoPilot::Save(uint8*& buf)
 	WriteSaveBuf<uint32>(buf, m_nTimeTempAction);
 	WriteSaveBuf<float>(buf, m_fMaxTrafficSpeed);
 	WriteSaveBuf<uint8>(buf, m_nCruiseSpeed);
+	WriteSaveBuf<uint8>(buf, m_nCruiseSpeedMultiplierType);
+	SkipSaveBuf(buf, 2);
+	WriteSaveBuf<float>(buf, m_fCruiseSpeedMultiplier);
 	uint8 flags = 0;
 	if (m_bSlowedDownBecauseOfCars) flags |= BIT(0);
 	if (m_bSlowedDownBecauseOfPeds) flags |= BIT(1);
@@ -77,6 +80,7 @@ void CAutoPilot::Save(uint8*& buf)
 	if (m_bStayInFastLane) flags |= BIT(3);
 	if (m_bIgnorePathfinding) flags |= BIT(4);
 	WriteSaveBuf<uint8>(buf, flags);
+	WriteSaveBuf<uint8>(buf, m_nSwitchDistance);
 	SkipSaveBuf(buf, 2);
 	WriteSaveBuf<float>(buf, m_vecDestinationCoors.x);
 	WriteSaveBuf<float>(buf, m_vecDestinationCoors.y);
@@ -91,8 +95,8 @@ void CAutoPilot::Load(uint8*& buf)
 	m_nCurrentRouteNode = ReadSaveBuf<int32>(buf);
 	m_nNextRouteNode = ReadSaveBuf<int32>(buf);
 	m_nPrevRouteNode = ReadSaveBuf<int32>(buf);
-	m_nTimeEnteredCurve = ReadSaveBuf<int32>(buf);
-	m_nTimeToSpendOnCurrentCurve = ReadSaveBuf<int32>(buf);
+	m_nTimeEnteredCurve = ReadSaveBuf<uint32>(buf);
+	m_nTimeToSpendOnCurrentCurve = ReadSaveBuf<uint32>(buf);
 	m_nCurrentPathNodeInfo = ReadSaveBuf<uint32>(buf);
 	m_nNextPathNodeInfo = ReadSaveBuf<uint32>(buf);
 	m_nPreviousPathNodeInfo = ReadSaveBuf<uint32>(buf);
@@ -109,12 +113,16 @@ void CAutoPilot::Load(uint8*& buf)
 	m_nTimeTempAction = ReadSaveBuf<uint32>(buf);
 	m_fMaxTrafficSpeed = ReadSaveBuf<float>(buf);
 	m_nCruiseSpeed = ReadSaveBuf<uint8>(buf);
+	m_nCruiseSpeedMultiplierType = ReadSaveBuf<uint8>(buf);
+	SkipSaveBuf(buf, 2);
+	m_fCruiseSpeedMultiplier = ReadSaveBuf<float>(buf);
 	uint8 flags = ReadSaveBuf<uint8>(buf);
 	m_bSlowedDownBecauseOfCars = !!(flags & BIT(0));
 	m_bSlowedDownBecauseOfPeds = !!(flags & BIT(1));
 	m_bStayInCurrentLevel = !!(flags & BIT(2));
 	m_bStayInFastLane = !!(flags & BIT(3));
 	m_bIgnorePathfinding = !!(flags & BIT(4));
+	m_nSwitchDistance = ReadSaveBuf<uint8>(buf);
 	SkipSaveBuf(buf, 2);
 	m_vecDestinationCoors.x = ReadSaveBuf<float>(buf);
 	m_vecDestinationCoors.y = ReadSaveBuf<float>(buf);

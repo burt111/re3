@@ -116,10 +116,8 @@ typedef ptrdiff_t ssize_t;
 
 #include "config.h"
 
-#ifdef PED_SKIN
 #include <rphanim.h>
 #include <rpskin.h>
-#endif
 
 #ifdef __GNUC__
 #define TYPEALIGN(n) __attribute__ ((aligned (n)))
@@ -148,7 +146,7 @@ inline uint32 ldb(uint32 p, uint32 s, uint32 w)
 #include "skeleton.h"
 #include "Draw.h"
 
-#if defined(PROPER_SCALING) || defined(PS2_HUD)
+#if defined(PROPER_SCALING)
 	#ifdef FORCE_PC_SCALING
 		#define DEFAULT_SCREEN_WIDTH  (640)
 		#define DEFAULT_SCREEN_HEIGHT (448)
@@ -280,11 +278,14 @@ public:
 
 #if (defined(_MSC_VER))
 extern int strcasecmp(const char *str1, const char *str2);
+extern int strncasecmp(const char *str1, const char *str2, size_t len);
 #endif
 
 extern wchar *AllocUnicode(const char*src);
 
 #define clamp(v, low, high) ((v)<(low) ? (low) : (v)>(high) ? (high) : (v))
+
+#define clamp2(v, center, radius) ((v) < (center) ? Max(v, center - radius) : Min(v, center + radius))
 
 inline float sq(float x) { return x*x; }
 #define SQR(x) ((x) * (x))
@@ -365,11 +366,8 @@ __inline__ void TRACE(char *f, ...) { } // this is re3 only, and so the function
 #define _TODO(x)
 #define _TODOCONST(x) (x)
 
-#ifdef CHECK_STRUCT_SIZES
-template<int s, int t> struct check_size {
-	static_assert(s == t, "Invalid structure size");
-};
-#define VALIDATE_SIZE(struc, size) check_size<sizeof(struc), size> struc ## Check
+#ifdef CHECK_STRUCT_SIZES 
+#define VALIDATE_SIZE(struc, size) static_assert(sizeof(struc) == size, "Invalid structure size of " #struc)
 #else
 #define VALIDATE_SIZE(struc, size)
 #endif
@@ -521,6 +519,15 @@ inline void SkipSaveBuf(uint8 *&buf, int32 skip)
 #endif
 }
 
+inline void SkipSaveBuf(uint8*& buf, uint32 &length, int32 skip)
+{
+	buf += skip;
+	length += skip;
+#ifdef VALIDATE_SAVE_SIZE
+	_saveBufCount += skip;
+#endif
+}
+
 template<typename T>
 inline const T ReadSaveBuf(uint8 *&buf)
 {
@@ -530,11 +537,28 @@ inline const T ReadSaveBuf(uint8 *&buf)
 }
 
 template<typename T>
+inline const T ReadSaveBuf(uint8 *&buf, uint32 &length)
+{
+	T &value = *(T*)buf;
+	SkipSaveBuf(buf, length, sizeof(T));
+	return value;
+}
+
+template<typename T>
 inline T *WriteSaveBuf(uint8 *&buf, const T &value)
 {
 	T *p = (T*)buf;
 	*p = value;
 	SkipSaveBuf(buf, sizeof(T));
+	return p;
+}
+
+template<typename T>
+inline T *WriteSaveBuf(uint8 *&buf, uint32 &length, const T &value)
+{
+	T *p = (T*)buf;
+	*p = value;
+	SkipSaveBuf(buf, length, sizeof(T));
 	return p;
 }
 
@@ -548,12 +572,26 @@ inline T *WriteSaveBuf(uint8 *&buf, const T &value)
 	WriteSaveBuf(buf, d);\
 	WriteSaveBuf<uint32>(buf, size);
 
+#define WriteSaveHeaderWithLength(buf,len,a,b,c,d,size) \
+	WriteSaveBuf(buf, len, a);\
+	WriteSaveBuf(buf, len, b);\
+	WriteSaveBuf(buf, len, c);\
+	WriteSaveBuf(buf, len, d);\
+	WriteSaveBuf<uint32>(buf, len, size);
+
 #define CheckSaveHeader(buf,a,b,c,d,size)\
 	assert(ReadSaveBuf<char>(buf) == a);\
 	assert(ReadSaveBuf<char>(buf) == b);\
 	assert(ReadSaveBuf<char>(buf) == c);\
 	assert(ReadSaveBuf<char>(buf) == d);\
 	assert(ReadSaveBuf<uint32>(buf) == size);
+
+#define CheckSaveHeaderWithLength(buf,len,a,b,c,d,size)\
+	assert(ReadSaveBuf<char>(buf,len) == a);\
+	assert(ReadSaveBuf<char>(buf,len) == b);\
+	assert(ReadSaveBuf<char>(buf,len) == c);\
+	assert(ReadSaveBuf<char>(buf,len) == d);\
+	assert(ReadSaveBuf<uint32>(buf,len) == size);
 
 
 void cprintf(char*, ...);

@@ -26,20 +26,6 @@ enum
 	CAM_ZOOM_CINEMATIC,
 };
 
-#ifdef FREE_CAM // LCS values
-#define FREE_CAR_ZOOM_VALUE_1 (-1.0f)
-#define FREE_CAR_ZOOM_VALUE_2 (2.0f)
-#define FREE_CAR_ZOOM_VALUE_3 (6.0f)
-
-#define FREE_BOAT_ZOOM_VALUE_1 (-2.41f)
-#define FREE_BOAT_ZOOM_VALUE_2 (6.49f)
-#define FREE_BOAT_ZOOM_VALUE_3 (15.0f)
-#endif
-
-#define DEFAULT_CAR_ZOOM_VALUE_1 (0.05f)
-#define DEFAULT_CAR_ZOOM_VALUE_2 (1.9f)
-#define DEFAULT_CAR_ZOOM_VALUE_3 (3.9f)
-
 const float DefaultFOV = 70.0f; // beta: 80.0f
 
 class CCam
@@ -85,13 +71,15 @@ public:
 		MODE_SPECIAL_FIXED_FOR_SYPHON,
 		MODE_FIGHT_CAM,
 		MODE_TOP_DOWN_PED,
+		MODE_LIGHTHOUSE,
 		MODE_SNIPER_RUNABOUT,
 		MODE_ROCKETLAUNCHER_RUNABOUT,
 		MODE_1STPERSON_RUNABOUT,
 		MODE_M16_1STPERSON_RUNABOUT,
 		MODE_FIGHT_CAM_RUNABOUT,
 		MODE_EDITOR,
-		MODE_HELICANNON_1STPERSON, // vice city leftover
+		MODE_HELICANNON_1STPERSON,
+		MODE_CAMERA,
 	};
 
 	bool    bBelowMinDist; //used for follow ped mode
@@ -121,7 +109,6 @@ public:
 	float   f_Roll; //used for adding a slight roll to the camera in the
 	float	f_rollSpeed;
 	float   m_fSyphonModeTargetZOffSet;
-	float	m_fRoadOffSet;
 	float   m_fAmountFractionObscured;
 	float   m_fAlphaSpeedOverOneFrame;
 	float   m_fBetaSpeedOverOneFrame;
@@ -144,7 +131,8 @@ public:
 	float   m_fRealGroundDist; //used for follow ped mode
 	float   m_fTargetBeta;
 	float   m_fTimeElapsedFloat;  
-  
+	float   m_fTilt;
+	float   m_fTiltSpeed;
 	float   m_fTransitionBeta;
 	float   m_fTrueBeta;
 	float   m_fTrueAlpha;
@@ -161,6 +149,16 @@ public:
 	float   CA_MIN_DISTANCE;
 	float   CA_MAX_DISTANCE;
 	float   SpeedVar;
+
+	float m_fTargetZoomGroundOne;
+	float m_fTargetZoomGroundTwo;
+	float m_fTargetZoomGroundThree;
+	float m_fTargetZoomOneZExtra;
+	float m_fTargetZoomTwoZExtra;
+	float m_fTargetZoomThreeZExtra;
+	float m_fTargetZoomZCloseIn;
+	float m_fMinRealGroundDist;
+	float m_fTargetCloseInDist;
 
 	CVector m_cvecSourceSpeedOverOneFrame;
 	CVector m_cvecTargetSpeedOverOneFrame;
@@ -194,13 +192,11 @@ public:
 	void ProcessSpecialHeightRoutines(void);
 	void GetVectorsReadyForRW(void);
 	CVector DoAverageOnVector(const CVector &vec);
-	float GetPedBetaAngleForClearView(const CVector &Target, float Dist, float BetaOffset, bool checkBuildings, bool checkVehicles, bool checkPeds, bool checkObjects, bool checkDummies);
-	void WorkOutCamHeightWeeCar(CVector &TargetCoors, float TargetOrientation);
 	void WorkOutCamHeight(const CVector &TargetCoors, float TargetOrientation, float TargetHeight);
 	bool RotCamIfInFrontCar(CVector &TargetCoors, float TargetOrientation);
-	bool FixCamIfObscured(CVector &TargetCoors, float TargetHeight, float TargetOrientation);
 	void Cam_On_A_String_Unobscured(const CVector &TargetCoors, float BaseDist);
 	void FixCamWhenObscuredByVehicle(const CVector &TargetCoors);
+	bool GetBoatLook_L_R_HeightOffset(float &Offset);
 	void LookBehind(void);
 	void LookLeft(void);
 	void LookRight(void);
@@ -233,42 +229,29 @@ public:
 	void Process_BehindBoat(const CVector &CameraTarget, float TargetOrientation, float, float);
 	void Process_Fight_Cam(const CVector &CameraTarget, float TargetOrientation, float, float);
 	void Process_FlyBy(const CVector&, float, float, float);
-	void Process_WheelCam(const CVector&, float, float, float);
+	bool Process_WheelCam(const CVector&, float, float, float);
 	void Process_Fixed(const CVector &CameraTarget, float, float, float);
 	void Process_Player_Fallen_Water(const CVector &CameraTarget, float TargetOrientation, float, float);
-	void Process_Circle(const CVector &CameraTarget, float, float, float);
 	void Process_SpecialFixedForSyphon(const CVector &CameraTarget, float, float, float);
+	void Process_LightHouse(const CVector &CameraTarget, float, float, float);
 	void ProcessPedsDeadBaby(void);
 	bool ProcessArrestCamOne(void);
 	bool ProcessArrestCamTwo(void);
-
-	/* Some of the unused PS2 cams */
-	void Process_Chris_With_Binding_PlusRotation(const CVector &CameraTarget, float, float, float);
-	void Process_ReactionCam(const CVector &CameraTarget, float TargetOrientation, float, float);
-	void Process_FollowPed_WithBinding(const CVector &CameraTarget, float TargetOrientation, float, float);
-	// TODO:
-	// CCam::Process_CushyPillows_Arse
-	// CCam::Process_Look_At_Cars
-	// CCam::Process_CheesyZoom
-	// CCam::Process_Aiming
-	void Process_Bill(const CVector &CameraTarget, float TargetOrientation, float SpeedVar, float TargetSpeedVar);
-	void Process_Im_The_Passenger_Woo_Woo(const CVector &CameraTarget, float TargetOrientation, float, float);
-	void Process_Blood_On_The_Tracks(const CVector &CameraTarget, float TargetOrientation, float, float);
-	void Process_Cam_Running_Side_Train(const CVector &CameraTarget, float TargetOrientation, float, float);
-	void Process_Cam_On_Train_Roof(const CVector &CameraTarget, float TargetOrientation, float, float);
+	bool GetLookAlongGroundPos(CEntity *Target, CPed *Cop, CVector &TargetCoors, CVector &SourceOut);
+	bool GetLookFromLampPostPos(CEntity *Target, CPed *Cop, CVector &TargetCoors, CVector &SourceOut);
+	bool GetLookOverShoulderPos(CEntity *Target, CPed *Cop, CVector &TargetCoors, CVector &SourceOut);
 
 	// custom stuff
 	void Process_FollowPed_Rotation(const CVector &CameraTarget, float TargetOrientation, float, float);
 	void Process_FollowCar_SA(const CVector &CameraTarget, float TargetOrientation, float, float);
 };
 
-VALIDATE_SIZE(CCam, 0x1A4);
-
 class CCamPathSplines
 {
 public:
 	enum {MAXPATHLENGTH=800};
-	float m_arr_PathData[MAXPATHLENGTH];
+//	float m_arr_PathData[MAXPATHLENGTH];
+	float *m_arr_PathData;
 	CCamPathSplines(void);
 };
 
@@ -350,13 +333,14 @@ public:
 	bool m_bcutsceneFinished;
 	bool m_bCullZoneChecksOn;
 	bool m_bFirstPersonBeingUsed;
-	bool m_bUnknown;
+	bool m_bJustJumpedOutOf1stPersonBecauseOfTarget;
 	bool m_bIdleOn;
 	bool m_bInATunnelAndABigVehicle;
 	bool m_bInitialNodeFound;
 	bool m_bInitialNoNodeStaticsSet;
 	bool m_bIgnoreFadingStuffForMusic;
 	bool m_bPlayerIsInGarage;
+	bool m_bPlayerWasOnBike;
 	bool m_bJustCameOutOfGarage;
 	bool m_bJustInitalised;
 	bool m_bJust_Switched;
@@ -381,6 +365,9 @@ public:
 	bool m_WideScreenOn;
 	bool m_1rstPersonRunCloseToAWall;
 	bool m_bHeadBob;
+	bool m_bVehicleSuspenHigh;
+	bool m_bEnable1rstPersonCamCntrlsScript;
+	bool m_bAllow1rstPersonWeaponsCamera;
 	bool m_bFailedCullZoneTestPreviously;
 
 	bool m_FadeTargetIsSplashScreen;
@@ -396,15 +383,16 @@ public:
 	uint8   m_uiTransitionState;        // 0:one mode 1:transition
 
 	uint32 m_uiTimeLastChange;
+	uint32 m_uiTimeWeLeftIdle_StillNoInput;
 	uint32 m_uiTimeWeEnteredIdle;
 	uint32 m_uiTimeTransitionStart;
 	uint32 m_uiTransitionDuration;
+	uint32 m_uiTransitionDurationTargetCoors;
 	int m_BlurBlue;
 	int m_BlurGreen;
 	int m_BlurRed;
 	int m_BlurType;
 
-	uint32    unknown;	// some counter having to do with music
 	int m_iWorkOutSpeedThisNumFrames;
 	int m_iNumFramesSoFar;
 
@@ -427,12 +415,9 @@ public:
 	float CarZoomValueSmooth;
 
 	float DistanceToWater;
-#ifndef PS2_CAM_TRANSITION
 	float FOVDuringInter;
-#endif
 	float LODDistMultiplier;
 	float GenerationDistMultiplier;
-#ifndef PS2_CAM_TRANSITION
 	float m_fAlphaSpeedAtStartInter;
 	float m_fAlphaWhenInterPol;
 	float m_fAlphaDuringInterPol;
@@ -443,7 +428,6 @@ public:
 	float m_fFOVSpeedAtStartInter;
 	float m_fStartingBetaForInterPol;
 	float m_fStartingAlphaForInterPol;
-#endif
 	float m_PedOrientForBehindOrInFront;
 	float m_CameraAverageSpeed;
 	float m_CameraSpeedSoFar;
@@ -468,17 +452,18 @@ public:
 	float PedZoomIndicator;
 #endif
 	float PlayerExhaustion;
-	float SoundDistUp, SoundDistLeft, SoundDistRight;
-	float SoundDistUpAsRead, SoundDistLeftAsRead, SoundDistRightAsRead;
-	float SoundDistUpAsReadOld, SoundDistLeftAsReadOld, SoundDistRightAsReadOld;
+	float SoundDistUp;
+	float SoundDistUpAsRead;
+	float SoundDistUpAsReadOld;
+	float m_fAvoidTheGeometryProbsTimer;
+	int16 m_nAvoidTheGeometryProbsDirn;
 	float m_fWideScreenReductionAmount;
 	float m_fStartingFOVForInterPol;
 
-	// not static yet
-	float m_fMouseAccelHorzntl;// acceleration multiplier for 1st person controls
-	float m_fMouseAccelVertical;// acceleration multiplier for 1st person controls
-	float m_f3rdPersonCHairMultX;
-	float m_f3rdPersonCHairMultY;
+	static float m_fMouseAccelHorzntl;// acceleration multiplier for 1st person controls
+	static float m_fMouseAccelVertical;// acceleration multiplier for 1st person controls
+	static float m_f3rdPersonCHairMultX;
+	static float m_f3rdPersonCHairMultY;
 
 
 	CCam Cams[3];
@@ -493,7 +478,7 @@ public:
 	CVector m_vecFixedModeSource;
 	CVector m_vecFixedModeUpOffSet;
 	CVector m_vecCutSceneOffset;
-#ifndef PS2_CAM_TRANSITION
+
 	CVector m_cvecStartingSourceForInterPol;
 	CVector m_cvecStartingTargetForInterPol;
 	CVector m_cvecStartingUpForInterPol;
@@ -503,17 +488,17 @@ public:
 	CVector m_vecSourceWhenInterPol;
 	CVector m_vecTargetWhenInterPol;
 	CVector m_vecUpWhenInterPol;
-#endif
+	CVector m_vecClearGeometryVec;
 	CVector m_vecGameCamPos;
-#ifndef PS2_CAM_TRANSITION
 	CVector SourceDuringInter;
 	CVector TargetDuringInter;
 	CVector UpDuringInter;
-#endif
 	RwCamera *m_pRwCamera;
 	CEntity *pTargetEntity;
 	CCamPathSplines m_arrPathArray[MAX_NUM_OF_SPLINETYPES];
+#ifdef GTA_TRAIN
 	CTrainCamNode m_arrTrainCamNode[MAX_NUM_OF_NODES];
+#endif
 	CMatrix m_cameraMatrix;
 	bool m_bGarageFixedCamPositionSet;
 	bool m_vecDoingSpecialInterPolation;
@@ -532,6 +517,8 @@ public:
 	float m_fTimeToFadeMusic;
 	float m_fFractionInterToStopMoving;
 	float m_fFractionInterToStopCatchUp;
+	float m_fFractionInterToStopMovingTarget;
+	float m_fFractionInterToStopCatchUpTarget;
 	float m_fGaitSwayBuffer;
 	float m_fScriptPercentageInterToStopMoving;
 	float m_fScriptPercentageInterToCatchUp;
@@ -555,7 +542,6 @@ public:
 
 	// High level and misc
 	CCamera(void);
-	CCamera(float);
 	void Init(void);
 	void Process(void);
 	void CamControl(void);
@@ -564,6 +550,9 @@ public:
 	void InitialiseCameraForDebugMode(void);
 	void CamShake(float strength, float x, float y, float z);
 	bool Get_Just_Switched_Status() { return m_bJust_Switched; }
+	void AvoidTheGeometry(const CVector &Source, const CVector &TargetPos, CVector &NewSource, float FOV);
+	void GetArrPosForVehicleType(int apperance, int &index);
+	void GetScreenRect(CRect &rect);
 
 	// Who's in control
 	void TakeControl(CEntity *target, int16 mode, int16 typeOfSwitch, int32 controller);
@@ -589,6 +578,7 @@ public:
 	bool TryToStartNewCamMode(int32 obbeMode);
 	void DontProcessObbeCinemaCamera(void);
 	void ProcessObbeCinemaCameraCar(void);
+	void ProcessObbeCinemaCameraHeli(void);
 	void ProcessObbeCinemaCameraPed(void);
 
 	// Train
@@ -597,6 +587,7 @@ public:
 
 	// Script
 	void LoadPathSplines(int file);
+	void DeleteCutSceneCamDataMemory(void);
 	void FinishCutscene(void);
 	float GetPositionAlongSpline(void) { return m_fPositionAlongSpline; }
 	uint32 GetCutSceneFinishTime(void);
@@ -632,6 +623,7 @@ public:
 	void UpdateAimingCoors(CVector const &coors);
 	bool Find3rdPersonCamTargetVector(float dist, CVector pos, CVector &source, CVector &target);
 	float Find3rdPersonQuickAimPitch(void);
+	bool Using1stPersonWeaponMode(void);
 
 	// Physical camera
 	void SetRwCamera(RwCamera *cam);

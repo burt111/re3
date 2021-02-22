@@ -88,7 +88,7 @@ static int32 NextValidModelId(int32 mi, int32 step)
 			continue;
 		if (pInfo->GetModelType() == MITYPE_PED
 #ifdef FIX_BUGS
-			&& !(i >= MI_SPECIAL01 && i <= MI_SPECIAL04)
+			&& !(i >= MI_SPECIAL01 && i <= MI_SPECIAL21)
 #endif
 			|| pInfo->GetModelType() == MITYPE_VEHICLE &&
 #ifdef FIX_BUGS
@@ -269,7 +269,7 @@ void CSceneEdit::Draw(void)
 	CFont::SetRightJustifyWrap(0.0f);
 	CFont::SetBackGroundOnlyTextOff();
 #ifdef FIX_BUGS
-	CFont::SetFontStyle(FONT_BANK);
+	CFont::SetFontStyle(FONT_STANDARD);
 	CFont::SetPropOn();
 	CFont::SetDropColor(CRGBA(0, 0, 0, 255));
 	CFont::SetDropShadowPosition(1);
@@ -312,7 +312,7 @@ void CSceneEdit::Draw(void)
 	CFont::SetScale(0.7f, 0.7f);
 #endif
 #ifdef FIX_BUGS
-	CFont::SetFontStyle(FONT_BANK);
+	CFont::SetFontStyle(FONT_STANDARD);
 #else
 	CFont::SetFontStyle(FONT_HEADING);
 #endif
@@ -1098,7 +1098,7 @@ bool CSceneEdit::SelectWeapon(void)
 	}
 	if (CPad::GetPad(1)->GetLeftShoulder1JustDown()) {
 		if (++m_nWeaponType >= WEAPONTYPE_DETONATOR)
-			m_nWeaponType = WEAPONTYPE_BASEBALLBAT;
+			m_nWeaponType = WEAPONTYPE_BRASSKNUCKLE;
 		pActors[m_nActor]->ClearWeapons();
 		pActors[m_nActor]->GiveWeapon((eWeaponType)m_nWeaponType, 1000);
 		pActors[m_nActor]->AddWeaponModel(CWeaponInfo::GetWeaponInfo(pActors[m_nActor]->GetWeapon()->m_eWeaponType)->m_nModelId);
@@ -1106,7 +1106,7 @@ bool CSceneEdit::SelectWeapon(void)
 	}
 	else if (CPad::GetPad(1)->GetRightShoulder1JustDown()){
 		if (--m_nWeaponType <= WEAPONTYPE_UNARMED)
-			m_nWeaponType = WEAPONTYPE_GRENADE;
+			m_nWeaponType = WEAPONTYPE_MINIGUN;
 		pActors[m_nActor]->ClearWeapons();
 		pActors[m_nActor]->GiveWeapon((eWeaponType)m_nWeaponType, 1000);
 		pActors[m_nActor]->AddWeaponModel(CWeaponInfo::GetWeaponInfo(pActors[m_nActor]->GetWeapon()->m_eWeaponType)->m_nModelId);

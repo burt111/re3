@@ -1,19 +1,22 @@
 #include "common.h"
 #ifdef GTA_REPLAY
+#include "AnimBlendAssocGroup.h"
 #include "AnimBlendAssociation.h"
+#include "Bike.h"
 #include "Boat.h"
 #include "SpecialFX.h"
 #include "CarCtrl.h"
 #include "CivilianPed.h"
+#include "CopPed.h"
 #include "Wanted.h"
 #include "Clock.h"
 #include "DMAudio.h"
 #include "Draw.h"
+#include "Explosion.h"
 #include "FileMgr.h"
-#ifdef FIX_BUGS
 #include "Fire.h"
+#include "Frontend.h"
 #include "Garages.h"
-#endif
 #include "Heli.h"
 #include "main.h"
 #include "Matrix.h"
@@ -21,15 +24,15 @@
 #include "ModelInfo.h"
 #include "Object.h"
 #include "Pad.h"
+#include "Particle.h"
+#include "PedAttractor.h"
 #include "Phones.h"
 #include "Pickups.h"
 #include "Plane.h"
 #include "Pools.h"
 #include "Population.h"
-#ifdef FIX_BUGS
 #include "Projectile.h"
 #include "ProjectileInfo.h"
-#endif
 #include "Replay.h"
 #include "References.h"
 #include "Pools.h"
@@ -37,6 +40,7 @@
 #include "RwHelper.h"
 #include "CutsceneMgr.h"
 #include "Skidmarks.h"
+#include "Stinger.h"
 #include "Streaming.h"
 #include "Timer.h"
 #include "Train.h"
@@ -46,6 +50,8 @@
 #include "Text.h"
 #include "Camera.h"
 #include "Radar.h"
+#include "Fluff.h"
+#include "WaterCreatures.h"
 
 uint8 CReplay::Mode;
 CAddressInReplayBuffer CReplay::Record;
@@ -55,7 +61,7 @@ CAutomobile *CReplay::pBuf1;
 uint8 *CReplay::pBuf2;
 CPlayerPed *CReplay::pBuf3;
 uint8 *CReplay::pBuf4;
-CCutsceneHead *CReplay::pBuf5;
+CCutsceneObject *CReplay::pBuf5;
 uint8 *CReplay::pBuf6;
 CPtrNode *CReplay::pBuf7;
 uint8 *CReplay::pBuf8;
@@ -109,12 +115,32 @@ bool CReplay::bPlayerInRCBuggy;
 float CReplay::fDistanceLookAroundCam;
 float CReplay::fBetaAngleLookAroundCam;
 float CReplay::fAlphaAngleLookAroundCam;
-#ifdef FIX_BUGS
+int CReplay::ms_nNumCivMale_Stored;
+int CReplay::ms_nNumCivFemale_Stored;
+int CReplay::ms_nNumCop_Stored;
+int CReplay::ms_nNumEmergency_Stored;
+int CReplay::ms_nNumGang1_Stored;
+int CReplay::ms_nNumGang2_Stored;
+int CReplay::ms_nNumGang3_Stored;
+int CReplay::ms_nNumGang4_Stored;
+int CReplay::ms_nNumGang5_Stored;
+int CReplay::ms_nNumGang6_Stored;
+int CReplay::ms_nNumGang7_Stored;
+int CReplay::ms_nNumGang8_Stored;
+int CReplay::ms_nNumGang9_Stored;
+int CReplay::ms_nNumDummy_Stored;
+int CReplay::ms_nTotalCarPassengerPeds_Stored;
+int CReplay::ms_nTotalCivPeds_Stored;
+int CReplay::ms_nTotalGangPeds_Stored;
+int CReplay::ms_nTotalPeds_Stored;
+int CReplay::ms_nTotalMissionPeds_Stored;
 uint8* CReplay::pGarages;
 CFire* CReplay::FireArray;
 uint32 CReplay::NumOfFires;
 uint8* CReplay::paProjectileInfo;
 uint8* CReplay::paProjectiles;
+uint8 CReplay::CurrArea;
+#ifdef FIX_BUGS
 int CReplay::nHandleOfPlayerPed[NUMPLAYERS];
 #endif
 
@@ -123,9 +149,15 @@ static void(*CBArray[])(CAnimBlendAssociation*, void*) =
 	nil, &CPed::PedGetupCB, &CPed::PedStaggerCB, &CPed::PedEvadeCB, &CPed::FinishDieAnimCB,
 	&CPed::FinishedWaitCB, &CPed::FinishLaunchCB, &CPed::FinishHitHeadCB, &CPed::PedAnimGetInCB, &CPed::PedAnimDoorOpenCB,
 	&CPed::PedAnimPullPedOutCB, &CPed::PedAnimDoorCloseCB, &CPed::PedSetInCarCB, &CPed::PedSetOutCarCB, &CPed::PedAnimAlignCB,
-	&CPed::PedSetDraggedOutCarCB, &CPed::PedAnimStepOutCarCB, &CPed::PedSetInTrainCB, &CPed::PedSetOutTrainCB, &CPed::FinishedAttackCB,
+	&CPed::PedSetDraggedOutCarCB, &CPed::PedAnimStepOutCarCB, &CPed::PedSetInTrainCB,
+#ifdef GTA_TRAIN
+	&CPed::PedSetOutTrainCB,
+#endif
+	&CPed::FinishedAttackCB,
 	&CPed::FinishFightMoveCB, &PhonePutDownCB, &PhonePickUpCB, &CPed::PedAnimDoorCloseRollingCB, &CPed::FinishJumpCB,
-	&CPed::PedLandCB, &FinishFuckUCB, &CPed::RestoreHeadingRateCB, &CPed::PedSetQuickDraggedOutCarPositionCB, &CPed::PedSetDraggedOutCarPositionCB
+	&CPed::PedLandCB, &CPed::RestoreHeadingRateCB, &CPed::PedSetQuickDraggedOutCarPositionCB, &CPed::PedSetDraggedOutCarPositionCB,
+	&CPed::PedSetPreviousStateCB, &CPed::FinishedReloadCB, &CPed::PedSetGetInCarPositionCB,
+	&CPed::PedAnimShuffleCB, &CPed::DeleteSunbatheIdleAnimCB, &StartTalkingOnMobileCB, &FinishTalkingOnMobileCB
 };
 
 static uint8 FindCBFunctionID(void(*f)(CAnimBlendAssociation*, void*))
@@ -221,6 +253,7 @@ void CReplay::Init(void)
 	SlowMotion = 1;
 	FramesActiveLookAroundCam = 0;
 	bDoLoadSceneWhenDone = false;
+	MarkEverythingAsNew();
 }
 
 void CReplay::DisableReplays(void)
@@ -236,8 +269,10 @@ void CReplay::EnableReplays(void)
 void PlayReplayFromHD(void);
 void CReplay::Update(void)
 {
-	if (CCutsceneMgr::IsCutsceneProcessing() || CTimer::GetIsPaused())
+	if (CCutsceneMgr::IsCutsceneProcessing() || CPad::GetPad(0)->ArePlayerControlsDisabled() || CScriptPaths::IsOneActive() || FrontEndMenuManager.GetIsMenuActive()) {
+		Init();
 		return;
+	}
 	switch (Mode){
 	case MODE_RECORD:
 		RecordThisFrame();
@@ -268,13 +303,16 @@ void CReplay::Update(void)
 
 void CReplay::RecordThisFrame(void)
 {
-#ifdef FIX_REPLAY_BUGS
-	uint32 memory_required = sizeof(tGeneralPacket) + sizeof(tClockPacket) + sizeof(tWeatherPacket) + sizeof(tTimerPacket);
+	uint32 memory_required = sizeof(tGeneralPacket) + sizeof(tClockPacket) + sizeof(tWeatherPacket) + sizeof(tTimerPacket) + sizeof(tMiscPacket);
 	CVehiclePool* vehiclesT = CPools::GetVehiclePool();
 	for (int i = 0; i < vehiclesT->GetSize(); i++) {
 		CVehicle* v = vehiclesT->GetSlot(i);
-		if (v && v->m_rwObject && v->GetModelIndex() != MI_AIRTRAIN && v->GetModelIndex() != MI_TRAIN)
-			memory_required += sizeof(tVehicleUpdatePacket);
+		if (v && v->m_rwObject && v->GetModelIndex() != MI_AIRTRAIN && v->GetModelIndex() != MI_TRAIN) {
+			if (v->IsBike())
+				memory_required += sizeof(tBikeUpdatePacket);
+			else
+				memory_required += sizeof(tVehicleUpdatePacket);
+		}
 	}
 	CPedPool* pedsT = CPools::GetPedPool();
 	for (int i = 0; i < pedsT->GetSize(); i++) {
@@ -292,17 +330,8 @@ void CReplay::RecordThisFrame(void)
 		memory_required += sizeof(tBulletTracePacket);
 	}
 	memory_required += sizeof(tEndOfFramePacket) + 1; // 1 for Record.m_pBase[Record.m_nOffset] = REPLAYPACKET_END;
-	if (Record.m_nOffset + memory_required > REPLAYBUFFERSIZE) {
-		Record.m_pBase[Record.m_nOffset] = REPLAYPACKET_END;
-		BufferStatus[Record.m_bSlot] = REPLAYBUFFER_PLAYBACK;
-		Record.m_bSlot = (Record.m_bSlot + 1) % NUM_REPLAYBUFFERS;
-		BufferStatus[Record.m_bSlot] = REPLAYBUFFER_RECORD;
-		Record.m_pBase = Buffers[Record.m_bSlot];
-		Record.m_nOffset = 0;
-		*Record.m_pBase = REPLAYPACKET_END;
-		MarkEverythingAsNew();
-	}
-#endif
+	if (Record.m_nOffset + memory_required > REPLAYBUFFERSIZE - 16)
+		GoToNextBlock();
 	tGeneralPacket* general = (tGeneralPacket*)&Record.m_pBase[Record.m_nOffset];
 	general->type = REPLAYPACKET_GENERAL;
 	general->camera_pos.CopyOnlyMatrix(TheCamera.GetMatrix());
@@ -327,8 +356,12 @@ void CReplay::RecordThisFrame(void)
 	CVehiclePool* vehicles = CPools::GetVehiclePool();
 	for (int i = 0; i < vehicles->GetSize(); i++){
 		CVehicle* v = vehicles->GetSlot(i);
-		if (v && v->m_rwObject && v->GetModelIndex() != MI_AIRTRAIN && v->GetModelIndex() != MI_TRAIN)
-			StoreCarUpdate(v, i);
+		if (v && v->m_rwObject && v->GetModelIndex() != MI_AIRTRAIN && v->GetModelIndex() != MI_TRAIN) {
+			if (v->IsBike())
+				StoreBikeUpdate(v, i);
+			else
+				StoreCarUpdate(v, i);
+		}
 	}
 	CPedPool* peds = CPools::GetPedPool();
 	for (int i = 0; i < peds->GetSize(); i++) {
@@ -352,23 +385,27 @@ void CReplay::RecordThisFrame(void)
 		tBulletTracePacket* bt = (tBulletTracePacket*)&Record.m_pBase[Record.m_nOffset];
 		bt->type = REPLAYPACKET_BULLET_TRACES;
 		bt->index = i;
-		bt->frames = CBulletTraces::aTraces[i].m_framesInUse;
-		bt->lifetime = CBulletTraces::aTraces[i].m_lifeTime;
-		bt->inf = CBulletTraces::aTraces[i].m_vecCurrentPos;
-		bt->sup = CBulletTraces::aTraces[i].m_vecTargetPos;
+		bt->inf = CBulletTraces::aTraces[i].m_vecStartPos;
+		bt->sup = CBulletTraces::aTraces[i].m_vecEndPos;
 		Record.m_nOffset += sizeof(*bt);
 	}
+	tMiscPacket* misc = (tMiscPacket*)&Record.m_pBase[Record.m_nOffset];
+	misc->type = REPLAYPACKET_MISC;
+	misc->cam_shake_start = TheCamera.m_uiCamShakeStart;
+	misc->cam_shake_strength = TheCamera.m_fCamShakeForce;
+	misc->cur_area = CGame::currArea;
+	misc->video_cam = CSpecialFX::bVideoCam;
+	misc->lift_cam = CSpecialFX::bLiftCam;
+	Record.m_nOffset += sizeof(*misc);
 	tEndOfFramePacket* eof = (tEndOfFramePacket*)&Record.m_pBase[Record.m_nOffset];
 	eof->type = REPLAYPACKET_ENDOFFRAME;
 	Record.m_nOffset += sizeof(*eof);
 	Record.m_pBase[Record.m_nOffset] = REPLAYPACKET_END;
-#ifndef FIX_REPLAY_BUGS
-	if (Record.m_nOffset <= REPLAYBUFFERSIZE - 3000){
-		/* Unsafe assumption which can cause buffer overflow
-		 * if size of next frame exceeds 3000 bytes.
-		 * Most notably it causes various timecyc errors. */
-		return;
-	}
+}
+
+void CReplay::GoToNextBlock(void)
+{
+	Record.m_pBase[Record.m_nOffset] = REPLAYPACKET_END;
 	BufferStatus[Record.m_bSlot] = REPLAYBUFFER_PLAYBACK;
 	Record.m_bSlot = (Record.m_bSlot + 1) % NUM_REPLAYBUFFERS;
 	BufferStatus[Record.m_bSlot] = REPLAYBUFFER_RECORD;
@@ -376,7 +413,28 @@ void CReplay::RecordThisFrame(void)
 	Record.m_nOffset = 0;
 	*Record.m_pBase = REPLAYPACKET_END;
 	MarkEverythingAsNew();
-#endif
+}
+
+void CReplay::RecordParticle(tParticleType type, const CVector& vecPos, const CVector& vecDir, float fSize, const RwRGBA& color)
+{
+	if (Record.m_nOffset > REPLAYBUFFERSIZE - 16 - sizeof(tParticlePacket))
+		GoToNextBlock();
+	tParticlePacket* pp = (tParticlePacket*)&Record.m_pBase[Record.m_nOffset];
+	pp->type = REPLAYPACKET_PARTICLE;
+	pp->particle_type = type;
+	pp->pos_x = 4.0f * vecPos.x;
+	pp->pos_y = 4.0f * vecPos.y;
+	pp->pos_z = 4.0f * vecPos.z;
+	pp->dir_x = 120.0f * clamp(vecDir.x, -1.0f, 1.0f);
+	pp->dir_y = 120.0f * clamp(vecDir.y, -1.0f, 1.0f);
+	pp->dir_z = 120.0f * clamp(vecDir.z, -1.0f, 1.0f);
+	pp->size = fSize;
+	pp->r = color.red;
+	pp->g = color.green;
+	pp->b = color.blue;
+	pp->a = color.alpha;
+	Record.m_nOffset += sizeof(tParticlePacket);
+	Record.m_pBase[Record.m_nOffset] = REPLAYPACKET_END;
 }
 
 void CReplay::StorePedUpdate(CPed *ped, int id)
@@ -387,6 +445,7 @@ void CReplay::StorePedUpdate(CPed *ped, int id)
 	pp->heading = 128.0f / PI * ped->m_fRotationCur;
 	pp->matrix.CompressFromFullMatrix(ped->GetMatrix());
 	pp->assoc_group_id = ped->m_animGroup;
+	pp->is_visible = ped->bIsVisible;
 	/* 	Would be more sane to use GetJustIndex(ped->m_pMyVehicle) in following assignment */
 	if (ped->InVehicle())
 		pp->vehicle_index = (CPools::GetVehiclePool()->GetIndex(ped->m_pMyVehicle) >> 8) + 1;
@@ -406,21 +465,25 @@ void CReplay::StorePedAnimation(CPed *ped, CStoredAnimationState *state)
 		state->animId = main->animId;
 		state->time = 255.0f / 4.0f * clamp(main->currentTime, 0.0f, 4.0f);
 		state->speed = 255.0f / 3.0f * clamp(main->speed, 0.0f, 3.0f);
+		state->groupId = main->groupId;
 	}else{
 		state->animId = 3;
 		state->time = 0;
 		state->speed = 85;
+		state->groupId = 0;
 	}
 	if (second) {
 		state->secAnimId = second->animId;
 		state->secTime = 255.0f / 4.0f * clamp(second->currentTime, 0.0f, 4.0f);
 		state->secSpeed = 255.0f / 3.0f * clamp(second->speed, 0.0f, 3.0f);
 		state->blendAmount = 255.0f / 2.0f * clamp(blend_amount, 0.0f, 2.0f);
+		state->secGroupId = second->groupId;
 	}else{
 		state->secAnimId = 0;
 		state->secTime = 0;
 		state->secSpeed = 0;
 		state->blendAmount = 0;
+		state->secGroupId = 0;
 	}
 	CAnimBlendAssociation* partial = RpAnimBlendClumpGetMainPartialAssociation((RpClump*)ped->m_rwObject);
 	if (partial) {
@@ -428,11 +491,13 @@ void CReplay::StorePedAnimation(CPed *ped, CStoredAnimationState *state)
 		state->partAnimTime = 255.0f / 4.0f * clamp(partial->currentTime, 0.0f, 4.0f);
 		state->partAnimSpeed = 255.0f / 3.0f * clamp(partial->speed, 0.0f, 3.0f);
 		state->partBlendAmount = 255.0f / 2.0f * clamp(partial->blendAmount, 0.0f, 2.0f);
+		state->partGroupId = partial->groupId;
 	}else{
 		state->partAnimId = 0;
 		state->partAnimTime = 0;
 		state->partAnimSpeed = 0;
 		state->partBlendAmount = 0;
+		state->partGroupId = 0;
 	}
 }
 
@@ -445,10 +510,9 @@ void CReplay::StoreDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState
 			state->aCurTime[i] = 255.0f / 4.0f * clamp(assoc->currentTime, 0.0f, 4.0f);
 			state->aSpeed[i] = 255.0f / 3.0f * clamp(assoc->speed, 0.0f, 3.0f);
 			state->aBlendAmount[i] = 255.0f / 2.0f * clamp(assoc->blendAmount, 0.0f, 2.0f);
-#ifdef FIX_REPLAY_BUGS
 			state->aBlendDelta[i] = 127.0f / 32.0f * clamp(assoc->blendDelta, -16.0f, 16.0f);
-#endif
 			state->aFlags[i] = assoc->flags;
+			state->aGroupId[i] = assoc->groupId;
 			if (assoc->callbackType == CAnimBlendAssociation::CB_FINISH || assoc->callbackType == CAnimBlendAssociation::CB_DELETE) {
 				state->aFunctionCallbackID[i] = FindCBFunctionID(assoc->callback);
 				if (assoc->callbackType == CAnimBlendAssociation::CB_FINISH)
@@ -457,11 +521,12 @@ void CReplay::StoreDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState
 				state->aFunctionCallbackID[i] = 0;
 			}
 		}else{
-			state->aAnimId[i] = ANIM_STD_NUM;
+			state->aAnimId[i] = NUM_STD_ANIMS;
 			state->aCurTime[i] = 0;
 			state->aSpeed[i] = 85;
 			state->aFunctionCallbackID[i] = 0;
 			state->aFlags[i] = 0;
+			state->aGroupId[i] = 0;
 		}
 	}
 	for (int i = 0; i < NUM_PARTIAL_ANIMS_IN_REPLAY; i++) {
@@ -471,10 +536,9 @@ void CReplay::StoreDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState
 			state->aCurTime2[i] = 255.0f / 4.0f * clamp(assoc->currentTime, 0.0f, 4.0f);
 			state->aSpeed2[i] = 255.0f / 3.0f * clamp(assoc->speed, 0.0f, 3.0f);
 			state->aBlendAmount2[i] = 255.0f / 2.0f * clamp(assoc->blendAmount, 0.0f, 2.0f);
-#ifdef FIX_REPLAY_BUGS
 			state->aBlendDelta2[i] = 127.0f / 16.0f * clamp(assoc->blendDelta, -16.0f, 16.0f);
-#endif
 			state->aFlags2[i] = assoc->flags;
+			state->aGroupId2[i] = assoc->groupId;
 			if (assoc->callbackType == CAnimBlendAssociation::CB_FINISH || assoc->callbackType == CAnimBlendAssociation::CB_DELETE) {
 				state->aFunctionCallbackID2[i] = FindCBFunctionID(assoc->callback);
 				if (assoc->callbackType == CAnimBlendAssociation::CB_FINISH)
@@ -484,11 +548,12 @@ void CReplay::StoreDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState
 			}
 		}
 		else {
-			state->aAnimId2[i] = ANIM_STD_NUM;
+			state->aAnimId2[i] = NUM_STD_ANIMS;
 			state->aCurTime2[i] = 0;
 			state->aSpeed2[i] = 85;
 			state->aFunctionCallbackID2[i] = 0;
 			state->aFlags2[i] = 0;
+			state->aGroupId2[i] = 0;
 		}
 	}
 }
@@ -510,7 +575,7 @@ void CReplay::ProcessPedUpdate(CPed *ped, float interpolation, CAddressInReplayB
 	ped->GetMatrix() += CMatrix(interpolation) * ped_matrix;
 	if (pp->vehicle_index) {
 		ped->m_pMyVehicle = CPools::GetVehiclePool()->GetSlot(pp->vehicle_index - 1);
-		ped->bInVehicle = pp->vehicle_index;
+		ped->bInVehicle = true;
 	}
 	else {
 		ped->m_pMyVehicle = nil;
@@ -521,21 +586,39 @@ void CReplay::ProcessPedUpdate(CPed *ped, float interpolation, CAddressInReplayB
 		if (ped == FindPlayerPed())
 			((CPlayerPed*)ped)->ReApplyMoveAnims();
 	}
+	ped->bIsVisible = pp->is_visible;
+	if (FramesActiveLookAroundCam && ped->m_nPedType == PEDTYPE_PLAYER1)
+		ped->bIsVisible = true;
 	RetrievePedAnimation(ped, &pp->anim_state);
 	ped->RemoveWeaponModel(-1);
-	if (pp->weapon_model != (uint8)-1)
-		ped->AddWeaponModel(pp->weapon_model);
+	if (pp->weapon_model != (uint16)-1) {
+		if (CStreaming::HasModelLoaded(pp->weapon_model))
+			ped->AddWeaponModel(pp->weapon_model);
+		else
+			CStreaming::RequestModel(pp->weapon_model, 0);
+	}
 	CWorld::Remove(ped);
 	CWorld::Add(ped);
 	buffer->m_nOffset += sizeof(tPedUpdatePacket);
 }
 
+bool HasAnimGroupLoaded(uint8 group)
+{
+	CAnimBlendAssocGroup* pGroup = &CAnimManager::GetAnimAssocGroups()[group];
+	return pGroup->animBlock && pGroup->animBlock->isLoaded;
+}
+
 void CReplay::RetrievePedAnimation(CPed *ped, CStoredAnimationState *state)
 {
-	CAnimBlendAssociation* anim1 = CAnimManager::BlendAnimation(
-		(RpClump*)ped->m_rwObject,
-		(state->animId > 3) ? ASSOCGRP_STD : ped->m_animGroup,
-		(AnimationId)state->animId, 100.0f);
+	CAnimBlendAssociation* anim1;
+	if (state->animId <= 3)
+		anim1 = CAnimManager::BlendAnimation(
+			(RpClump*)ped->m_rwObject, ped->m_animGroup, (AnimationId)state->animId, 100.0f);
+	else if (HasAnimGroupLoaded(state->groupId))
+		anim1 = CAnimManager::BlendAnimation((RpClump*)ped->m_rwObject, (AssocGroupId)state->groupId, (AnimationId)state->animId, 100.0f);
+	else
+		anim1 = CAnimManager::BlendAnimation((RpClump*)ped->m_rwObject, ASSOCGRP_STD, ANIM_WALK, 100.0f);
+
 	anim1->SetCurrentTime(state->time * 4.0f / 255.0f);
 	anim1->speed = state->speed * 3.0f / 255.0f;
 	anim1->SetBlend(1.0f, 1.0f);
@@ -546,7 +629,7 @@ void CReplay::RetrievePedAnimation(CPed *ped, CStoredAnimationState *state)
 		float blend = state->blendAmount * 2.0f / 255.0f;
 		CAnimBlendAssociation* anim2 = CAnimManager::BlendAnimation(
 			(RpClump*)ped->m_rwObject,
-			(state->secAnimId > 3) ? ASSOCGRP_STD : ped->m_animGroup,
+			(state->secAnimId > 3) ? (AssocGroupId)state->secGroupId : ped->m_animGroup,
 			(AnimationId)state->secAnimId, 100.0f);
 		anim2->SetCurrentTime(time);
 		anim2->speed = speed;
@@ -558,9 +641,9 @@ void CReplay::RetrievePedAnimation(CPed *ped, CStoredAnimationState *state)
 		float time = state->partAnimTime * 4.0f / 255.0f;
 		float speed = state->partAnimSpeed * 3.0f / 255.0f;
 		float blend = state->partBlendAmount * 2.0f / 255.0f;
-		if (blend > 0.0f && state->partAnimId != ANIM_STD_IDLE){
+		if (blend > 0.0f && state->partAnimId != ANIM_IDLE_STANCE && HasAnimGroupLoaded(state->partGroupId)){
 			CAnimBlendAssociation* anim3 = CAnimManager::BlendAnimation(
-				(RpClump*)ped->m_rwObject, ASSOCGRP_STD, (AnimationId)state->partAnimId, 1000.0f);
+				(RpClump*)ped->m_rwObject, (AssocGroupId)state->partGroupId, (AnimationId)state->partAnimId, 1000.0f);
 			anim3->SetCurrentTime(time);
 			anim3->speed = speed;
 			anim3->SetBlend(blend, 0.0f);
@@ -570,33 +653,20 @@ void CReplay::RetrievePedAnimation(CPed *ped, CStoredAnimationState *state)
 
 void CReplay::RetrieveDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationState *state)
 {
-#ifdef FIX_REPLAY_BUGS
 	CAnimBlendAssociation* assoc;
 	for (int i = 0; ((assoc = RpAnimBlendClumpGetMainAssociation_N(ped->GetClump(), i))); i++)
 		assoc->SetBlend(0.0f, -1.0f);
 	for (int i = 0; ((assoc = RpAnimBlendClumpGetMainPartialAssociation_N(ped->GetClump(), i))); i++)
 		assoc->SetBlend(0.0f, -1.0f);
-#endif
 	for (int i = 0; i < NUM_MAIN_ANIMS_IN_REPLAY; i++) {
-		if (state->aAnimId[i] == ANIM_STD_NUM)
+		if (state->aAnimId[i] == NUM_STD_ANIMS)
 			continue;
-#ifdef FIX_REPLAY_BUGS
 		CAnimBlendAssociation* anim = CAnimManager::AddAnimation(ped->GetClump(),
-			state->aAnimId[i] > 3 ? ASSOCGRP_STD : ped->m_animGroup,
+			state->aAnimId[i] > 3 ? (AssocGroupId)state->aGroupId[i] : ped->m_animGroup,
 			(AnimationId)state->aAnimId[i]);
-#else
-		CAnimBlendAssociation* anim = CAnimManager::BlendAnimation(
-			(RpClump*)ped->m_rwObject,
-			state->aAnimId[i] > 3 ? ASSOCGRP_STD : ped->m_animGroup,
-			(AnimationId)state->aAnimId[i], 100.0f);
-#endif
 		anim->SetCurrentTime(state->aCurTime[i] * 4.0f / 255.0f);
 		anim->speed = state->aSpeed[i] * 3.0f / 255.0f;
-#ifdef FIX_REPLAY_BUGS
 		anim->SetBlend(state->aBlendAmount[i] * 2.0f / 255.0f, state->aBlendDelta[i] * 16.0f / 127.0f);
-#else
-		anim->SetBlend(state->aBlendAmount[i], 1.0f);
-#endif
 		anim->flags = state->aFlags[i];
 		uint8 callback = state->aFunctionCallbackID[i];
 		if (!callback)
@@ -607,25 +677,14 @@ void CReplay::RetrieveDetailedPedAnimation(CPed *ped, CStoredDetailedAnimationSt
 			anim->SetDeleteCallback(FindCBFunction(callback & 0x7F), ped);
 	}
 	for (int i = 0; i < NUM_PARTIAL_ANIMS_IN_REPLAY; i++) {
-		if (state->aAnimId2[i] == ANIM_STD_NUM)
+		if (state->aAnimId2[i] == NUM_STD_ANIMS)
 			continue;
-#ifdef FIX_REPLAY_BUGS
 		CAnimBlendAssociation* anim = CAnimManager::AddAnimation(ped->GetClump(),
-			state->aAnimId2[i] > 3 ? ASSOCGRP_STD : ped->m_animGroup,
+			state->aAnimId2[i] > 3 ? (AssocGroupId)state->aGroupId2[i] : ped->m_animGroup,
 			(AnimationId)state->aAnimId2[i]);
-#else
-		CAnimBlendAssociation* anim = CAnimManager::BlendAnimation(
-			(RpClump*)ped->m_rwObject,
-			state->aAnimId2[i] > 3 ? ASSOCGRP_STD : ped->m_animGroup,
-			(AnimationId)state->aAnimId2[i], 100.0f);
-#endif
 		anim->SetCurrentTime(state->aCurTime2[i] * 4.0f / 255.0f);
 		anim->speed = state->aSpeed2[i] * 3.0f / 255.0f;
-#ifdef FIX_REPLAY_BUGS
 		anim->SetBlend(state->aBlendAmount2[i] * 2.0f / 255.0f, state->aBlendDelta2[i] * 16.0f / 127.0f);
-#else
-		anim->SetBlend(state->aBlendAmount2[i], 1.0f);
-#endif
 		anim->flags = state->aFlags2[i];
 		uint8 callback = state->aFunctionCallbackID2[i];
 		if (!callback)
@@ -664,7 +723,6 @@ void CReplay::PlaybackThisFrame(void)
 
 // next two functions are only found in mobile version
 // most likely they were optimized out for being unused
-
 void CReplay::TriggerPlaybackLastCoupleOfSeconds(uint32 start, uint8 cam_mode, float cam_x, float cam_y, float cam_z, uint32 slomo)
 {
 	if (Mode != MODE_RECORD)
@@ -718,7 +776,45 @@ void CReplay::StoreCarUpdate(CVehicle *vehicle, int id)
 				vp->door_status |= BIT(i);
 		}
 	}
+	if (vehicle->GetModelIndex() == MI_SKIMMER)
+		vp->skimmer_speed = 50.0f * ((CBoat*)vehicle)->m_fMovingSpeed;
+	vp->render_scorched = vehicle->bRenderScorched;
+	vp->vehicle_type = vehicle->m_vehType;
 	Record.m_nOffset += sizeof(tVehicleUpdatePacket);
+}
+
+void CReplay::StoreBikeUpdate(CVehicle* vehicle, int id)
+{
+	CBike* bike = (CBike*)vehicle;
+	tBikeUpdatePacket* vp = (tBikeUpdatePacket*)&Record.m_pBase[Record.m_nOffset];
+	vp->type = REPLAYPACKET_BIKE;
+	vp->index = id;
+	vp->matrix.CompressFromFullMatrix(vehicle->GetMatrix());
+	vp->health = vehicle->m_fHealth / 4.0f; /* Not anticipated that health can be > 1000. */
+	vp->acceleration = vehicle->m_fGasPedal * 100.0f;
+#ifdef FIX_BUGS // originally it's undefined behaviour - different fields are copied on PC and mobile
+	for (int i = 0; i < 2; i++)
+		vp->wheel_rotation[i] = 128.0f / PI * bike->m_aWheelRotation[i];
+	for (int i = 0; i < 2; i++)
+		vp->wheel_rotation[i + 2] = 128.0f / PI * bike->m_aWheelSpeed[i];
+	for (int i = 0; i < 4; i++)
+		vp->wheel_susp_dist[i] = 50.0f * bike->m_aSuspensionSpringRatio[i];
+#else
+	for (int i = 0; i < 4; i++) {
+		vp->wheel_susp_dist[i] = 50.0f * bike->m_aSuspensionSpringRatio[i];
+		vp->wheel_rotation[i] = 128.0f / PI * bike->m_aWheelRotation[i];
+	}
+#endif
+	vp->velocityX = 8000.0f * Max(-4.0f, Min(4.0f, vehicle->GetMoveSpeed().x)); /* 8000!? */
+	vp->velocityY = 8000.0f * Max(-4.0f, Min(4.0f, vehicle->GetMoveSpeed().y));
+	vp->velocityZ = 8000.0f * Max(-4.0f, Min(4.0f, vehicle->GetMoveSpeed().z));
+	vp->mi = vehicle->GetModelIndex();
+	vp->primary_color = vehicle->m_currentColour1;
+	vp->secondary_color = vehicle->m_currentColour2;
+	vp->wheel_state = 50.0f * vehicle->m_fSteerAngle;
+	vp->lean_angle = 50.0f * bike->m_fLeanLRAngle;
+	vp->wheel_angle = 50.0f * bike->m_fWheelAngle;
+	Record.m_nOffset += sizeof(tBikeUpdatePacket);
 }
 
 void CReplay::ProcessCarUpdate(CVehicle *vehicle, float interpolation, CAddressInReplayBuffer *buffer)
@@ -789,20 +885,53 @@ void CReplay::ProcessCarUpdate(CVehicle *vehicle, float interpolation, CAddressI
 	CWorld::Add(vehicle);
 	if (vehicle->IsBoat())
 		((CBoat*)vehicle)->m_bIsAnchored = false;
+	vehicle->bRenderScorched = vp->render_scorched;
+	if (vehicle->GetModelIndex() == MI_SKIMMER)
+		((CBoat*)vehicle)->m_fMovingSpeed = vp->skimmer_speed / 50.0f;
 }
 
-bool CReplay::PlayBackThisFrameInterpolation(CAddressInReplayBuffer *buffer, float interpolation, uint32 *pTimer){
-	/* Mistake. Not even sure what this is even doing here...
-	 * PlayerWanted is a backup to restore at the end of replay.
-	 * Setting current wanted pointer to it makes it useless.
-	 * Causes picking up bribes in replays reducing wanted level bug.
-	 * Obviously fact of picking them up is a bug on its own,
-	 * but it doesn't cancel this one.
-	 */
-#ifndef FIX_REPLAY_BUGS
-	FindPlayerPed()->m_pWanted = &PlayerWanted;
+void CReplay::ProcessBikeUpdate(CVehicle* vehicle, float interpolation, CAddressInReplayBuffer* buffer)
+{
+	CBike* bike = (CBike*)vehicle;
+	tBikeUpdatePacket* vp = (tBikeUpdatePacket*)&buffer->m_pBase[buffer->m_nOffset];
+	if (!vehicle) {
+		printf("Replay:Car wasn't there");
+		return;
+	}
+	CMatrix vehicle_matrix;
+	vp->matrix.DecompressIntoFullMatrix(vehicle_matrix);
+	vehicle->GetMatrix() = vehicle->GetMatrix() * CMatrix(1.0f - interpolation);
+	vehicle->GetMatrix().GetPosition() *= (1.0f - interpolation);
+	vehicle->GetMatrix() += CMatrix(interpolation) * vehicle_matrix;
+	vehicle->m_vecTurnSpeed = CVector(0.0f, 0.0f, 0.0f);
+	vehicle->m_fHealth = 4 * vp->health;
+	vehicle->m_fGasPedal = vp->acceleration / 100.0f;
+	vehicle->m_vecMoveSpeed = CVector(vp->velocityX / 8000.0f, vp->velocityY / 8000.0f, vp->velocityZ / 8000.0f);
+	vehicle->m_fSteerAngle = vp->wheel_state / 50.0f;
+	vehicle->bEngineOn = true;
+#ifdef FIX_BUGS
+	for (int i = 0; i < 2; i++)
+		bike->m_aWheelRotation[i] = vp->wheel_rotation[i] / (128.0f / PI);
+	for (int i = 0; i < 2; i++)
+		bike->m_aWheelSpeed[i] = vp->wheel_rotation[i + 2] / (128.0f / PI);
+	for (int i = 0; i < 4; i++)
+		bike->m_aSuspensionSpringRatio[i] = vp->wheel_susp_dist[i] / 50.0f;
+#else
+	for (int i = 0; i < 4; i++) {
+		bike->m_aSuspensionSpringRatio[i] = vp->wheel_susp_dist[i] / 50.0f;
+		bike->m_aWheelRotation[i] = vp->wheel_rotation[i] / (128.0f / PI);
+	}
 #endif
+	bike->m_fLeanLRAngle = vp->lean_angle / 50.0f;
+	bike->m_fWheelAngle = vp->wheel_angle / 50.0f;
+	bike->bLeanMatrixClean = false;
+	bike->CalculateLeanMatrix();
+	CWorld::Remove(vehicle);
+	CWorld::Add(vehicle);
+}
 
+bool CReplay::PlayBackThisFrameInterpolation(CAddressInReplayBuffer *buffer, float interpolation, uint32 *pTimer)
+{
 	CBulletTraces::Init();
 	float split = 1.0f - interpolation;
 	int ped_min_index = 0; /* Optimization due to peds and vehicles placed in buffer sequentially. */
@@ -848,20 +977,25 @@ bool CReplay::PlayBackThisFrameInterpolation(CAddressInReplayBuffer *buffer, flo
 					CStreaming::RequestModel(mi, 0);
 				}
 				else {
-					if (mi == MI_DEADDODO || mi == MI_AIRTRAIN) {
-						new_v = new(vp->index << 8) CPlane(mi, 2);
-					}
-					else if (mi == MI_TRAIN) {
-						new_v = new(vp->index << 8) CTrain(mi, 2);
-					}
-					else if (mi == MI_CHOPPER || mi == MI_ESCAPE) {
-						new_v = new(vp->index << 8) CHeli(mi, 2);
-					}
-					else if (CModelInfo::IsBoatModel(mi)){
+					switch (vp->vehicle_type) {
+					case VEHICLE_TYPE_CAR:
+						new_v = new(vp->index << 8) CAutomobile(mi, 2);	
+						break;
+					case VEHICLE_TYPE_BOAT:
 						new_v = new(vp->index << 8) CBoat(mi, 2);
-					}
-					else{
-						new_v = new(vp->index << 8) CAutomobile(mi, 2);
+						break;
+					case VEHICLE_TYPE_TRAIN:
+						new_v = new(vp->index << 8) CTrain(mi, 2);
+						break;
+					case VEHICLE_TYPE_HELI:
+						new_v = new(vp->index << 8) CHeli(mi, 2);
+						break;
+					case VEHICLE_TYPE_PLANE:
+						new_v = new(vp->index << 8) CPlane(mi, 2);
+						break;
+					case VEHICLE_TYPE_BIKE: // not possible
+						new_v = new(vp->index << 8) CBike(mi, 2);
+						break;
 					}
 					new_v->SetStatus(STATUS_PLAYER_PLAYBACKFROMBUFFER);
 					vp->matrix.DecompressIntoFullMatrix(new_v->GetMatrix());
@@ -874,15 +1008,51 @@ bool CReplay::PlayBackThisFrameInterpolation(CAddressInReplayBuffer *buffer, flo
 			buffer->m_nOffset += sizeof(tVehicleUpdatePacket);
 			break;
 		}
+		case REPLAYPACKET_BIKE:
+		{
+			tBikeUpdatePacket* vp = (tBikeUpdatePacket*)&ptr[offset];
+			for (int i = vehicle_min_index; i < vp->index; i++) {
+				CVehicle* v = CPools::GetVehiclePool()->GetSlot(i);
+				if (!v)
+					continue;
+				/* Removing vehicles not present in this frame. */
+				CWorld::Remove(v);
+				delete v;
+			}
+			vehicle_min_index = vp->index + 1;
+			CVehicle* v = CPools::GetVehiclePool()->GetSlot(vp->index);
+			CVehicle* new_v;
+			if (!v) {
+				int mi = vp->mi;
+				if (CStreaming::ms_aInfoForModel[mi].m_loadState != 1) {
+					CStreaming::RequestModel(mi, 0);
+				}
+				else {
+					new_v = new(vp->index << 8) CBike(mi, 2);
+					new_v->SetStatus(STATUS_PLAYER_PLAYBACKFROMBUFFER);
+					vp->matrix.DecompressIntoFullMatrix(new_v->GetMatrix());
+					new_v->m_currentColour1 = vp->primary_color;
+					new_v->m_currentColour2 = vp->secondary_color;
+					CWorld::Add(new_v);
+				}
+			}
+			ProcessBikeUpdate(CPools::GetVehiclePool()->GetSlot(vp->index), interpolation, buffer);
+			buffer->m_nOffset += sizeof(tBikeUpdatePacket);
+			break;
+		}
 		case REPLAYPACKET_PED_HEADER:
 		{
 			tPedHeaderPacket* ph = (tPedHeaderPacket*)&ptr[offset];
 			if (!CPools::GetPedPool()->GetSlot(ph->index)) {
-				if (CStreaming::ms_aInfoForModel[ph->mi].m_loadState != 1) {
+				if (!CStreaming::HasModelLoaded(ph->mi) || (ph->mi >= MI_SPECIAL01 && ph->mi < MI_LAST_PED)) {
 					CStreaming::RequestModel(ph->mi, 0);
 				}
 				else {
-					CPed* new_p = new(ph->index << 8) CCivilianPed((ePedType)ph->pedtype, ph->mi);
+					CPed* new_p;
+					if (ph->pedtype != PEDTYPE_PLAYER1)
+						new_p = new(ph->index << 8) CCivilianPed((ePedType)ph->pedtype, ph->mi);
+					else
+						new_p = new(ph->index << 8) CPlayerPed();
 					new_p->SetStatus(STATUS_PLAYER_PLAYBACKFROMBUFFER);
 					new_p->GetMatrix().SetUnity();
 					CWorld::Add(new_p);
@@ -960,11 +1130,35 @@ bool CReplay::PlayBackThisFrameInterpolation(CAddressInReplayBuffer *buffer, flo
 		{
 			tBulletTracePacket* pb = (tBulletTracePacket*)&ptr[offset];
 			CBulletTraces::aTraces[pb->index].m_bInUse = true;
-			CBulletTraces::aTraces[pb->index].m_framesInUse = pb->frames;
-			CBulletTraces::aTraces[pb->index].m_lifeTime = pb->lifetime;
-			CBulletTraces::aTraces[pb->index].m_vecCurrentPos = pb->inf;
-			CBulletTraces::aTraces[pb->index].m_vecTargetPos = pb->sup;
+			CBulletTraces::aTraces[pb->index].m_vecStartPos = pb->inf;
+			CBulletTraces::aTraces[pb->index].m_vecEndPos = pb->sup;
 			buffer->m_nOffset += sizeof(tBulletTracePacket);
+			break;
+		}
+		case REPLAYPACKET_PARTICLE:
+		{
+			tParticlePacket* pp = (tParticlePacket*)&ptr[offset];
+			CVector pos(pp->pos_x / 4.0f, pp->pos_y / 4.0f, pp->pos_z / 4.0f);
+			CVector dir(pp->dir_x / 120.0f, pp->dir_y / 120.0f, pp->dir_z / 120.0f);
+			RwRGBA color;
+			color.red = pp->r;
+			color.green = pp->g;
+			color.blue = pp->b;
+			color.alpha = pp->a;
+			CParticle::AddParticle((tParticleType)pp->particle_type, pos, dir, nil, pp->size, color);
+			buffer->m_nOffset += sizeof(tParticlePacket);
+			break;
+		}
+		case REPLAYPACKET_MISC:
+		{
+			tMiscPacket* pm = (tMiscPacket*)&ptr[offset];
+			TheCamera.m_uiCamShakeStart = pm->cam_shake_start;
+			TheCamera.m_fCamShakeForce = pm->cam_shake_strength;
+			CSpecialFX::bVideoCam = pm->video_cam;
+			CSpecialFX::bLiftCam = pm->lift_cam;
+			CGame::currArea = pm->cur_area;
+			buffer->m_nOffset += sizeof(tMiscPacket);
+			break;
 		}
 		default:
 			break;
@@ -1072,6 +1266,8 @@ void CReplay::ProcessReplayCamera(void)
 	RwFrameUpdateObjects(RwCameraGetFrame(TheCamera.m_pRwCamera));
 }
 
+extern CWeaponEffects gCrossHair;
+
 void CReplay::TriggerPlayback(uint8 cam_mode, float cam_x, float cam_y, float cam_z, bool load_scene)
 {
 	if (Mode != MODE_RECORD)
@@ -1088,6 +1284,8 @@ void CReplay::TriggerPlayback(uint8 cam_mode, float cam_x, float cam_y, float ca
 	DMAudio.ChangeMusicMode(MUSICMODE_FRONTEND);
 	DMAudio.SetEffectsFadeVol(0);
 	DMAudio.SetMusicFadeVol(0);
+	CEscalators::Shutdown();
+	CWaterCreatures::RemoveAll();
 	int current;
 	for (current = 0; current < NUM_REPLAYBUFFERS; current++)
 		if (BufferStatus[current] == REPLAYBUFFER_RECORD)
@@ -1120,6 +1318,13 @@ void CReplay::TriggerPlayback(uint8 cam_mode, float cam_x, float cam_y, float ca
 	}
 	if (cam_mode == REPLAYCAMMODE_ASSTORED)
 		TheCamera.CarZoomIndicator = CAM_ZOOM_CINEMATIC;
+	gCrossHair.m_bActive = false;
+	CExplosion::ClearAllExplosions();
+	CPlaneBanners::Init();
+#ifndef FIX_BUGS // this doesn't do anything useful and accesses destroyed player ped
+	TheCamera.Restore();
+#endif
+	CDraw::SetFOV(70.0f);
 }
 
 void CReplay::StoreStuffInMem(void)
@@ -1128,6 +1333,14 @@ void CReplay::StoreStuffInMem(void)
 	for (int i = 0; i < NUMPLAYERS; i++)
 		nHandleOfPlayerPed[i] = CPools::GetPedPool()->GetIndex(CWorld::Players[i].m_pPed);
 #endif
+	int i = CPools::GetPedPool()->GetSize();
+	while (--i >= 0) {
+		CPed* ped = CPools::GetPedPool()->GetSlot(i);
+		if (!ped)
+			continue;
+		if (ped->m_attractor)
+			GetPedAttractorManager()->DeRegisterPed(ped, ped->m_attractor);
+	}
 	CPools::GetVehiclePool()->Store(pBuf0, pBuf1);
 	CPools::GetPedPool()->Store(pBuf2, pBuf3);
 	CPools::GetObjectPool()->Store(pBuf4, pBuf5);
@@ -1159,9 +1372,28 @@ void CReplay::StoreStuffInMem(void)
 	OldWeatherType = CWeather::OldWeatherType;
 	NewWeatherType = CWeather::NewWeatherType;
 	WeatherInterpolationValue = CWeather::InterpolationValue;
+	CurrArea = CGame::currArea;
 	TimeStepNonClipped = CTimer::GetTimeStepNonClipped();
 	TimeStep = CTimer::GetTimeStep();
 	TimeScale = CTimer::GetTimeScale();
+	ms_nNumCivMale_Stored = CPopulation::ms_nNumCivMale;
+	ms_nNumCivFemale_Stored = CPopulation::ms_nNumCivFemale;
+	ms_nNumCop_Stored = CPopulation::ms_nNumCop;
+	ms_nNumEmergency_Stored = CPopulation::ms_nNumEmergency;
+	ms_nNumGang1_Stored = CPopulation::ms_nNumGang1;
+	ms_nNumGang2_Stored = CPopulation::ms_nNumGang2;
+	ms_nNumGang3_Stored = CPopulation::ms_nNumGang3;
+	ms_nNumGang4_Stored = CPopulation::ms_nNumGang4;
+	ms_nNumGang5_Stored = CPopulation::ms_nNumGang5;
+	ms_nNumGang6_Stored = CPopulation::ms_nNumGang6;
+	ms_nNumGang7_Stored = CPopulation::ms_nNumGang7;
+	ms_nNumGang8_Stored = CPopulation::ms_nNumGang8;
+	ms_nNumGang9_Stored = CPopulation::ms_nNumGang9;
+	ms_nNumDummy_Stored = CPopulation::ms_nNumDummy;
+	ms_nTotalCivPeds_Stored = CPopulation::ms_nTotalCivPeds;
+	ms_nTotalGangPeds_Stored = CPopulation::ms_nTotalGangPeds;
+	ms_nTotalPeds_Stored = CPopulation::ms_nTotalPeds;
+	ms_nTotalMissionPeds_Stored = CPopulation::ms_nTotalMissionPeds;
 	int size = CPools::GetPedPool()->GetSize();
 	pPedAnims = new CStoredDetailedAnimationState[size];
 	for (int i = 0; i < size; i++) {
@@ -1169,7 +1401,6 @@ void CReplay::StoreStuffInMem(void)
 		if (ped)
 			StoreDetailedPedAnimation(ped, &pPedAnims[i]);
 	}
-#ifdef FIX_BUGS
 	pGarages = new uint8[sizeof(CGarages::aGarages)];
 	memcpy(pGarages, CGarages::aGarages, sizeof(CGarages::aGarages));
 	FireArray = new CFire[NUM_FIRES];
@@ -1179,7 +1410,7 @@ void CReplay::StoreStuffInMem(void)
 	memcpy(paProjectileInfo, gaProjectileInfo, sizeof(gaProjectileInfo));
 	paProjectiles = new uint8[sizeof(CProjectileInfo::ms_apProjectile)];
 	memcpy(paProjectiles, CProjectileInfo::ms_apProjectile, sizeof(CProjectileInfo::ms_apProjectile));
-#endif
+	CScriptPaths::Save_ForReplay();
 }
 
 void CReplay::RestoreStuffFromMem(void)
@@ -1234,8 +1465,24 @@ void CReplay::RestoreStuffFromMem(void)
 		ped->m_audioEntityId = DMAudio.CreateEntity(AUDIOTYPE_PHYSICAL, ped);
 		DMAudio.SetEntityStatus(ped->m_audioEntityId, true);
 		CPopulation::UpdatePedCount((ePedType)ped->m_nPedType, false);
-		if (ped->m_wepModelID >= 0)
+		for (int j = 0; j < TOTAL_WEAPON_SLOTS; j++) {
+			int mi1 = CWeaponInfo::GetWeaponInfo(ped->m_weapons[j].m_eWeaponType)->m_nModelId;
+			if (mi1 != -1)
+				CStreaming::RequestModel(mi1, STREAMFLAGS_DEPENDENCY);
+			int mi2 = CWeaponInfo::GetWeaponInfo(ped->m_weapons[j].m_eWeaponType)->m_nModel2Id;
+			if (mi2 != -1)
+				CStreaming::RequestModel(mi2, STREAMFLAGS_DEPENDENCY);
+			CStreaming::LoadAllRequestedModels(false);
+			ped->m_weapons[j].Initialise(ped->m_weapons[j].m_eWeaponType, ped->m_weapons[j].m_nAmmoTotal);
+		}
+		if (ped->m_wepModelID >= 0) {
+			ped->m_pWeaponModel = nil;
+			if (ped->IsPlayer())
+				((CPlayerPed*)ped)->m_pMinigunTopAtomic = nil;
 			ped->AddWeaponModel(ped->m_wepModelID);
+		}
+		if (ped->m_nPedType == PEDTYPE_COP)
+			((CCopPed*)ped)->m_pStinger = new CStinger;
 	}
 	i = CPools::GetVehiclePool()->GetSize();
 	while (--i >= 0) {
@@ -1248,14 +1495,26 @@ void CReplay::RestoreStuffFromMem(void)
 		vehicle->m_rwObject = nil;
 		vehicle->m_modelIndex = -1;
 		vehicle->SetModelIndex(mi);
-		if (mi == MI_DODO){
-			CAutomobile* dodo = (CAutomobile*)vehicle;
-			RpAtomicSetFlags((RpAtomic*)GetFirstObject(dodo->m_aCarNodes[CAR_WHEEL_LF]), 0);
-			CMatrix tmp1;
-			tmp1.Attach(RwFrameGetMatrix(dodo->m_aCarNodes[CAR_WHEEL_RF]), false);
-			CMatrix tmp2(RwFrameGetMatrix(dodo->m_aCarNodes[CAR_WHEEL_LF]), false);
-			tmp1.GetPosition() += CVector(tmp2.GetPosition().x + 0.1f, 0.0f, tmp2.GetPosition().z);
-			tmp1.UpdateRW();
+		if (vehicle->IsCar()) {
+			CAutomobile* car = (CAutomobile*)vehicle;
+			if (mi == MI_DODO) {
+				RpAtomicSetFlags((RpAtomic*)GetFirstObject(car->m_aCarNodes[CAR_WHEEL_LF]), 0);
+				CMatrix tmp1;
+				tmp1.Attach(RwFrameGetMatrix(car->m_aCarNodes[CAR_WHEEL_RF]), false);
+				CMatrix tmp2(RwFrameGetMatrix(car->m_aCarNodes[CAR_WHEEL_LF]), false);
+				tmp1.GetPosition() += CVector(tmp2.GetPosition().x + 0.1f, 0.0f, tmp2.GetPosition().z);
+				tmp1.UpdateRW();
+			}
+			else if (mi == MI_HUNTER) {
+				RpAtomicSetFlags((RpAtomic*)GetFirstObject(car->m_aCarNodes[CAR_WHEEL_LB]), 0);
+				RpAtomicSetFlags((RpAtomic*)GetFirstObject(car->m_aCarNodes[CAR_WHEEL_RB]), 0);
+			}
+			else if (vehicle->IsRealHeli()) {
+				RpAtomicSetFlags((RpAtomic*)GetFirstObject(car->m_aCarNodes[CAR_WHEEL_LF]), 0);
+				RpAtomicSetFlags((RpAtomic*)GetFirstObject(car->m_aCarNodes[CAR_WHEEL_RF]), 0);
+				RpAtomicSetFlags((RpAtomic*)GetFirstObject(car->m_aCarNodes[CAR_WHEEL_LB]), 0);
+				RpAtomicSetFlags((RpAtomic*)GetFirstObject(car->m_aCarNodes[CAR_WHEEL_RB]), 0);
+			}
 		}
 		if (vehicle->IsCar()){
 			CAutomobile* car = (CAutomobile*)vehicle;
@@ -1302,14 +1561,10 @@ void CReplay::RestoreStuffFromMem(void)
 		if (!object)
 			continue;
 		int mi = object->GetModelIndex();
-		CStreaming::RequestModel(mi, 0);
-		CStreaming::LoadAllRequestedModels(false);
 		object->m_rwObject = nil;
 		object->m_modelIndex = -1;
-		object->SetModelIndex(mi);
+		object->SetModelIndexNoCreate(mi);
 		object->GetMatrix().m_attachment = nil;
-		if (RwObjectGetType(object->m_rwObject) == rpATOMIC)
-			object->GetMatrix().AttachRW(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic*)object->m_rwObject)), false);
 	}
 	i = CPools::GetDummyPool()->GetSize();
 	while (--i >= 0) {
@@ -1317,15 +1572,12 @@ void CReplay::RestoreStuffFromMem(void)
 		if (!dummy)
 			continue;
 		int mi = dummy->GetModelIndex();
-		CStreaming::RequestModel(mi, 0);
-		CStreaming::LoadAllRequestedModels(false);
 		dummy->m_rwObject = nil;
 		dummy->m_modelIndex = -1;
-		dummy->SetModelIndex(mi);
+		dummy->SetModelIndexNoCreate(mi);
 		dummy->GetMatrix().m_attachment = nil;
-		if (RwObjectGetType(dummy->m_rwObject) == rpATOMIC)
-			dummy->GetMatrix().AttachRW(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic*)dummy->m_rwObject)), false);
 	}
+	++ClockMinutes;
 	CTimer::SetTimeInMilliseconds(Time1);
 	CTimer::SetTimeInMillisecondsNonClipped(Time2);
 	CTimer::SetPreviousTimeInMilliseconds(Time3);
@@ -1338,6 +1590,25 @@ void CReplay::RestoreStuffFromMem(void)
 	CWeather::OldWeatherType = OldWeatherType;
 	CWeather::NewWeatherType = NewWeatherType;
 	CWeather::InterpolationValue = WeatherInterpolationValue;
+	CGame::currArea = CurrArea;
+	CPopulation::ms_nNumCivMale = ms_nNumCivMale_Stored;
+	CPopulation::ms_nNumCivFemale = ms_nNumCivFemale_Stored;
+	CPopulation::ms_nNumCop = ms_nNumCop_Stored;
+	CPopulation::ms_nNumEmergency = ms_nNumEmergency_Stored;
+	CPopulation::ms_nNumGang1 = ms_nNumGang1_Stored;
+	CPopulation::ms_nNumGang2 = ms_nNumGang2_Stored;
+	CPopulation::ms_nNumGang3 = ms_nNumGang3_Stored;
+	CPopulation::ms_nNumGang4 = ms_nNumGang4_Stored;
+	CPopulation::ms_nNumGang5 = ms_nNumGang5_Stored;
+	CPopulation::ms_nNumGang6 = ms_nNumGang6_Stored;
+	CPopulation::ms_nNumGang7 = ms_nNumGang7_Stored;
+	CPopulation::ms_nNumGang8 = ms_nNumGang8_Stored;
+	CPopulation::ms_nNumGang9 = ms_nNumGang9_Stored;
+	CPopulation::ms_nNumDummy = ms_nNumDummy_Stored;
+	CPopulation::ms_nTotalCivPeds = ms_nTotalCivPeds_Stored;
+	CPopulation::ms_nTotalGangPeds = ms_nTotalGangPeds_Stored;
+	CPopulation::ms_nTotalPeds = ms_nTotalPeds_Stored;
+	CPopulation::ms_nTotalMissionPeds = ms_nTotalMissionPeds_Stored;
 	for (int i = 0; i < CPools::GetPedPool()->GetSize(); i++) {
 		CPed* ped = CPools::GetPedPool()->GetSlot(i);
 		if (!ped)
@@ -1346,7 +1617,6 @@ void CReplay::RestoreStuffFromMem(void)
 	}
 	delete[] pPedAnims;
 	pPedAnims = nil;
-#ifdef FIX_BUGS
 	memcpy(CGarages::aGarages, pGarages, sizeof(CGarages::aGarages));
 	delete[] pGarages;
 	pGarages = nil;
@@ -1360,8 +1630,8 @@ void CReplay::RestoreStuffFromMem(void)
 	memcpy(CProjectileInfo::ms_apProjectile, paProjectiles, sizeof(CProjectileInfo::ms_apProjectile));
 	delete[] paProjectiles;
 	paProjectiles = nil;
-	//CExplosion::ClearAllExplosions(); not in III
-#endif
+	CScriptPaths::Load_ForReplay();
+	CExplosion::ClearAllExplosions();
 	DMAudio.ChangeMusicMode(MUSICMODE_FRONTEND);
 	DMAudio.SetRadioInCar(OldRadioStation);
 	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
@@ -1499,6 +1769,9 @@ void CReplay::StreamAllNecessaryCarsAndPeds(void)
 			case REPLAYPACKET_VEHICLE:
 				CStreaming::RequestModel(((tVehicleUpdatePacket*)&Buffers[slot][offset])->mi, 0);
 				break;
+			case REPLAYPACKET_BIKE:
+				CStreaming::RequestModel(((tBikeUpdatePacket*)&Buffers[slot][offset])->mi, 0);
+				break;
 			case REPLAYPACKET_PED_HEADER:
 				CStreaming::RequestModel(((tPedHeaderPacket*)&Buffers[slot][offset])->mi, 0);
 				break;
@@ -1595,6 +1868,7 @@ size_t CReplay::FindSizeOfPacket(uint8 type)
 	switch (type) {
 	case REPLAYPACKET_END:			return 4;
 	case REPLAYPACKET_VEHICLE:		return sizeof(tVehicleUpdatePacket);
+	case REPLAYPACKET_BIKE:			return sizeof(tBikeUpdatePacket);
 	case REPLAYPACKET_PED_HEADER:	return sizeof(tPedHeaderPacket);
 	case REPLAYPACKET_PED_UPDATE:	return sizeof(tPedUpdatePacket);
 	case REPLAYPACKET_GENERAL:		return sizeof(tGeneralPacket);
@@ -1603,6 +1877,8 @@ size_t CReplay::FindSizeOfPacket(uint8 type)
 	case REPLAYPACKET_ENDOFFRAME:	return 4;
 	case REPLAYPACKET_TIMER:		return sizeof(tTimerPacket);
 	case REPLAYPACKET_BULLET_TRACES:return sizeof(tBulletTracePacket);
+	case REPLAYPACKET_PARTICLE:		return sizeof(tParticlePacket);
+	case REPLAYPACKET_MISC:			return sizeof(tMiscPacket);
 	default: assert(false); break;
 	}
 	return 0;
@@ -1628,7 +1904,7 @@ void CReplay::Display()
 	CFont::SetCentreOff();
 	CFont::SetPropOn();
 	CFont::SetColor(CRGBA(255, 255, 200, 200));
-	CFont::SetFontStyle(FONT_BANK);
+	CFont::SetFontStyle(FONT_STANDARD);
 	if (Mode == MODE_PLAYBACK)
 		CFont::PrintString(SCREEN_WIDTH/15, SCREEN_HEIGHT/10, TheText.Get("REPLAY"));
 }
