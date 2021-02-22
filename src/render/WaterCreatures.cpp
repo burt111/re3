@@ -8,6 +8,7 @@
 #include "General.h"
 #include "Object.h"
 
+/*
 int CWaterCreatures::nNumActiveSeaLifeForms;
 CWaterCreature CWaterCreatures::aWaterCreatures[NUM_WATER_CREATURES];
 
@@ -273,3 +274,4 @@ void CWaterCreatures::RemoveAll() {
 		}
 	}
 }
+*/

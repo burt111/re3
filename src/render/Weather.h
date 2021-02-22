@@ -42,6 +42,11 @@ public:
 	static float TrafficLightBrightness;
 
 	static bool bScriptsForceRain;
+	static bool Stored_StateStored;
+	static float Stored_InterpolationValue;
+	static int16 Stored_OldWeatherType;
+	static int16 Stored_NewWeatherType;
+	static float Stored_Rain;
 
 	static void RenderRainStreaks(void);
 	static void Update(void);
@@ -57,6 +62,8 @@ public:
 	static void AddBeastie();
 
 	static void ForceHurricaneWeather();
+	static void StoreWeatherState();
+	static void RestoreWeatherState();
 };
 
 enum {

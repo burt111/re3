@@ -590,6 +590,8 @@ CMBlur::AddRenderFx(RwCamera *cam, RwRect *rect, float z, FxType type)
 void
 CMBlur::OverlayRenderFx(RwCamera *cam, RwRaster *frontBuf)
 {
+	//TODO(LCS)
+#if 0
 	bool drawWaterDrops = false;
 	RwIm2DVertex verts[4];
 	int red = (0.75f*CTimeCycle::GetDirectionalRed() + CTimeCycle::GetAmbientRed())*0.55f * 255;
@@ -795,4 +797,5 @@ CMBlur::OverlayRenderFx(RwCamera *cam, RwRaster *frontBuf)
 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
 	pBufVertCount = 0;
+#endif
 }

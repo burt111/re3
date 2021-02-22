@@ -73,7 +73,7 @@ RwRaster *gpWaterEnvBaseRaster;
 RwRaster *gpWaterWakeRaster;
 
 bool _bSeaLife;
-float _fWaterZOffset = WATER_Z_OFFSET;
+float _fWaterZOffset = 0.5f;
 
 #ifdef PC_WATER
 float fEnvScale               = 0.25f;
@@ -318,7 +318,6 @@ CWaterLevel::Shutdown()
 
 	_DELETE_TEXTURE(gpWaterTex);
 	_DELETE_TEXTURE(gpWaterEnvTex);
-	_DELETE_TEXTURE(gpWaterWakeTex);
 	_DELETE_TEXTURE(gpWaterEnvBaseTex);
 
 #undef _DELETE_TEXTURE
@@ -715,9 +714,9 @@ CWaterLevel::GetWaterLevel(float fX, float fY, float fZ, float *pfOutLevel, bool
 	if ( y < 0 || y >= MAX_SMALL_SECTORS ) return false;
 #endif
 
-	int8 nBlock = aWaterFineBlockList[x][y];
+	uint8 nBlock = aWaterFineBlockList[x][y];
 
-	if ( nBlock == NO_WATER )
+	if ( nBlock == 0x80 )
 		return false;
 
 	ASSERT( pfOutLevel != nil );
@@ -757,9 +756,9 @@ CWaterLevel::GetWaterLevelNoWaves(float fX, float fY, float fZ, float *pfOutLeve
 	if ( y < 0 || y >= MAX_SMALL_SECTORS ) return false;
 #endif
 	
-	int8 nBlock = aWaterFineBlockList[x][y];
+	uint8 nBlock = aWaterFineBlockList[x][y];
 		
-	if ( nBlock == NO_WATER )
+	if ( nBlock == 0x80 )
 		return false;
 	
 	ASSERT( pfOutLevel != nil );
@@ -1077,7 +1076,7 @@ CWaterLevel::RenderWater()
 	{
 		for ( int32 y = 0; y < 5; y++ )
 		{
-			float fX = WATER_SIGN_X(float(x) * EXTRAHUGE_SECTOR_SIZE) - 1280.0f - WATER_X_OFFSET;
+			float fX = WATER_SIGN_X(float(x) * EXTRAHUGE_SECTOR_SIZE) - 1280.0f - 400.0f;
 			float fY = WATER_SIGN_Y(float(y) * EXTRAHUGE_SECTOR_SIZE) - 1280.0f;
 			
 			if ( !bUseCamStartY )
@@ -1176,13 +1175,13 @@ CWaterLevel::RenderWater()
 	if ( WavesCalculatedThisFrame )
 	{
 		RenderSeaBirds();
-		RenderShipsOnHorizon();
-		CParticle::HandleShipsAtHorizonStuff();
-		HandleBeachToysStuff();
+		//RenderShipsOnHorizon();
+		//CParticle::HandleShipsAtHorizonStuff();
+		//HandleBeachToysStuff();
 	}
 	
-	if ( _bSeaLife )
-		HandleSeaLifeForms();
+	//if ( _bSeaLife )
+	//	HandleSeaLifeForms();
 
 	DefinedState();
 }
@@ -1463,7 +1462,7 @@ CWaterLevel::RenderTransparentWater(void)
 
 		int32 nBlock;
 
-		int32 BlockX = WATER_TO_SMALL_SECTOR_X(fCamX + WATER_X_OFFSET) + 1;
+		int32 BlockX = WATER_TO_SMALL_SECTOR_X(fCamX + 400.0f) + 1;
 		int32 BlockY = WATER_TO_SMALL_SECTOR_Y(fCamY) + 1;
 
 		if (_IsColideWithBlock(BlockX, BlockY, nBlock))
@@ -1473,7 +1472,7 @@ CWaterLevel::RenderTransparentWater(void)
 				float fMaskX = Floor(fCamX / 2.0f) * 2.0f;
 				float fMaskY = Floor(fCamY / 2.0f) * 2.0f;
 				float fWaterZ = CWaterLevel::ms_aWaterZs[nBlock];
-				float fSectorX = WATER_FROM_SMALL_SECTOR_X(BlockX) - WATER_X_OFFSET;
+				float fSectorX = WATER_FROM_SMALL_SECTOR_X(BlockX) - 400.0f;
 				float fSectorY = WATER_FROM_SMALL_SECTOR_Y(BlockY);
 
 				RenderWavyMask(fMaskX, fMaskY, fWaterZ,
@@ -3106,6 +3105,7 @@ CWaterLevel::RenderShipsOnHorizon()
 	}
 }
 
+/*
 void
 CWaterLevel::HandleSeaLifeForms()
 {
@@ -3146,7 +3146,7 @@ CWaterLevel::HandleSeaLifeForms()
 	}
 	
 	CWaterCreatures::UpdateAll();
-}
+}*/
 
 void
 CWaterLevel::HandleBeachToysStuff(void)
