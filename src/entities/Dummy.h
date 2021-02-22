@@ -16,5 +16,4 @@ public:
 	static void operator delete(void*, size_t);
 };
 
-VALIDATE_SIZE(CDummy, 0x68);
-
+bool IsDummyPointerValid(CDummy* pDummy);

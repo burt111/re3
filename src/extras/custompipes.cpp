@@ -342,7 +342,7 @@ ReadTweakValueTable(char *fp, InterpolatedValue &interp)
  */
 
 int32 VehiclePipeSwitch = VEHICLEPIPE_MATFX;
-float VehicleShininess = 0.7f;	// the default is a bit extreme
+float VehicleShininess = 1.0f;
 float VehicleSpecularity = 1.0f;
 InterpolatedFloat Fresnel(0.4f);
 InterpolatedFloat Power(18.0f);

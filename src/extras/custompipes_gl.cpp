@@ -133,8 +133,9 @@ vehicleRenderCB(rw::Atomic *atomic, rw::gl3::InstanceDataHeader *header)
 		inst++;
 	}
 
-	SetRenderState(SRCBLEND, BLENDSRCALPHA);
 	setTexture(1, nil);
+
+	SetRenderState(SRCBLEND, BLENDSRCALPHA);
 
 #ifndef RW_GL_USE_VAOS
 	disableAttribPointers(header->attribDesc, header->numAttribs);
@@ -270,10 +271,10 @@ CreateWorldPipe(void)
 		ReadTweakValueTable((char*)work_buff, WorldLightmapBlend);
 
 	{
-#include "shaders/neoWorldIII_fs_gl.inc"
+#include "shaders/neoWorldVC_fs_gl.inc"
 #include "shaders/default_UV2_gl.inc"
 	const char *vs[] = { shaderDecl, header_vert_src, default_UV2_vert_src, nil };
-	const char *fs[] = { shaderDecl, header_frag_src, neoWorldIII_frag_src, nil };
+	const char *fs[] = { shaderDecl, header_frag_src, neoWorldVC_frag_src, nil };
 	neoWorldShader = Shader::create(vs, fs);
 	assert(neoWorldShader);
 	}

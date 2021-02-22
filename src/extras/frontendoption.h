@@ -26,11 +26,6 @@
 #define FEOPTION_ACTION_SELECT 2
 #define FEOPTION_ACTION_FOCUSLOSS 3
 
-// -- Passed via FrontendScreenAdd()
-#define FESCREEN_CENTER 0
-#define FESCREEN_LEFT_ALIGN 1
-#define FESCREEN_RIGHT_ALIGN 2
-
 // -- Callbacks
 
 // pretty much in everything I guess, and optional in all of them
@@ -52,8 +47,7 @@ extern int numCustomFrontendOptions;
 extern int numCustomFrontendScreens;
 
 // -- To be used in ButtonPressFunc / ChangeFunc(this one would be weird):
-void ChangeScreen(int screen, int option = 0, bool fadeIn = true);
-void GoBack(bool fadeIn = true);
+void GoBack(void);
 
 uint8 GetNumberOfMenuOptions(int screen);
 
@@ -82,10 +76,11 @@ uint8 GetNumberOfMenuOptions(int screen);
 
 void FrontendOptionSetCursor(int screen, int8 option, bool overwrite = false);
 
-// var is optional in AddDynamic, enables you to save them in an INI file(also needs passing char array to and saveCat saveKey param. obv), otherwise pass nil/0
-void FrontendOptionAddBuiltinAction(const char* gxtKey, int action, int targetMenu = MENUPAGE_NONE, int saveSlot = SAVESLOT_NONE);
-void FrontendOptionAddSelect(const char* gxtKey, const char** rightTexts, int8 numRightTexts, int8 *var, bool onlyApplyOnEnter, ChangeFunc changeFunc, const char* saveCat = nil, const char* saveKey = nil, bool disableIfGameLoaded = false);
-void FrontendOptionAddDynamic(const char* gxtKey, DrawFunc rightTextDrawFunc, int8 *var, ButtonPressFunc buttonPressFunc, const char* saveCat = nil, const char* saveKey = nil);
+// var is optional in AddDynamic, enables you to save them in an INI file(also needs passing char array to saveCat and saveKey param. obv), otherwise pass nil/0
+void FrontendOptionAddBuiltinAction(const char* gxtKey, uint16 x, uint16 y, uint8 align, int action, int targetMenu = MENUPAGE_NONE, int saveSlot = SAVESLOT_NONE);
+void FrontendOptionAddSelect(const char* gxtKey, uint16 x, uint16 y, uint8 align, const char** rightTexts, int8 numRightTexts, int8 *var, bool onlyApplyOnEnter, ChangeFunc changeFunc, const char* saveCat = nil, const char* saveKey = nil, bool disableIfGameLoaded = false);
+void FrontendOptionAddDynamic(const char* gxtKey, uint16 x, uint16 y, uint8 align, DrawFunc rightTextDrawFunc, int8 *var, ButtonPressFunc buttonPressFunc, const char* saveCat = nil, const char* saveKey = nil);
 
-uint8 FrontendScreenAdd(const char* gxtKey, eMenuSprites sprite, int prevPage, int columnWidth, int headerHeight, int lineHeight, int8 font, float fontScaleX, float fontScaleY, int8 alignment, bool showLeftRightHelper, ReturnPrevPageFunc returnPrevPageFunc = nil);
+// lineHeight = 0 means game will use MENU_DEFAULT_LINE_HEIGHT
+uint8 FrontendScreenAdd(const char* gxtKey, int prevPage, int lineHeight, bool showLeftRightHelper, ReturnPrevPageFunc returnPrevPageFunc = nil);
 #endif

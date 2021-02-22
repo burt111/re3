@@ -131,6 +131,7 @@ vehicleRenderCB(rw::Atomic *atomic, rw::d3d9::InstanceDataHeader *header)
 		drawInst(header, inst);
 		inst++;
 	}
+
 	d3d::setTexture(1, nil);
 
 	SetRenderState(SRCBLEND, BLENDSRCALPHA);
@@ -185,7 +186,7 @@ DestroyVehiclePipe(void)
  */
 
 static void *neoWorld_VS;
-static void *neoWorldIII_PS;
+static void *neoWorldVC_PS;
 
 static void
 worldRenderCB(rw::Atomic *atomic, rw::d3d9::InstanceDataHeader *header)
@@ -243,7 +244,7 @@ worldRenderCB(rw::Atomic *atomic, rw::d3d9::InstanceDataHeader *header)
 			d3d::setTexture(0, m->texture);
 		else
 			d3d::setTexture(0, gpWhiteTexture);
-		setPixelShader(neoWorldIII_PS);
+		setPixelShader(neoWorldVC_PS);
 
 		drawInst(header, inst);
 		inst++;
@@ -263,9 +264,9 @@ CreateWorldPipe(void)
 	neoWorld_VS = rw::d3d::createVertexShader(default_UV2_VS_cso);
 	assert(neoWorld_VS);
 
-#include "shaders/neoWorldIII_PS.inc"
-	neoWorldIII_PS = rw::d3d::createPixelShader(neoWorldIII_PS_cso);
-	assert(neoWorldIII_PS);
+#include "shaders/neoWorldVC_PS.inc"
+	neoWorldVC_PS = rw::d3d::createPixelShader(neoWorldVC_PS_cso);
+	assert(neoWorldVC_PS);
 
 
 	rw::d3d9::ObjPipeline *pipe = rw::d3d9::ObjPipeline::create();
@@ -280,8 +281,8 @@ DestroyWorldPipe(void)
 {
 	rw::d3d::destroyVertexShader(neoWorld_VS);
 	neoWorld_VS = nil;
-	rw::d3d::destroyPixelShader(neoWorldIII_PS);
-	neoWorldIII_PS = nil;
+	rw::d3d::destroyPixelShader(neoWorldVC_PS);
+	neoWorldVC_PS = nil;
 
 
 	((rw::d3d9::ObjPipeline*)worldPipe)->destroy();

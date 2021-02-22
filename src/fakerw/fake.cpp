@@ -16,6 +16,7 @@ using namespace rw;
 RwUInt8 RwObjectGetType(const RwObject *obj) { return obj->type; }
 RwFrame* rwObjectGetParent(const RwObject *obj) { return (RwFrame*)obj->parent; }
 
+
 void *RwMalloc(size_t size) { return engine->memfuncs.rwmalloc(size, 0); }
 void *RwCalloc(size_t numObj, size_t sizeObj) {
 	void *mem = RwMalloc(numObj*sizeObj);
@@ -298,6 +299,7 @@ RwTextureAddressMode RwTextureGetAddressingV(const RwTexture *texture);
 
 // TODO
 void _rwD3D8TexDictionaryEnableRasterFormatConversion(bool enable) { }
+
 
 // hack for reading native textures
 RwBool rwNativeTextureHackRead(RwStream *stream, RwTexture **tex, RwInt32 size)

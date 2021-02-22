@@ -22,6 +22,9 @@
 #include "MemoryHeap.h"
 #include "Bones.h"
 #include "Debug.h"
+#include "Ped.h"
+#include "Dummy.h"
+#include "WindModifiers.h"
 
 int gBuildings;
 
@@ -46,18 +49,17 @@ CEntity::CEntity(void)
 	bRenderScorched = false;
 	bHasBlip = false;
 	bIsBIGBuilding = false;
-	bRenderDamaged = false;
+	bStreamBIGBuilding = false;
 
+	bRenderDamaged = false;
 	bBulletProof = false;
 	bFireProof = false;
 	bCollisionProof = false;
 	bMeleeProof = false;
 	bOnlyDamagedByPlayer = false;
 	bStreamingDontDelete = false;
-	bZoneCulled = false;
-	bZoneCulled2 = false;
-
 	bRemoveFromWorld = false;
+
 	bHasHitWall = false;
 	bImBeingRendered = false;
 	bTouchingWater = false;
@@ -65,13 +67,20 @@ CEntity::CEntity(void)
 	bDrawLast = false;
 	bNoBrightHeadLights = false;
 	bDoNotRender = false;
-
 	bDistanceFade = false;
+
+	m_flagE1 = false;
 	m_flagE2 = false;
+	bOffscreen = false;
+	bIsStaticWaitingForCollision = false;
+	bDontStream = false;
+	bUnderwater = false;
+	bHasPreRenderEffects = false;
 
 	m_scanCode = 0;
 	m_modelIndex = -1;
 	m_rwObject = nil;
+	m_area = AREA_MAIN_MAP;
 	m_randomSeed = CGeneral::GetRandomNumber();
 	m_pFirstReference = nil;
 }
@@ -86,6 +95,7 @@ void
 CEntity::SetModelIndex(uint32 id)
 {
 	m_modelIndex = id;
+	bHasPreRenderEffects = HasPreRenderEffects();
 	CreateRwObject();
 }
 
@@ -93,6 +103,7 @@ void
 CEntity::SetModelIndexNoCreate(uint32 id)
 {
 	m_modelIndex = id;
+	bHasPreRenderEffects = HasPreRenderEffects();
 }
 
 void
@@ -113,6 +124,7 @@ CEntity::CreateRwObject(void)
 			m_matrix.AttachRW(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic*)m_rwObject)), false);
 		else if(RwObjectGetType(m_rwObject) == rpCLUMP)
 			m_matrix.AttachRW(RwFrameGetMatrix(RpClumpGetFrame((RpClump*)m_rwObject)), false);
+
 		mi->AddRef();
 	}
 }
@@ -126,6 +138,7 @@ CEntity::AttachToRwObject(RwObject *obj)
 			m_matrix.Attach(RwFrameGetMatrix(RpAtomicGetFrame((RpAtomic*)m_rwObject)), false);
 		else if(RwObjectGetType(m_rwObject) == rpCLUMP)
 			m_matrix.Attach(RwFrameGetMatrix(RpClumpGetFrame((RpClump*)m_rwObject)), false);
+
 		CModelInfo::GetModelInfo(m_modelIndex)->AddRef();
 	}
 }
@@ -139,7 +152,6 @@ CEntity::DetachFromRwObject(void)
 	m_matrix.Detach();
 }
 
-#ifdef PED_SKIN
 RpAtomic*
 AtomicRemoveAnimFromSkinCB(RpAtomic *atomic, void *data)
 {
@@ -151,15 +163,14 @@ AtomicRemoveAnimFromSkinCB(RpAtomic *atomic, void *data)
 			hier->interpolator->currentAnim = nil;
 		}
 #else
-		if(hier && hier->pCurrentAnim){
-			RpHAnimAnimationDestroy(hier->pCurrentAnim);
-			hier->pCurrentAnim = nil;
+		if(hier && hier->currentAnim){
+			RpHAnimAnimationDestroy(hier->currentAnim->pCurrentAnim);
+			hier->currentAnim = nil;
 		}
 #endif
 	}
 	return atomic;
 }
-#endif
 
 void
 CEntity::DeleteRwObject(void)
@@ -173,10 +184,8 @@ CEntity::DeleteRwObject(void)
 			RpAtomicDestroy((RpAtomic*)m_rwObject);
 			RwFrameDestroy(f);
 		}else if(RwObjectGetType(m_rwObject) == rpCLUMP){
-#ifdef PED_SKIN
 			if(IsClumpSkinned((RpClump*)m_rwObject))
 				RpClumpForAllAtomics((RpClump*)m_rwObject, AtomicRemoveAnimFromSkinCB, nil);
-#endif
 			RpClumpDestroy((RpClump*)m_rwObject);
 		}
 		m_rwObject = nil;
@@ -234,13 +243,12 @@ CEntity::UpdateRwFrame(void)
 		RwFrameUpdateObjects((RwFrame*)rwObjectGetParent(m_rwObject));
 }
 
-#ifdef PED_SKIN
 void
 CEntity::UpdateRpHAnim(void)
 {
-	RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
-	RpHAnimHierarchyUpdateMatrices(hier);
-
+	if(IsClumpSkinned(GetClump())){
+		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
+		RpHAnimHierarchyUpdateMatrices(hier);
 #if 0
 	int i;
 	char buf[256];
@@ -269,22 +277,42 @@ CEntity::UpdateRpHAnim(void)
 	void RenderSkeleton(RpHAnimHierarchy *hier);
 	RenderSkeleton(hier);
 #endif
+	}
 }
-#endif
+
+bool
+CEntity::HasPreRenderEffects(void)
+{
+	return IsTreeModel(GetModelIndex()) ||
+	   GetModelIndex() == MI_COLLECTABLE1 ||
+	   GetModelIndex() == MI_MONEY ||
+	   GetModelIndex() == MI_CARMINE ||
+	   GetModelIndex() == MI_NAUTICALMINE ||
+	   GetModelIndex() == MI_BRIEFCASE ||
+	   GetModelIndex() == MI_GRENADE ||
+	   GetModelIndex() == MI_MOLOTOV ||
+	   GetModelIndex() == MI_MISSILE ||
+	   GetModelIndex() == MI_BEACHBALL ||
+	   IsGlass(GetModelIndex()) ||
+	   IsObject() && ((CObject*)this)->bIsPickup ||
+	   IsLightWithPreRenderEffects(GetModelIndex());
+}
 
 void
 CEntity::PreRender(void)
 {
+	if (CModelInfo::GetModelInfo(GetModelIndex())->GetNum2dEffects() != 0)
+		ProcessLightsForEntity();
+
+	if(!bHasPreRenderEffects)
+		return;
+
 	switch(m_type){
 	case ENTITY_TYPE_BUILDING:
-		if(GetModelIndex() == MI_RAILTRACKS){
-			CShadows::StoreShadowForPole(this, 0.0f, -10.949f, 5.0f, 8.0f, 1.0f, 0);
-			CShadows::StoreShadowForPole(this, 0.0f, 10.949f, 5.0f, 8.0f, 1.0f, 1);
-		}else if(IsTreeModel(GetModelIndex())){
-			CShadows::StoreShadowForTree(this);
+		if(IsTreeModel(GetModelIndex())){
+			float dist = (TheCamera.GetPosition() - GetPosition()).Magnitude2D();
+			CObject::fDistToNearestTree = Min(CObject::fDistToNearestTree, dist);
 			ModifyMatrixForTreeInWind();
-		}else if(IsBannerModel(GetModelIndex())){
-			ModifyMatrixForBannerInWind();
 		}
 		break;
 	case ENTITY_TYPE_OBJECT:
@@ -304,22 +332,6 @@ CEntity::PreRender(void)
 				GetMatrix().UpdateRW();
 				UpdateRwFrame();
 			}
-		}else if(IsPickupModel(GetModelIndex())){
-			if(((CObject*)this)->bIsPickup){
-				CPickups::DoPickUpEffects(this);
-				GetMatrix().UpdateRW();
-				UpdateRwFrame();
-			}else if(GetModelIndex() == MI_GRENADE){
-				CMotionBlurStreaks::RegisterStreak((uintptr)this,
-					100, 100, 100,
-					GetPosition() - 0.07f*TheCamera.GetRight(),
-					GetPosition() + 0.07f*TheCamera.GetRight());
-			}else if(GetModelIndex() == MI_MOLOTOV){
-				CMotionBlurStreaks::RegisterStreak((uintptr)this,
-					0, 100, 0,
-					GetPosition() - 0.07f*TheCamera.GetRight(),
-					GetPosition() + 0.07f*TheCamera.GetRight());
-			}
 		}else if(GetModelIndex() == MI_MISSILE){
 			CVector pos = GetPosition();
 			float flicker = (CGeneral::GetRandomNumber() & 0xF)/(float)0x10;
@@ -327,7 +339,7 @@ CEntity::PreRender(void)
 				gpShadowExplosionTex, &pos,
 				8.0f, 0.0f, 0.0f, -8.0f,
 				255, 200.0f*flicker, 160.0f*flicker, 120.0f*flicker,
-				20.0f, false, 1.0f);
+				20.0f, false, 1.0f, nil, false);
 			CPointLights::AddLight(CPointLights::LIGHT_POINT,
 				pos, CVector(0.0f, 0.0f, 0.0f),
 				8.0f,
@@ -342,12 +354,44 @@ CEntity::PreRender(void)
 				CCoronas::LOSCHECK_OFF, CCoronas::STREAK_OFF, 0.0f);
 		}else if(IsGlass(GetModelIndex())){
 			PreRenderForGlassWindow();
+		}else if (((CObject*)this)->bIsPickup) {
+			CPickups::DoPickUpEffects(this);
+			GetMatrix().UpdateRW();
+			UpdateRwFrame();
+		} else if (GetModelIndex() == MI_GRENADE) {
+			CMotionBlurStreaks::RegisterStreak((uintptr)this,
+				100, 100, 100,
+				GetPosition() - 0.07f * TheCamera.GetRight(),
+				GetPosition() + 0.07f * TheCamera.GetRight());
+		} else if (GetModelIndex() == MI_MOLOTOV) {
+			CMotionBlurStreaks::RegisterStreak((uintptr)this,
+				0, 100, 0,
+				GetPosition() - 0.07f * TheCamera.GetRight(),
+				GetPosition() + 0.07f * TheCamera.GetRight());
+		}else if(GetModelIndex() == MI_BEACHBALL){
+			CVector pos = GetPosition();
+			CShadows::StoreShadowToBeRendered(SHADOWTYPE_DARK,
+				gpShadowPedTex, &pos,
+				0.4f, 0.0f, 0.0f, -0.4f,
+				CTimeCycle::GetShadowStrength(),
+				CTimeCycle::GetShadowStrength(),
+				CTimeCycle::GetShadowStrength(),
+				CTimeCycle::GetShadowStrength(),
+				20.0f, false, 1.0f, nil, false);
 		}
 		// fall through
 	case ENTITY_TYPE_DUMMY:
 		if(GetModelIndex() == MI_TRAFFICLIGHTS){
 			CTrafficLights::DisplayActualLight(this);
 			CShadows::StoreShadowForPole(this, 2.957f, 0.147f, 0.0f, 16.0f, 0.4f, 0);
+		}else if(GetModelIndex() == MI_TRAFFICLIGHTS_VERTICAL){
+			CTrafficLights::DisplayActualLight(this);
+		}else if(GetModelIndex() == MI_TRAFFICLIGHTS_MIAMI){
+			CTrafficLights::DisplayActualLight(this);
+			CShadows::StoreShadowForPole(this, 4.819f, 1.315f, 0.0f, 16.0f, 0.4f, 0);
+		}else if(GetModelIndex() == MI_TRAFFICLIGHTS_TWOVERTICAL){
+			CTrafficLights::DisplayActualLight(this);
+			CShadows::StoreShadowForPole(this, 7.503f, 0.0f, 0.0f, 16.0f, 0.4f, 0);
 		}else if(GetModelIndex() == MI_SINGLESTREETLIGHTS1)
 			CShadows::StoreShadowForPole(this, 0.744f, 0.0f, 0.0f, 16.0f, 0.4f, 0);
 		else if(GetModelIndex() == MI_SINGLESTREETLIGHTS2)
@@ -356,14 +400,8 @@ CEntity::PreRender(void)
 			CShadows::StoreShadowForPole(this, 1.143f, 0.145f, 0.0f, 16.0f, 0.4f, 0);
 		else if(GetModelIndex() == MI_DOUBLESTREETLIGHTS)
 			CShadows::StoreShadowForPole(this, 0.0f, -0.048f, 0.0f, 16.0f, 0.4f, 0);
-		else if(GetModelIndex() == MI_STREETLAMP1 ||
-		        GetModelIndex() == MI_STREETLAMP2)
-			CShadows::StoreShadowForPole(this, 0.0f, 0.0f, 0.0f, 16.0f, 0.4f, 0);
 		break;
 	}
-
-	if (CModelInfo::GetModelInfo(GetModelIndex())->GetNum2dEffects() != 0)
-		ProcessLightsForEntity();
 }
 
 void
@@ -585,14 +623,12 @@ CEntity::SetupBigBuilding(void)
 	bStreamingDontDelete = true;
 	bUsesCollision = false;
 	m_level = CTheZones::GetLevelFromPosition(&GetPosition());
-	if(m_level == LEVEL_GENERIC){
-		if(mi->GetTxdSlot() != CTxdStore::FindTxdSlot("generic")){
-			mi->SetTexDictionary("generic");
-			printf("%d:%s txd has been set to generic\n", m_modelIndex, mi->GetModelName());
-		}
-	}
-	if(mi->m_lodDistances[0] > 2000.0f)
+	if(mi->m_lodDistances[0] <= 2000.0f)
+		bStreamBIGBuilding = true;
+	if(mi->m_lodDistances[0] > 2500.0f || mi->m_ignoreDrawDist)
 		m_level = LEVEL_GENERIC;
+	else if(m_level == LEVEL_GENERIC)
+		printf("%s isn't in a level\n", mi->GetModelName());
 }
 
 float WindTabel[] = {
@@ -613,26 +649,30 @@ CEntity::ModifyMatrixForTreeInWind(void)
 	CMatrix mat(GetMatrix().m_attachment);
 
 	if(CWeather::Wind >= 0.5){
-		t = m_randomSeed + 16*CTimer::GetTimeInMilliseconds();
+		t = m_randomSeed + 8*CTimer::GetTimeInMilliseconds();
 		f = (t & 0xFFF)/(float)0x1000;
 		flutter = f * WindTabel[(t>>12)+1 & 0xF] +
 			(1.0f - f) * WindTabel[(t>>12) & 0xF] +
 			1.0f;
-		strength = CWeather::Wind < 0.8f ? 0.008f : 0.014f;
+		strength = -0.015f*CWeather::Wind;
 	}else if(CWeather::Wind >= 0.2){
 		t = (uintptr)this + CTimer::GetTimeInMilliseconds();
 		f = (t & 0xFFF)/(float)0x1000;
 		flutter = Sin(f * 6.28f);
-		strength = 0.008f;
+		strength = -0.008f;
 	}else{
 		t = (uintptr)this + CTimer::GetTimeInMilliseconds();
 		f = (t & 0xFFF)/(float)0x1000;
 		flutter = Sin(f * 6.28f);
-		strength = 0.005f;
+		strength = -0.005f;
 	}
 
 	mat.GetUp().x = strength * flutter;
+	if(IsPalmTreeModel(GetModelIndex()))
+		mat.GetUp().x += -0.07f*CWeather::Wind;
 	mat.GetUp().y = mat.GetUp().x;
+
+	CWindModifiers::FindWindModifier(GetPosition(), &mat.GetUp().x, &mat.GetUp().y);
 
 	mat.UpdateRW();
 	UpdateRwFrame();
@@ -645,6 +685,7 @@ float BannerWindTabel[] = {
 	0.28f, 0.28f, 0.22f, 0.1f, 0.0f, -0.1f, -0.17f, -0.12f
 };
 
+// unused
 void
 CEntity::ModifyMatrixForBannerInWind(void)
 {
@@ -684,8 +725,64 @@ CEntity::ModifyMatrixForBannerInWind(void)
 void
 CEntity::PreRenderForGlassWindow(void)
 {
+	if(((CSimpleModelInfo*)CModelInfo::GetModelInfo(m_modelIndex))->m_isArtistGlass)
+		return;
 	CGlass::AskForObjectToBeRenderedInGlass(this);
 	bIsVisible = false;
+}
+
+/*
+0x487A10 - SetAtomicAlphaCB
+0x4879E0 - SetClumpAlphaCB
+*/
+
+RpMaterial*
+SetAtomicAlphaCB(RpMaterial *material, void *data)
+{
+	((RwRGBA*)RpMaterialGetColor(material))->alpha = (uint8)(uintptr)data;
+	return material;
+}
+
+RpAtomic*
+SetClumpAlphaCB(RpAtomic *atomic, void *data)
+{
+	RpGeometry *geometry = RpAtomicGetGeometry(atomic);
+	RpGeometrySetFlags(geometry, RpGeometryGetFlags(geometry) | rpGEOMETRYMODULATEMATERIALCOLOR);
+	RpGeometryForAllMaterials(geometry, SetAtomicAlphaCB, (void*)data);
+	return atomic;
+}
+
+void
+CEntity::SetRwObjectAlpha(int32 alpha)
+{
+	if (m_rwObject != nil) {
+		switch (RwObjectGetType(m_rwObject)) {
+		case rpATOMIC: {
+			RpGeometry *geometry = RpAtomicGetGeometry((RpAtomic*)m_rwObject);
+			RpGeometrySetFlags(geometry, RpGeometryGetFlags(geometry) | rpGEOMETRYMODULATEMATERIALCOLOR);
+			RpGeometryForAllMaterials(geometry, SetAtomicAlphaCB, (void*)alpha);
+			break;
+		}
+		case rpCLUMP:
+			RpClumpForAllAtomics((RpClump*)m_rwObject, SetClumpAlphaCB, (void*)alpha);
+			break;
+		}
+	}
+}
+
+bool IsEntityPointerValid(CEntity* pEntity)
+{
+	if (!pEntity)
+		return false;
+	switch (pEntity->GetType()) {
+	case ENTITY_TYPE_NOTHING: return false;
+	case ENTITY_TYPE_BUILDING: return IsBuildingPointerValid((CBuilding*)pEntity);
+	case ENTITY_TYPE_VEHICLE: return IsVehiclePointerValid((CVehicle*)pEntity);
+	case ENTITY_TYPE_PED: return IsPedPointerValid((CPed*)pEntity);
+	case ENTITY_TYPE_OBJECT: return IsObjectPointerValid((CObject*)pEntity);
+	case ENTITY_TYPE_DUMMY: return IsDummyPointerValid((CDummy*)pEntity);
+	}
+	return false;
 }
 
 #ifdef COMPATIBLE_SAVES
@@ -712,32 +809,37 @@ CEntity::SaveEntityFlags(uint8*& buf)
 	if (bRenderScorched) tmp |= BIT(20);
 	if (bHasBlip) tmp |= BIT(21);
 	if (bIsBIGBuilding) tmp |= BIT(22);
-	if (bRenderDamaged) tmp |= BIT(23);
+	if (bStreamBIGBuilding) tmp |= BIT(23);
 
-	if (bBulletProof) tmp |= BIT(24);
-	if (bFireProof) tmp |= BIT(25);
-	if (bCollisionProof)  tmp |= BIT(26);
-	if (bMeleeProof) tmp |= BIT(27);
-	if (bOnlyDamagedByPlayer) tmp |= BIT(28);
-	if (bStreamingDontDelete) tmp |= BIT(29);
-	if (bZoneCulled) tmp |= BIT(30);
-	if (bZoneCulled2) tmp |= BIT(31);
+	if (bRenderDamaged) tmp |= BIT(24);
+	if (bBulletProof) tmp |= BIT(25);
+	if (bFireProof) tmp |= BIT(26);
+	if (bCollisionProof)  tmp |= BIT(27);
+	if (bMeleeProof) tmp |= BIT(28);
+	if (bOnlyDamagedByPlayer) tmp |= BIT(29);
+	if (bStreamingDontDelete) tmp |= BIT(30);
+	if (bRemoveFromWorld) tmp |= BIT(31);
 
 	WriteSaveBuf<uint32>(buf, tmp);
 
 	tmp = 0;
 
-	if (bRemoveFromWorld) tmp |= BIT(0);
-	if (bHasHitWall) tmp |= BIT(1);
-	if (bImBeingRendered)  tmp |= BIT(2);
-	if (bTouchingWater) tmp |= BIT(3);
-	if (bIsSubway) tmp |= BIT(4);
-	if (bDrawLast) tmp |= BIT(5);
-	if (bNoBrightHeadLights) tmp |= BIT(6);
-	if (bDoNotRender) tmp |= BIT(7);
+	if (bHasHitWall) tmp |= BIT(0);
+	if (bImBeingRendered)  tmp |= BIT(1);
+	if (bTouchingWater) tmp |= BIT(2);
+	if (bIsSubway) tmp |= BIT(3);
+	if (bDrawLast) tmp |= BIT(4);
+	if (bNoBrightHeadLights) tmp |= BIT(5);
+	if (bDoNotRender) tmp |= BIT(6);
+	if (bDistanceFade) tmp |= BIT(7);
 
-	if (bDistanceFade) tmp |= BIT(8);
+	if (m_flagE1) tmp |= BIT(8);
 	if (m_flagE2) tmp |= BIT(9);
+	if (bOffscreen) tmp |= BIT(10);
+	if (bIsStaticWaitingForCollision) tmp |= BIT(11);
+	if (bDontStream) tmp |= BIT(12);
+	if (bUnderwater) tmp |= BIT(13);
+	if (bHasPreRenderEffects) tmp |= BIT(14);
 
 	WriteSaveBuf<uint32>(buf, tmp);
 }
@@ -765,30 +867,35 @@ CEntity::LoadEntityFlags(uint8*& buf)
 	bRenderScorched = !!(tmp & BIT(20));
 	bHasBlip = !!(tmp & BIT(21));
 	bIsBIGBuilding = !!(tmp & BIT(22));
-	bRenderDamaged = !!(tmp & BIT(23));
+	bStreamBIGBuilding = !!(tmp & BIT(23));
 
-	bBulletProof = !!(tmp & BIT(24));
-	bFireProof = !!(tmp & BIT(25));
-	bCollisionProof = !!(tmp & BIT(26));
-	bMeleeProof = !!(tmp & BIT(27));
-	bOnlyDamagedByPlayer = !!(tmp & BIT(28));
-	bStreamingDontDelete = !!(tmp & BIT(29));
-	bZoneCulled = !!(tmp & BIT(30));
-	bZoneCulled2 = !!(tmp & BIT(31));
+	bRenderDamaged = !!(tmp & BIT(24));
+	bBulletProof = !!(tmp & BIT(25));
+	bFireProof = !!(tmp & BIT(26));
+	bCollisionProof = !!(tmp & BIT(27));
+	bMeleeProof = !!(tmp & BIT(28));
+	bOnlyDamagedByPlayer = !!(tmp & BIT(29));
+	bStreamingDontDelete = !!(tmp & BIT(30));
+	bRemoveFromWorld = !!(tmp & BIT(31));
 
 	tmp = ReadSaveBuf<uint32>(buf);
 
-	bRemoveFromWorld = !!(tmp & BIT(0));
-	bHasHitWall = !!(tmp & BIT(1));
-	bImBeingRendered = !!(tmp & BIT(2));
-	bTouchingWater = !!(tmp & BIT(3));
-	bIsSubway = !!(tmp & BIT(4));
-	bDrawLast = !!(tmp & BIT(5));
-	bNoBrightHeadLights = !!(tmp & BIT(6));
-	bDoNotRender = !!(tmp & BIT(7));
+	bHasHitWall = !!(tmp & BIT(0));
+	bImBeingRendered = !!(tmp & BIT(1));
+	bTouchingWater = !!(tmp & BIT(2));
+	bIsSubway = !!(tmp & BIT(3));
+	bDrawLast = !!(tmp & BIT(4));
+	bNoBrightHeadLights = !!(tmp & BIT(5));
+	bDoNotRender = !!(tmp & BIT(6));
+	bDistanceFade = !!(tmp & BIT(7));
 
-	bDistanceFade = !!(tmp & BIT(8));
+	m_flagE1 = !!(tmp & BIT(8));
 	m_flagE2 = !!(tmp & BIT(9));
+	bOffscreen = !!(tmp & BIT(10));
+	bIsStaticWaitingForCollision = !!(tmp & BIT(11));
+	bDontStream = !!(tmp & BIT(12));
+	bUnderwater = !!(tmp & BIT(13));
+	bHasPreRenderEffects = !!(tmp & BIT(14));
 }
 
 #endif
